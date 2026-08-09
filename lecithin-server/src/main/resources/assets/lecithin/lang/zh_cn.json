@@ -1,0 +1,3 @@
+{
+  "waypoint.remake_connections": "“Unused” 的用法有误：\nServerScoreboard.updatePlayerWaypoint/updateTeamWaypoints 会在在线玩家每次变更团队成员或团队颜色时调用（定位条的路径点会显示团队颜色），\n所以原版 /team 命令以及任何插件的团队更改都会导致这里调用者崩溃。\n参考原版 ServerWaypointManager：为每个追踪的玩家重新创建连接；\ncreateConnection 已经通过 scheduleIfOffTarget 跳转到玩家所属的区域。"
+}

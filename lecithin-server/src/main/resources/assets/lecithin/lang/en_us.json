@@ -1,0 +1,3 @@
+{
+  "waypoint.remake_connections": "\"Unused\" was wrong: ServerScoreboard.updatePlayerWaypoint/updateTeamWaypoints call this for\nevery team-membership or team-color change of an online player (locator bar waypoints are\nteam-colored), so the vanilla /team command and any plugin team change crashed the caller\nhere. Mirror vanilla ServerWaypointManager: recreate the connection for every tracking\nplayer; createConnection already hops to the player's owning region via scheduleIfOffTarget."
+}
