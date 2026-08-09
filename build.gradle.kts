@@ -111,3 +111,98 @@ subprojects {
         }
     }
 }
+
+// Sort all JSON language files under the lang directory by key in ASCII order
+val langDir = layout.projectDirectory.dir("lecithin-server/src/main/resources/assets/lecithin/lang")
+tasks.register("sortLangKeys") {
+    group = "lecithin"
+    description = "Sort all JSON language files by key in ASCII (ordinal) order"
+    notCompatibleWithConfigurationCache("Inline task action references build script class")
+    inputs.dir(langDir).optional()
+    outputs.dir(langDir)
+    doLast {
+        val dir = langDir.asFile
+        if (!dir.isDirectory) {
+            logger.warn("Lang directory not found: $dir")
+            return@doLast
+        }
+        val jsonFiles = dir.listFiles { f -> f.extension == "json" }?.sortedBy { it.name } ?: emptyList()
+        if (jsonFiles.isEmpty()) {
+            logger.lifecycle("No .json files found in: $dir")
+            return@doLast
+        }
+        val slurper = JsonSlurper()
+        for (file in jsonFiles) {
+            @Suppress("UNCHECKED_CAST")
+            val data = slurper.parse(file) as Map<String, Any?>
+            val sorted = data.toSortedMap()
+            val pretty = formatJson(sorted)
+            file.writeText(pretty + "\n", charset = Charsets.UTF_8)
+            logger.lifecycle("Processed: ${file.name}  (${sorted.size} keys)")
+        }
+        logger.lifecycle("Done.")
+    }
+}
+
+// --- Pure-Kotlin JSON serializer that preserves non-ASCII characters (e.g. CJK) ---
+fun formatJson(value: Any?, indent: Int = 2): String {
+    val sb = StringBuilder()
+    appendJson(sb, value, indent, 0)
+    return sb.toString()
+}
+
+private fun appendJson(sb: StringBuilder, value: Any?, indent: Int, level: Int) {
+    when (value) {
+        null -> sb.append("null")
+        is Boolean -> sb.append(value)
+        is Number -> sb.append(value)
+        is String -> sb.append('"').append(escapeJsonString(value)).append('"')
+        is List<*> -> {
+            if (value.isEmpty()) { sb.append("[]"); return }
+            sb.append("[\n")
+            value.forEachIndexed { i, v ->
+                sb.append(" ".repeat(indent * (level + 1)))
+                appendJson(sb, v, indent, level + 1)
+                if (i < value.size - 1) sb.append(',')
+                sb.append('\n')
+            }
+            sb.append(" ".repeat(indent * level)).append(']')
+        }
+        is Map<*, *> -> {
+            if (value.isEmpty()) { sb.append("{}"); return }
+            sb.append("{\n")
+            val entries = value.entries.toList()
+            entries.forEachIndexed { i, (k, v) ->
+                sb.append(" ".repeat(indent * (level + 1)))
+                sb.append('"').append(escapeJsonString(k.toString())).append('"')
+                sb.append(": ")
+                appendJson(sb, v, indent, level + 1)
+                if (i < entries.size - 1) sb.append(',')
+                sb.append('\n')
+            }
+            sb.append(" ".repeat(indent * level)).append('}')
+        }
+        else -> sb.append('"').append(escapeJsonString(value.toString())).append('"')
+    }
+}
+
+private fun escapeJsonString(s: String): String {
+    val sb = StringBuilder(s.length)
+    for (c in s) {
+        when (c) {
+            '"' -> sb.append("\\\"")
+            '\\' -> sb.append("\\\\")
+            '\b' -> sb.append("\\b")
+            '\u000C' -> sb.append("\\f")
+            '\n' -> sb.append("\\n")
+            '\r' -> sb.append("\\r")
+            '\t' -> sb.append("\\t")
+            else -> if (c.code < 0x20) {
+                sb.append("\\u").append(String.format("%04x", c.code))
+            } else {
+                sb.append(c) // preserve CJK and all other printable chars as-is
+            }
+        }
+    }
+    return sb.toString()
+}
