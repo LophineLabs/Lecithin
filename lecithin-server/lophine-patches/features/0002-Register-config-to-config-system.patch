@@ -1,0 +1,18 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Helvetica Volubi <suisuroru@blue-millennium.fun>
+Date: Mon, 10 Aug 2026 03:10:35 +0800
+Subject: [PATCH] Register config to config system
+
+
+diff --git a/src/main/java/me/earthme/luminol/config/ConfigManager.java b/src/main/java/me/earthme/luminol/config/ConfigManager.java
+index 678380847d05f2c784eb262faea75470fde4b45a..2ff46afe613a9a6a06d81611c718aac3b7fb4317 100644
+--- a/src/main/java/me/earthme/luminol/config/ConfigManager.java
++++ b/src/main/java/me/earthme/luminol/config/ConfigManager.java
+@@ -35,6 +35,7 @@ public class ConfigManager {
+                 "fun.bm.lophine.carpet.config.modules"
+         ));
+         // Lophine end - add carpet config
++        registerConfig("lecithin", builder.of("lecithin", "fun.bm.lecithin.config.modules")); // Lecithin global config
+         preLoad();
+     }
+ 

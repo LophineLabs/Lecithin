@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Helvetica Volubi <suisuroru@blue-millennium.fun>
+Date: Mon, 10 Aug 2026 03:25:26 +0800
+Subject: [PATCH] Force disable all unsupported check
+
+
+diff --git a/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java b/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
+index 9055778fe40fca64ecc9699d08476f3054abb471..d07e3568afc84c996c54f9025abf7d52be01eb34 100644
+--- a/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
++++ b/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
+@@ -5,11 +5,7 @@ import me.earthme.luminol.config.flags.ConfigClassInfo;
+ import me.earthme.luminol.config.flags.ConfigInfo;
+ import me.earthme.luminol.enums.EnumConfigCategory;
+ 
+-@ConfigClassInfo(category = EnumConfigCategory.UNSUPPORTED, name = "disable_check_for_folia_supported")
+ public class DisableCheckForFoliaSupported implements IConfigModule {
+-    @ConfigInfo(name = "disable_for_paper")
+-    public static boolean disableForPaper = false;
+-
+-    @ConfigInfo(name = "disable_for_leaves")
+-    public static boolean disableForLeaves = false;
++    public static boolean disableForPaper = true;
++    public static boolean disableForLeaves = true;
+ }

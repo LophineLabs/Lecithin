@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Helvetica Volubi <suisuroru@blue-millennium.fun>
+Date: Mon, 10 Aug 2026 03:32:54 +0800
+Subject: [PATCH] Rebrand to Lecithin
+
+
+diff --git a/src/main/java/io/papermc/paper/ServerBuildInfo.java b/src/main/java/io/papermc/paper/ServerBuildInfo.java
+index ebe0290bf0235af2ba353ac1f74b29080daebba4..03ce43b9d368089a343366b412045b567d048de9 100644
+--- a/src/main/java/io/papermc/paper/ServerBuildInfo.java
++++ b/src/main/java/io/papermc/paper/ServerBuildInfo.java
+@@ -30,6 +30,13 @@ public interface ServerBuildInfo {
+     Key BRAND_LOPHINE_ID = Key.key("lophinelabs", "lophine");
+     // Lophine end
+ 
++    // Lecithin start
++    /**
++     * The brand id for Lecithin.
++     */
++    Key BRAND_LECITHIN_ID = Key.key("lophinelabs", "lecithin");
++    // Lecithin end
++
+     /**
+      * Gets the {@code ServerBuildInfo}.
+      *

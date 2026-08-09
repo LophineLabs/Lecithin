@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Helvetica Volubi <suisuroru@blue-millennium.fun>
+Date: Mon, 10 Aug 2026 03:32:53 +0800
+Subject: [PATCH] Rebrand to Lecithin
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/Metrics.java b/src/main/java/com/destroystokyo/paper/Metrics.java
+index ce97076bd642bff22c9fc10212e19f81327d7c5a..8f7a5bb2a20b8809ae1c8dc7b6dfad7e1b14f2b2 100644
+--- a/src/main/java/com/destroystokyo/paper/Metrics.java
++++ b/src/main/java/com/destroystokyo/paper/Metrics.java
+@@ -593,7 +593,7 @@ public class Metrics {
+             boolean logFailedRequests = config.getBoolean("logFailedRequests", false);
+             // Only start Metrics, if it's enabled in the config
+             if (config.getBoolean("enabled", true)) {
+-                Metrics metrics = new Metrics("Lophine", serverUUID, logFailedRequests, Bukkit.getLogger()); // Folia - we have our own bstats page // Lophine
++                Metrics metrics = new Metrics("Lecithin", serverUUID, logFailedRequests, Bukkit.getLogger()); // Folia - we have our own bstats page // Lophine // Lecithin
+ 
+                 metrics.addCustomChart(new Metrics.SimplePie("minecraft_version", () -> {
+                     String minecraftVersion = Bukkit.getVersion();
+@@ -607,11 +607,11 @@ public class Metrics {
+                 final String implVersion = org.bukkit.craftbukkit.Main.class.getPackage().getImplementationVersion();
+                 if (implVersion != null) {
+                     final String buildOrHash = implVersion.substring(implVersion.lastIndexOf('-') + 1);
+-                    paperVersion = "git-Lophine-%s-%s".formatted(Bukkit.getServer().getMinecraftVersion(), buildOrHash); // Folia - we have our own bstats page // Lophine - Rebrand to Lophine
++                    paperVersion = "git-Lecithin-%s-%s".formatted(Bukkit.getServer().getMinecraftVersion(), buildOrHash); // Folia - we have our own bstats page // Lophine - Rebrand to Lophine // Lecithin
+                 } else {
+                     paperVersion = "unknown";
+                 }
+-                metrics.addCustomChart(new Metrics.SimplePie("lophine_version", () -> paperVersion)); // Folia - we have our own bstats page // Lophine
++                metrics.addCustomChart(new Metrics.SimplePie("lecithin_version", () -> paperVersion)); // Folia - we have our own bstats page // Lophine // Lecithin
+ 
+                 metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
+                     Map<String, Map<String, Integer>> map = new HashMap<>();
+diff --git a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
+index 37ca11405d4f77e3acf7fc3c175d1f9ced8f0f20..8a3534e4fe5a75c4aa8ec79e3ea6d74856536221 100644
+--- a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
++++ b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
+@@ -40,8 +40,8 @@ public class PaperVersionFetcher implements VersionFetcher {
+     private static final ComponentLogger COMPONENT_LOGGER = ComponentLogger.logger(LogManager.getRootLogger().getName());
+     private static final int DISTANCE_ERROR = -1;
+     private static final int DISTANCE_UNKNOWN = -2;
+-    private static final String DOWNLOAD_PAGE = "https://github.com/LophineLabs/Lophine"; // Lophine
+-    private static final String REPOSITORY = "LophineLabs/Lophine"; // Lophine
++    private static final String DOWNLOAD_PAGE = "https://github.com/LophineLabs/Lecithin"; // Lophine // Lecithin
++    private static final String REPOSITORY = "LophineLabs/Lecithin"; // Lophine //Lecithin
+     private static final ServerBuildInfo BUILD_INFO = ServerBuildInfo.buildInfo();
+     private static final String USER_AGENT = BUILD_INFO.brandName() + "/" + BUILD_INFO.asString(VERSION_SIMPLE) + " (https://papermc.io)";
+     private static final Gson GSON = new Gson();
+diff --git a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
+index 883cb95cb4ef72e40af7073f76fc2f3219a51127..12f43a8acf95daa96894c73e0e6a88ce3b31777c 100644
+--- a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
++++ b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
+@@ -32,6 +32,7 @@ public record ServerBuildInfoImpl(
+ 
+     private static final String BRAND_PAPER_NAME = "Paper";
+     private static final String BRAND_LOPHINE_NAME = "Lophine"; // Lophine - Rebrand to Lophine
++    private static final String BRAND_LECITHIN_NAME = "Lecithin"; // Lecithin - rebrand to Lecithin
+ 
+     private static final String BUILD_DEV = "DEV";
+ 
+@@ -43,9 +44,9 @@ public record ServerBuildInfoImpl(
+         this(
+             getManifestAttribute(manifest, ATTRIBUTE_BRAND_ID)
+                 .map(Key::key)
+-                .orElse(BRAND_LOPHINE_ID), // Folia // Lophine
++                .orElse(BRAND_LECITHIN_ID), // Folia // Lophine // Lecithin
+             getManifestAttribute(manifest, ATTRIBUTE_BRAND_NAME)
+-                .orElse(BRAND_LOPHINE_NAME), // Folia // Lophine
++                .orElse(BRAND_LECITHIN_NAME), // Folia // Lophine // Lecithin
+             SharedConstants.getCurrentVersion().id(),
+             SharedConstants.getCurrentVersion().name(),
+             getManifestAttribute(manifest, ATTRIBUTE_BUILD_NUMBER)
+@@ -62,7 +63,7 @@ public record ServerBuildInfoImpl(
+ 
+     @Override
+     public boolean isBrandCompatible(final @NotNull Key brandId) {
+-        return brandId.equals(this.brandId) || brandId.equals(BRAND_PAPER_ID) || brandId.equals(BRAND_FOLIA_ID) || brandId.equals(BRAND_LOPHINE_ID); // Lophine
++        return brandId.equals(this.brandId) || brandId.equals(BRAND_PAPER_ID) || brandId.equals(BRAND_FOLIA_ID) || brandId.equals(BRAND_LOPHINE_ID) || brandId.equals(BRAND_LECITHIN_ID); // Lophine // Lecithin
+     }
+ 
+     @Override
+diff --git a/src/main/java/org/spigotmc/WatchdogThread.java b/src/main/java/org/spigotmc/WatchdogThread.java
+index f5462b42c8231a5cf58a24e5fc5dc77bd550eb0a..f19e3b2132fea7b79e952549eb9a4e5a4e6f9446 100644
+--- a/src/main/java/org/spigotmc/WatchdogThread.java
++++ b/src/main/java/org/spigotmc/WatchdogThread.java
+@@ -81,7 +81,7 @@ public class WatchdogThread extends ca.spottedleaf.moonrise.common.util.TickThre
+                     logger.log(Level.SEVERE, "If you see a world save or edit, then it means you did far more than your server can handle at once");
+                     logger.log(Level.SEVERE, "\t If this is the case, consider increasing timeout-time in spigot.yml but note that this will replace the crash with LARGE lag spikes");
+                     logger.log(Level.SEVERE, "DO NOT REPORT THIS TO PAPER!");
+-                    logger.log(Level.SEVERE, "If you are unsure or still think this is a Lophine bug, please report this to https://github.com/LophineLabs/Lophine/issues");
++                    logger.log(Level.SEVERE, "If you are unsure or still think this is a Lecithin bug, please report this to https://github.com/LophineLabs/Lecithin/issues");
+                     logger.log(Level.SEVERE, "Be sure to include ALL relevant console errors and Minecraft crash reports");
+                     logger.log(Level.SEVERE, "Server version: " + Bukkit.getServer().getVersion());
+ 
