@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 6 Aug 2026 14:25:34 +0800
+Subject: [PATCH] Lophinya: exp - add per-chunk compute/wait breakdown to
+ RegionParallelRunner diagnostics
+
+DEC-70 6 attribution round (2026-08-06B): aggregate computeNanos/waitNanos
+cannot distinguish one slow chunk from every chunk being slow, which is
+exactly the question the tick 14/16 intermittent failure needs answered.
+Adds chunkSize/chunkComputeNanos/chunkWaitNanos/chunkTimedOut arrays,
+index-aligned per dispatched chunk.
+
+diff --git a/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java b/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
+index c5a8f7d41477f18bb1970e92132f00e90c8c251c..485de6dfea9bb85193b08c40e8dfca0bcc788c72 100644
+--- a/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
++++ b/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
+@@ -126,6 +126,19 @@ public final class RegionParallelRunner {
+         /** Owner-thread time blocked in {@code chunkFuture.get()}, summed across chunks (chunks
+          *  are awaited one at a time, so this is close to this call's own wall-clock cost). */
+         public long waitNanos;
++
++        /** Per-chunk breakdown, one entry per dispatched chunk, index-aligned across all four
++         *  arrays (2026-08-06B, DEC-70 6 attribution round - the aggregate {@code computeNanos}/
++         *  {@code waitNanos} above cannot tell "one chunk was slow" from "all chunks were slow",
++         *  which is exactly the question an intermittent single-tick failure like tick 14/16 needs
++         *  answered). {@code chunkSize} entries with {@code n <= WORKERS} (true for every
++         *  distributed-mode call used in this round, since perTick=5 &lt; WORKERS) each cover
++         *  exactly one entity, so this array is per-request granularity in that case - not just
++         *  per-chunk. */
++        public int[] chunkSize;
++        public long[] chunkComputeNanos;
++        public long[] chunkWaitNanos;
++        public boolean[] chunkTimedOut;
+     }
+ 
+     /**
+@@ -158,20 +171,26 @@ public final class RegionParallelRunner {
+         final int chunkCount = Math.max(1, Math.min(RegionParallelRunner.WORKERS, n));
+         final int chunkSize = (n + chunkCount - 1) / chunkCount;
+ 
+-        final java.util.concurrent.atomic.AtomicLong computeNanosAccum = new java.util.concurrent.atomic.AtomicLong();
++        stats.chunkSize = new int[chunkCount];
++        stats.chunkComputeNanos = new long[chunkCount];
++        stats.chunkWaitNanos = new long[chunkCount];
++        stats.chunkTimedOut = new boolean[chunkCount];
++
+         final Future<R[]>[] chunkFutures = RegionParallelRunner.<R[]>futureBuffer(chunkCount);
+         int chunkIndex = 0;
+         for (int start = 0; start < n; start += chunkSize, chunkIndex++) {
+             final int from = start;
+             final int to = Math.min(n, start + chunkSize);
++            final int idx = chunkIndex;
++            stats.chunkSize[idx] = to - from;
+             try {
+-                chunkFutures[chunkIndex] = POOL.submit(() -> computeChunk(phase, snapshots, from, to, computeNanosAccum));
++                chunkFutures[idx] = POOL.submit(() -> computeChunk(phase, snapshots, from, to, stats.chunkComputeNanos, idx));
+                 stats.submitted += to - from;
+             } catch (final RejectedExecutionException poolFull) {
+                 // Queue is full: do not wait for room, compute this chunk right here on the calling
+                 // thread instead. Bounded queue, no unbounded backlog - a full queue degrades to
+                 // synchronous, it never blocks.
+-                chunkFutures[chunkIndex] = CompletableFuture.completedFuture(computeChunk(phase, snapshots, from, to, computeNanosAccum));
++                chunkFutures[idx] = CompletableFuture.completedFuture(computeChunk(phase, snapshots, from, to, stats.chunkComputeNanos, idx));
+                 stats.rejectedQueueFull += to - from;
+             }
+         }
+@@ -181,7 +200,8 @@ public final class RegionParallelRunner {
+         for (int start = 0; start < n; start += chunkSize, chunkIndex++) {
+             final int from = start;
+             final int to = Math.min(n, start + chunkSize);
+-            final Future<R[]> chunkFuture = chunkFutures[chunkIndex];
++            final int idx = chunkIndex;
++            final Future<R[]> chunkFuture = chunkFutures[idx];
+             final R[] results;
+             final long waitStart = System.nanoTime();
+             try {
+@@ -190,17 +210,25 @@ public final class RegionParallelRunner {
+                     throw new TimeoutException();
+                 }
+                 results = chunkFuture.get(remaining, TimeUnit.NANOSECONDS);
+-                stats.waitNanos += System.nanoTime() - waitStart;
++                final long waited = System.nanoTime() - waitStart;
++                stats.waitNanos += waited;
++                stats.chunkWaitNanos[idx] = waited;
+             } catch (final TimeoutException | ExecutionException giveUp) {
+                 // Deadline missed (or the worker itself failed): drop this whole chunk for this tick.
+                 // compute() must tolerate being abandoned mid-run - it never touches shared state, so
+                 // an orphaned computation is wasted CPU, not a correctness problem.
+-                stats.waitNanos += System.nanoTime() - waitStart;
++                final long waited = System.nanoTime() - waitStart;
++                stats.waitNanos += waited;
++                stats.chunkWaitNanos[idx] = waited;
++                stats.chunkTimedOut[idx] = true;
+                 chunkFuture.cancel(true);
+                 stats.timedOut += to - from;
+                 continue;
+             } catch (final InterruptedException interrupted) {
+-                stats.waitNanos += System.nanoTime() - waitStart;
++                final long waited = System.nanoTime() - waitStart;
++                stats.waitNanos += waited;
++                stats.chunkWaitNanos[idx] = waited;
++                stats.chunkTimedOut[idx] = true;
+                 Thread.currentThread().interrupt();
+                 chunkFuture.cancel(true);
+                 stats.timedOut += to - from;
+@@ -229,22 +257,28 @@ public final class RegionParallelRunner {
+             stats.computedInTime += to - from;
+         }
+ 
+-        stats.computeNanos = computeNanosAccum.get();
++        long computeNanosTotal = 0L;
++        for (final long c : stats.chunkComputeNanos) {
++            computeNanosTotal += c;
++        }
++        stats.computeNanos = computeNanosTotal;
+         return stats;
+     }
+ 
+-    /** Runs on a worker thread: pure computation over a contiguous slice of snapshots, no live state. */
++    /** Runs on a worker thread: pure computation over a contiguous slice of snapshots, no live state.
++     *  Writes its own elapsed time directly into {@code chunkComputeNanos[chunkIndex]} - safe without
++     *  synchronization because each chunk owns a distinct array slot, never shared with another chunk. */
+     @SuppressWarnings("unchecked")
+     private static <S, R> R[] computeChunk(
+         final RegionParallelPhase<?, S, R> phase, final S[] snapshots, final int from, final int to,
+-        final java.util.concurrent.atomic.AtomicLong computeNanosAccum
++        final long[] chunkComputeNanos, final int chunkIndex
+     ) {
+         final long start = System.nanoTime();
+         final Object[] results = new Object[to - from];
+         for (int i = from; i < to; i++) {
+             results[i - from] = phase.compute(snapshots[i]);
+         }
+-        computeNanosAccum.addAndGet(System.nanoTime() - start);
++        chunkComputeNanos[chunkIndex] = System.nanoTime() - start;
+         return (R[]) results;
+     }
+ }

@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 7 Aug 2026 00:39:37 +0800
+Subject: [PATCH] Lophinya: exp - candidate C: computeViaFramework
+ result-capture wiring API
+
+Adds NavigationPathfindPhase#computeViaFramework, a static helper that runs
+RegionParallelRunner.runPhase for exactly one mob and returns the resolved
+Path directly instead of having commit() call moveTo itself, via a new
+resultHolder constructor overload. Lets a real call site (MoveToTargetSink)
+that already owns its own moveTo/state logic use the framework as a drop-in
+synchronous-from-the-caller's-perspective replacement for
+PathNavigation#createPath, without a redundant second moveTo call.
+
+Also adds RegionParallelConfig.NAVIGATION_ENABLED (system property
+lophinya.parallel.navigation, default false even when the master switch is
+on) as the dedicated kill switch for this real-behavior wiring, separate
+from the measurement-only SENSOR_SHADOW_ENABLED.
+
+See project-docs/evidence/20260807-nyacore-candidate-c-navigation-wiring.md.
+exp/* isolated exploration, not for merge into ver/26.2-nya.
+
+diff --git a/src/main/java/fun/bm/lophinya/parallel/RegionParallelConfig.java b/src/main/java/fun/bm/lophinya/parallel/RegionParallelConfig.java
+index e0d027c1374ddaaaa5352f659afee029421438e7..f2e4f441796aa64cc9806fb2fbe193d0ef2cce4e 100644
+--- a/src/main/java/fun/bm/lophinya/parallel/RegionParallelConfig.java
++++ b/src/main/java/fun/bm/lophinya/parallel/RegionParallelConfig.java
+@@ -31,6 +31,18 @@ public final class RegionParallelConfig {
+     public static final boolean SENSOR_SHADOW_ENABLED =
+         ENABLED && !"false".equalsIgnoreCase(System.getProperty("lophinya.parallel.sensorShadow", "true"));
+ 
++    /**
++     * Candidate C (DEC-70): route real villager {@code MoveToTargetSink} pathfind requests through
++     * {@link NavigationPathfindPhase} + {@link RegionParallelRunner} instead of the vanilla
++     * synchronous {@code PathNavigation.createPath} call. Off by default (unlike
++     * {@link #SENSOR_SHADOW_ENABLED}, which defaults on when the master switch is on) - this changes
++     * real mob behavior/timing, not just measurement overhead, so it needs an explicit opt-in on top
++     * of the master switch. exp/* only, not merged into ver/26.2-nya - see
++     * evidence/20260807-nyacore-candidate-c-navigation-wiring.md.
++     */
++    public static final boolean NAVIGATION_ENABLED =
++        ENABLED && "true".equalsIgnoreCase(System.getProperty("lophinya.parallel.navigation", "false"));
++
+     /** Worker pool size: total minus this many, floor 1. Reserves cores for the existing region
+      *  pool / global work pool / network executor so this framework cannot starve them on a small
+      *  box (Goal explicitly forbids that). */
+diff --git a/src/main/java/fun/bm/lophinya/parallel/nyacore/NavigationPathfindPhase.java b/src/main/java/fun/bm/lophinya/parallel/nyacore/NavigationPathfindPhase.java
+index 90380293cca7ad456c62a45f62a95d65cc62e94a..d7e109f6744c717606e12aa2ed0afcd9029d5788 100644
+--- a/src/main/java/fun/bm/lophinya/parallel/nyacore/NavigationPathfindPhase.java
++++ b/src/main/java/fun/bm/lophinya/parallel/nyacore/NavigationPathfindPhase.java
+@@ -9,6 +9,7 @@ import net.minecraft.world.level.PathNavigationRegion;
+ import net.minecraft.world.level.pathfinder.Path;
+ import net.minecraft.world.level.pathfinder.PathFinder;
+ 
++import java.util.List;
+ import java.util.Set;
+ 
+ /**
+@@ -32,6 +33,9 @@ public final class NavigationPathfindPhase implements RegionParallelPhase<Mob, N
+     private final int reachRange;
+     private final float maxVisitedNodesMultiplier;
+     private final double speedModifier;
++    // Lophinya: DEC-70 real-call-site wiring (MoveToTargetSink) - see the constructor overload and
++    // #computeViaFramework below.
++    private final Path[] resultHolder;
+ 
+     public NavigationPathfindPhase(
+         final Set<BlockPos> targets,
+@@ -40,6 +44,28 @@ public final class NavigationPathfindPhase implements RegionParallelPhase<Mob, N
+         final int reachRange,
+         final float maxVisitedNodesMultiplier,
+         final double speedModifier
++    ) {
++        this(targets, radiusOffset, above, reachRange, maxVisitedNodesMultiplier, speedModifier, null);
++    }
++
++    /**
++     * Lophinya: variant for a caller that wants the resolved {@link Path} back to apply through its
++     * own existing logic instead of having {@link #commit} call {@code moveTo} itself - e.g.
++     * {@code MoveToTargetSink}, which already sets its own {@code this.path} field and calls
++     * {@code moveTo} later from {@code start()}. When {@code resultHolder} is non-null, {@link
++     * #commit} writes the result there (index 0) instead of moving the mob, so the caller does not
++     * get a redundant second {@code moveTo} call. {@code resultHolder} must be a fresh single-element
++     * array per request (one {@link RegionParallelRunner#runPhase} call is for one mob when used this
++     * way - see {@link #computeViaFramework}), not shared across concurrent requests.
++     */
++    public NavigationPathfindPhase(
++        final Set<BlockPos> targets,
++        final int radiusOffset,
++        final boolean above,
++        final int reachRange,
++        final float maxVisitedNodesMultiplier,
++        final double speedModifier,
++        final Path[] resultHolder
+     ) {
+         this.targets = targets;
+         this.radiusOffset = radiusOffset;
+@@ -47,6 +73,40 @@ public final class NavigationPathfindPhase implements RegionParallelPhase<Mob, N
+         this.reachRange = reachRange;
+         this.maxVisitedNodesMultiplier = maxVisitedNodesMultiplier;
+         this.speedModifier = speedModifier;
++        this.resultHolder = resultHolder;
++    }
++
++    /**
++     * Lophinya: drop-in replacement for {@code PathNavigation.createPath(targets, radiusOffset,
++     * above, reachRange)} at a real call site (DEC-70 wiring, {@code MoveToTargetSink}). Blocks the
++     * calling (region owner) thread until the framework commits or drops this one mob's request -
++     * same synchronous-from-the-caller's-perspective contract as the vanilla call it replaces, so no
++     * change to the caller's control flow is needed. Returns {@code null} both when no path was found
++     * and when the request was dropped (queue full / deadline missed) - the caller cannot currently
++     * distinguish the two, same as {@code createPath} returning {@code null} for "no path found" is
++     * already an ordinary outcome its callers must already handle.
++     *
++     * <p>Known limitation (see evidence/20260807-nyacore-candidate-c-navigation-wiring.md): this is
++     * ONE mob per {@code runPhase} call, not batched with other mobs also requesting a path this same
++     * tick - it does not reproduce the framework-dispatch performance win the n=100/300/1000 matrix
++     * measured (that required many mobs sharing one {@code runPhase} call). Real batching would
++     * require restructuring the entity-tick loop to collect-then-dispatch, which is out of scope for
++     * this wiring pass.
++     */
++    public static Path computeViaFramework(
++        final ServerLevel level,
++        final Mob mob,
++        final Set<BlockPos> targets,
++        final int radiusOffset,
++        final boolean above,
++        final int reachRange,
++        final float maxVisitedNodesMultiplier
++    ) {
++        final Path[] resultHolder = new Path[1];
++        final NavigationPathfindPhase phase = new NavigationPathfindPhase(
++            targets, radiusOffset, above, reachRange, maxVisitedNodesMultiplier, 0.0, resultHolder);
++        fun.bm.lophinya.parallel.RegionParallelRunner.runPhase(level, List.of(mob), phase);
++        return resultHolder[0];
+     }
+ 
+     // Owner thread only (RegionParallelRunner guarantee). Mirrors PathNavigation#createPath's own
+@@ -86,6 +146,10 @@ public final class NavigationPathfindPhase implements RegionParallelPhase<Mob, N
+     // null result (no path found) is a normal outcome, not committed as a move.
+     @Override
+     public void commit(final ServerLevel level, final Mob mob, final Path result) {
++        if (this.resultHolder != null) {
++            this.resultHolder[0] = result;
++            return;
++        }
+         if (result != null) {
+             mob.getNavigation().moveTo(result, this.speedModifier);
+         }

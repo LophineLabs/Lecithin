@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 5 Aug 2026 23:07:23 +0800
+Subject: [PATCH] Lophinya: exp - batch the shadow-run across a whole
+ region-tick, not per-entity
+
+Moves the RegionParallelRunner shadow-run call from inside Brain#tick (called
+once per entity, batch size 1) to ServerLevel's entity-tick preamble (called
+once per region per tick, batch = every ticking LivingEntity in the region).
+
+The unbatched version measured ~16.3%/1.9% tick-time overhead for a no-op -
+more expensive than the Brain Sensor Tick it would eventually replace (3.15%
+in the same run), because submit+barrier+validate paid its fixed cost once
+per entity instead of once per tick. This is the batched measurement of the
+same pipeline, to test whether that fixed cost amortizes across a batch.
+
+Still behaviour-identical: SensorShadowPhase's three methods remain no-ops.
+
+exp/* isolated exploration branch per DEC-69. Not for merge into ver/26.2-nya.
+
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index e94ea890c83e65d987519379ebe3b5134bb14b42..ff4f3f1a7453aea347ad40864c08647e0a7a4322 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -930,6 +930,33 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+                 if (dev.kaiijumc.kaiiju.KaiijuEntityLimits.enabled) regionizedWorldData.entityThrottler.tickLimiterStart(); // Kaiiju
+             io.papermc.paper.entity.activation.ActivationRange.activateEntities(this); // Paper - EAR
+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.ACTIVATE_ENTITIES); } // Folia - profiler
++            // Lophinya start - region parallel phase framework (DEC-69): batched shadow-run pre-pass
++            // Default off (RegionParallelConfig.SENSOR_SHADOW_ENABLED). Collects every ticking entity
++            // in this region ONCE, then runs the no-op SensorShadowPhase through
++            // RegionParallelRunner.runPhase for the whole batch in a single call - contrast with the
++            // earlier per-entity version (batch size 1, called from inside Brain#tick, since removed)
++            // that measured unbatched overhead. This is the batched measurement of the same pipeline,
++            // see project-docs/evidence/20260805-region-parallel-phase-framework-design.md 7.
++            if (fun.bm.lophinya.parallel.RegionParallelConfig.SENSOR_SHADOW_ENABLED) {
++                foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_SHADOW_RUN);
++                final java.util.List<Entity> shadowBatch = new java.util.ArrayList<>();
++                regionizedWorldData.forEachTickingEntity(e -> {
++                    if (!e.isRemoved() && e instanceof net.minecraft.world.entity.LivingEntity) {
++                        shadowBatch.add(e);
++                    }
++                });
++                final fun.bm.lophinya.parallel.RegionParallelRunner.Stats stats =
++                    fun.bm.lophinya.parallel.RegionParallelRunner.runPhase(
++                        this, shadowBatch, fun.bm.lophinya.parallel.SensorShadowPhase.INSTANCE);
++                foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_SHADOW_RUN);
++                foliaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_SUBMITTED, stats.submitted);
++                foliaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_QUEUE_FULL, stats.rejectedQueueFull);
++                foliaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_TIMED_OUT, stats.timedOut);
++                foliaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_DISCARDED_STALE, stats.discardedInvalid + stats.discardedNotOwned);
++                foliaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_COMMITTED, stats.committed);
++            }
++            // Lophinya end - region parallel phase framework
++
+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.ENTITY_TICK); try { // Folia - profiler
+             regionizedWorldData // Folia - regionised ticking
+                 .forEachTickingEntity( // Folia - regionised ticking
+diff --git a/net/minecraft/world/entity/ai/Brain.java b/net/minecraft/world/entity/ai/Brain.java
+index fcb84de19552e1140ecd09bc181a2ea96a418cb0..ef9493dd020868c25a30c922c5187b25bd9677f4 100644
+--- a/net/minecraft/world/entity/ai/Brain.java
++++ b/net/minecraft/world/entity/ai/Brain.java
+@@ -394,27 +394,11 @@ public class Brain<E extends LivingEntity> {
+         this.tickEachRunningBehavior(level, body);
+         lophinyaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BRAIN_BEHAVIOR_TICK);
+         // Lophinya end - region parallel tick research
+-
+-        // Lophinya start - region parallel phase framework (DEC-69), first wired call site
+-        // Default off (RegionParallelConfig.SENSOR_SHADOW_ENABLED). Runs a no-op phase through the
+-        // real submit/barrier/commit-validate pipeline for this one entity so its overhead is
+-        // measurable on its own before any real phase (Sensor, Goal, Navigation, Brain behavior) is
+-        // attached. This does not batch multiple entities together yet - see
+-        // project-docs/evidence/20260805-region-parallel-phase-framework-design.md 4 for why that is
+-        // the next step, not this one. Changes nothing: SensorShadowPhase's three methods are no-ops.
+-        if (fun.bm.lophinya.parallel.RegionParallelConfig.SENSOR_SHADOW_ENABLED) {
+-            lophinyaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_SHADOW_RUN);
+-            final fun.bm.lophinya.parallel.RegionParallelRunner.Stats stats =
+-                fun.bm.lophinya.parallel.RegionParallelRunner.runPhase(
+-                    level, java.util.List.of(body), fun.bm.lophinya.parallel.SensorShadowPhase.INSTANCE);
+-            lophinyaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_SHADOW_RUN);
+-            lophinyaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_SUBMITTED, stats.submitted);
+-            lophinyaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_QUEUE_FULL, stats.rejectedQueueFull);
+-            lophinyaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_TIMED_OUT, stats.timedOut);
+-            lophinyaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_DISCARDED_STALE, stats.discardedInvalid + stats.discardedNotOwned);
+-            lophinyaProfiler.addCounter(ca.spottedleaf.leafprofiler.LProfilerRegistry.REGION_PARALLEL_COMMITTED, stats.committed);
+-        }
+-        // Lophinya end - region parallel phase framework
++        // Lophinya: region parallel phase framework shadow-run moved to ServerLevel's entity tick
++        // preamble (batched across every ticking entity in the region, once per tick) - see
++        // ServerLevel#tick and project-docs/evidence/20260805-region-parallel-phase-framework-design.md
++        // 7. The per-entity call that used to live here (batch size 1) measured how expensive an
++        // unbatched call is; the batched version replaces it entirely, it does not run alongside it.
+     }
+ 
+     private void tickSensors(final ServerLevel level, final E body) {

@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 6 Aug 2026 00:26:17 +0800
+Subject: [PATCH] Lophinya: exp - wire the behavior-start throttle into
+ Brain.tick()
+
+
+diff --git a/net/minecraft/world/entity/ai/Brain.java b/net/minecraft/world/entity/ai/Brain.java
+index ef9493dd020868c25a30c922c5187b25bd9677f4..db276d9ab0b99e7bd392e5f4da13cd8481686c26 100644
+--- a/net/minecraft/world/entity/ai/Brain.java
++++ b/net/minecraft/world/entity/ai/Brain.java
+@@ -390,7 +390,15 @@ public class Brain<E extends LivingEntity> {
+         this.tickSensors(level, body);
+         lophinyaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BRAIN_SENSOR_TICK);
+         lophinyaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BRAIN_BEHAVIOR_TICK);
+-        this.startEachNonRunningBehavior(level, body);
++        // Lophinya start - Dynamic Activation of Brain (DEC-69 alternative candidate, exp/* only)
++        // Default off. Only the "should I start something new" check is throttled, phased by
++        // entity id so the population does not pause in lockstep; an already-running behavior is
++        // never skipped. See fun.bm.lophinya.loadshed.BrainBehaviorStartThrottleConfig.
++        if (!fun.bm.lophinya.loadshed.BrainBehaviorStartThrottleConfig.ENABLED
++            || (body.tickCount + body.getId()) % fun.bm.lophinya.loadshed.BrainBehaviorStartThrottleConfig.DELAY_TICKS == 0) {
++            this.startEachNonRunningBehavior(level, body);
++        }
++        // Lophinya end - Dynamic Activation of Brain
+         this.tickEachRunningBehavior(level, body);
+         lophinyaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BRAIN_BEHAVIOR_TICK);
+         // Lophinya end - region parallel tick research

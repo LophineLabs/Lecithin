@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 31 Jul 2026 15:14:59 +0800
+Subject: [PATCH] Lophinya: fire the Bukkit teleport events Folia left
+ unimplemented
+
+Two hooks in Entity, both at points upstream already marks as event territory.
+
+teleportAsync: fire PlayerTeleportEvent (players) or EntityTeleportEvent
+(everything else) just above the destination unload lock. That is after all the
+validity checks and before anything is mutated, so a cancel is a plain return
+false - the same answer teleportAsync already gives for its own refusals - with
+no lock to unwind, and it sits above the same-region/cross-region branch so one
+hook covers same region, cross region and cross world. The thread is right by
+construction: teleportAsync opens with TickThread.ensureTickThread on this
+entity, so the handler runs on the region that owns it. Nothing blocks, nothing
+waits on another region, no ownership check is touched. A handler that redirects
+via setTo is honoured, including to another world.
+
+placeInAsync: fire PlayerChangedWorldEvent from the completion that runs on the
+destination region, once the entity has actually been placed - guarded on the
+world really having changed, because placeInAsync also handles same-world cross
+-region moves. It goes before teleportComplete because that callback releases
+the destination's unload read lock.
+
+Teleports whose cause is UNKNOWN are skipped: that is what Folia and Luminol
+pass for internal repositioning with no Paper counterpart (fixPassengerDesync,
+guardEntityTick's out-of-region recovery) and what TamableAnimal passes after
+having already fired EntityTeleportEvent itself. Everything with a real cause is
+a teleport Paper would also have reported, and no Bukkit API overload produces
+UNKNOWN by default.
+
+Kill switch: -Dlophinya.compat.teleportEvents=false
+
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+index 363dcad09e441ea8b4fd79fcb94432536783676c..b31008f29e652ad8d2a352a5f322d577f8eb108f 100644
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -4401,6 +4401,17 @@ public abstract class Entity
+                         node.root.postChangeDimension();
+                     }
+ 
++                    // Lophinya start - PlayerChangedWorldEvent; placeInAsync also runs for same-world
++                    // cross-region moves, so the world really has to have changed. Fired before
++                    // teleportComplete because that callback releases the destination's unload read
++                    // lock, and the handler should still be covered by it.
++                    if (originWorld != destination && fun.bm.lophinya.compat.LophinyaTeleportEvents.ENABLED) {
++                        for (EntityTreeNode node : fullTree) {
++                            fun.bm.lophinya.compat.LophinyaTeleportEvents.callChangedWorld(node.root, originWorld);
++                        }
++                    }
++                    // Lophinya end
++
+                     if (teleportComplete != null) {
+                         teleportComplete.accept(Entity.this);
+                     }
+@@ -4564,12 +4575,29 @@ public abstract class Entity
+             }
+         }
+ 
++        // Lophinya start - fire the Bukkit teleport events Folia left as a TODO below
++        // Deliberately above the unload lock: a cancel here is a plain return, with no lock to
++        // unwind and nothing mutated yet. See LophinyaTeleportEvents for the full rationale.
++        if (fun.bm.lophinya.compat.LophinyaTeleportEvents.ENABLED) {
++            final fun.bm.lophinya.compat.LophinyaTeleportEvents.Destination lophinyaDestination =
++                fun.bm.lophinya.compat.LophinyaTeleportEvents.callTeleportEvent(this, destination, pos, yaw, pitch, cause);
++            if (lophinyaDestination == null) {
++                return false;
++            }
++            destination = lophinyaDestination.level();
++            pos = lophinyaDestination.pos();
++            yaw = lophinyaDestination.yaw();
++            pitch = lophinyaDestination.pitch();
++        }
++        // Lophinya end
++
+         // Luminol start - Level hot unload apis
+         if (!destination.levelUnloadStateLock.acquireRead()) {
+             return false;
+         }
++        final ServerLevel finalDestination = destination; // Lophinya - the event may have redirected it, and the lambda below needs an effectively final capture
+         final java.util.function.Consumer<Entity> finalTeleportComplete = entity -> {
+-            destination.levelUnloadStateLock.releaseRead();
++            finalDestination.levelUnloadStateLock.releaseRead(); // Lophinya - was destination, which is no longer effectively final
+ 
+             if (teleportComplete != null) teleportComplete.accept(entity);
+         };

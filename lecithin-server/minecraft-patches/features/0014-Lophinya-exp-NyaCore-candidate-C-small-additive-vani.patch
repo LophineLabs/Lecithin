@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 6 Aug 2026 03:00:49 +0800
+Subject: [PATCH] Lophinya: exp - NyaCore candidate C: small additive
+ vanilla-layer accessors for worker-safe pathfinding
+
+Three small, additive-only changes, all zero behaviour change for existing
+callers:
+- PathfindingContext: new Mob-free constructor (CollisionGetter, BlockPos)
+  that always skips the per-region PathTypeCache (unsynchronized, unsafe from
+  a worker thread - see design doc 3a).
+- PathFinder: new public findPathFromPreparedStart() entry point that runs
+  the search from an already-obtained start Node, without calling
+  prepare()/done() (both require a live Mob).
+- PathNavigation: getMaxPathLength() widened private->public, new public
+  getMaxVisitedNodes() - so a caller building its own PathFinder for async
+  search can match PathNavigation's own search budget exactly instead of
+  guessing.
+
+diff --git a/net/minecraft/world/entity/ai/navigation/PathNavigation.java b/net/minecraft/world/entity/ai/navigation/PathNavigation.java
+index 65f3f239a230f95a8082ecac1a05615f6af89b91..e46b389f680cc1bf638b33829e824b1f8514ba09 100644
+--- a/net/minecraft/world/entity/ai/navigation/PathNavigation.java
++++ b/net/minecraft/world/entity/ai/navigation/PathNavigation.java
+@@ -76,10 +76,23 @@ public abstract class PathNavigation {
+         this.updatePathfinderMaxVisitedNodes();
+     }
+ 
+-    private float getMaxPathLength() {
++    // Lophinya note (NyaCore candidate C, DEC-70): widened from private to public - a caller
++    // building its own PathNavigationRegion for async search (design doc 3b) needs the exact same
++    // radius PathNavigation#createPath itself would use. No behaviour change for existing callers.
++    public float getMaxPathLength() {
+         return Math.max((float)this.mob.getAttributeValue(Attributes.FOLLOW_RANGE), this.requiredPathLength);
+     }
+ 
++    // Lophinya start - NyaCore candidate C (DEC-70): expose the same search-budget calculation
++    // updatePathfinderMaxVisitedNodes() feeds into this.pathFinder, so a caller building its own
++    // PathFinder for async search (never this.pathFinder itself - see design doc 3b) can match it
++    // exactly, including any setRequiredPathLength() override, instead of guessing from FOLLOW_RANGE
++    // alone.
++    public int getMaxVisitedNodes() {
++        return Mth.floor(this.getMaxPathLength() * 16.0F);
++    }
++    // Lophinya end - NyaCore candidate C
++
+     public void resetMaxVisitedNodesMultiplier() {
+         this.maxVisitedNodesMultiplier = 1.0F;
+     }
+diff --git a/net/minecraft/world/level/pathfinder/PathFinder.java b/net/minecraft/world/level/pathfinder/PathFinder.java
+index 253074a0a14115cd3d18aaae6fa5822cf32346c9..5fcf4372a43cb4a307db0f47b28a92b8a7ab08f7 100644
+--- a/net/minecraft/world/level/pathfinder/PathFinder.java
++++ b/net/minecraft/world/level/pathfinder/PathFinder.java
+@@ -66,6 +66,27 @@ public class PathFinder {
+         return path;
+     }
+ 
++    // Lophinya start - NyaCore candidate C (DEC-70): search-only entry point for worker-thread
++    // pathfinding. Mirrors the public findPath() above from "getStart() already returned a node"
++    // onward, but never calls nodeEvaluator.prepare()/done() (both require a live Mob) and never
++    // touches PathNavigationRegion beyond what the evaluator itself reads. The caller
++    // (fun.bm.lophinya.parallel.nyacore) is responsible for calling a snapshot-based equivalent of
++    // prepare() on the owner thread beforehand and obtaining `from`/`targets` from that. This
++    // PathFinder instance must be freshly created per request (see design doc 3b) - never the
++    // instance a PathNavigation holds long-term, since this.neighbors/this.openSet are mutable
++    // scratch state with no synchronization.
++    public @Nullable Path findPathFromPreparedStart(
++        final Node from, final Set<BlockPos> targets, final float maxPathLength, final int reachRange, final float maxVisitedNodesMultiplier
++    ) {
++        this.openSet.clear();
++        List<Map.Entry<Target, BlockPos>> tos = Lists.newArrayList();
++        for (BlockPos pos : targets) {
++            tos.add(new java.util.AbstractMap.SimpleEntry<>(this.nodeEvaluator.getTarget(pos.getX(), pos.getY(), pos.getZ()), pos));
++        }
++        return this.findPath(from, tos, maxPathLength, reachRange, maxVisitedNodesMultiplier);
++    }
++    // Lophinya end - NyaCore candidate C
++
+     private @Nullable Path findPath(
+         final Node from, final List<Map.Entry<Target, BlockPos>> targets, final float maxPathLength, final int reachRange, final float maxVisitedNodesMultiplier // Paper - optimize collection
+     ) {
+diff --git a/net/minecraft/world/level/pathfinder/PathfindingContext.java b/net/minecraft/world/level/pathfinder/PathfindingContext.java
+index 64e1a34de133beccb90486f247e7e74d6535941f..b9b0da595a26cbe683f16030c3e246b07cebdd27 100644
+--- a/net/minecraft/world/level/pathfinder/PathfindingContext.java
++++ b/net/minecraft/world/level/pathfinder/PathfindingContext.java
+@@ -24,6 +24,20 @@ public class PathfindingContext {
+         this.mobPosition = mob.blockPosition();
+     }
+ 
++    // Lophinya start - NyaCore candidate C (DEC-70): a Mob-free constructor for worker-thread search.
++    // getPathTypeCache() returns a per-region RegionizedWorldData field with no synchronization -
++    // safe for the owning region tick thread, not safe for a NyaCore worker thread computing
++    // concurrently. This constructor always skips it (cache stays null, forcing the uncached
++    // WalkNodeEvaluator.getPathTypeFromState() path every call - see
++    // project-docs/evidence/20260806-nyacore-candidate-c-navigationsnapshot-design.md 3a), and takes
++    // an already-captured mobPosition instead of reading a live Mob. Existing callers are untouched.
++    public PathfindingContext(final CollisionGetter level, final BlockPos mobPosition) {
++        this.level = level;
++        this.cache = null;
++        this.mobPosition = mobPosition;
++    }
++    // Lophinya end - NyaCore candidate C
++
+     public PathType getPathTypeFromState(final int x, final int y, final int z) {
+         BlockPos pos = this.mutablePos.set(x, y, z);
+         return this.cache == null ? WalkNodeEvaluator.getPathTypeFromState(this.level, pos) : this.cache.getOrCompute(this.level, pos);

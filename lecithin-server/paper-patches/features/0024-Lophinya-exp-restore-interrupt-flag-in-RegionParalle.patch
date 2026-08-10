@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 5 Aug 2026 22:53:54 +0800
+Subject: [PATCH] Lophinya: exp - restore interrupt flag in
+ RegionParallelRunner's barrier wait
+
+InterruptedException was being swallowed alongside TimeoutException/
+ExecutionException. Split it into its own catch that calls
+Thread.currentThread().interrupt() before falling through to the same
+drop-this-entity handling, per the standard JDK convention of letting the
+flag survive an InterruptedException catch instead of eating it.
+
+exp/* isolated exploration branch. Not for merge into ver/26.2-nya.
+
+diff --git a/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java b/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
+index a7776d4cafaa50673273e6eb9e3b16aff8fbf46d..f0a7af5a19bab3196e173f43cb681bc8f774777a 100644
+--- a/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
++++ b/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
+@@ -126,13 +126,21 @@ public final class RegionParallelRunner {
+                 }
+                 result = future.get(remaining, TimeUnit.NANOSECONDS);
+                 stats.computedInTime++;
+-            } catch (final TimeoutException | InterruptedException | ExecutionException giveUp) {
++            } catch (final TimeoutException | ExecutionException giveUp) {
+                 // Deadline missed (or the worker itself failed): drop this entity for this tick and
+                 // move on. compute() must tolerate being abandoned mid-run - it never touches shared
+                 // state, so an orphaned computation is wasted CPU, not a correctness problem.
+                 future.cancel(true);
+                 stats.timedOut++;
+                 continue;
++            } catch (final InterruptedException interrupted) {
++                // Restore the interrupt flag rather than swallowing it - this thread (the region
++                // owner thread) did not ask to stop, but whoever interrupted it might expect the
++                // usual JDK convention of the flag surviving past this catch.
++                Thread.currentThread().interrupt();
++                future.cancel(true);
++                stats.timedOut++;
++                continue;
+             }
+ 
+             // Re-validate immediately before commit - never trust snapshot-time state. This single

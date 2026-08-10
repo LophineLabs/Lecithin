@@ -1,0 +1,340 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 5 Aug 2026 22:47:40 +0800
+Subject: [PATCH] Lophinya: exp - Region-local parallel phase framework
+ skeleton (DEC-69)
+
+RegionParallelPhase<E,S,R>: snapshot (owner thread) / compute (worker thread,
+no live-state access) / commit (owner thread, only after re-validation).
+
+RegionParallelRunner: server-wide shared bounded worker pool (not per-region -
+would starve regions on a small box), bounded queue with immediate synchronous
+fallback on rejection (never blocks), hard-deadline barrier wait (region tick
+thread must never block indefinitely - see the folia-economy-harness incident
+in SESSION_HANDOFF.md 8), and per-result re-validation (alive, not removed,
+still owned by the calling region) immediately before commit - this single
+check is what makes region merge/split, entity unload, and shutdown safe
+without special-case code for any of them.
+
+SensorShadowPhase: the first (no-op) phase, wired into Brain#tick in the
+lophine-server/src/minecraft/java worktree (see that repo's matching exp/
+branch) to measure the framework's own overhead before any real AI sub-phase
+is attached.
+
+Design doc: project-docs/evidence/20260805-region-parallel-phase-framework-
+design.md. Authorization: DECISIONS.md DEC-69 (CORE-SHIM-RESEARCH scope only -
+exp/* isolated prototyping, not authorization to merge into ver/26.2-nya).
+
+exp/* isolated exploration branch. Not for merge into ver/26.2-nya.
+
+diff --git a/src/main/java/fun/bm/lophinya/parallel/RegionParallelConfig.java b/src/main/java/fun/bm/lophinya/parallel/RegionParallelConfig.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e0d027c1374ddaaaa5352f659afee029421438e7
+--- /dev/null
++++ b/src/main/java/fun/bm/lophinya/parallel/RegionParallelConfig.java
+@@ -0,0 +1,52 @@
++package fun.bm.lophinya.parallel;
++
++/**
++ * Lophinya: kill switches for the Region-local parallel phase framework (DEC-69).
++ *
++ * <p>System properties, not YAML, same reasoning as {@code LophinyaCompatConfig}: every one of
++ * these is a rollback lever you can pull from the start script.
++ *
++ * <pre>
++ *   -Dlophinya.parallel.enabled=true      # master switch. DEFAULT OFF - Goal requires this
++ *   -Dlophinya.parallel.sensorShadow=false # disables the sensor shadow-run sub-feature specifically
++ * </pre>
++ *
++ * <p>This is deliberately a separate property namespace from {@code lophinya.compat.*}: those are
++ * plugin-compatibility shims (the project's core product); this is a new, distinct performance
++ * research area reactivated by {@code DECISIONS.md} {@code DEC-69}, not a compatibility fix.
++ */
++public final class RegionParallelConfig {
++
++    /** Master switch. Off by default per the Goal that reactivated this research (DEC-69). */
++    public static final boolean ENABLED =
++        "true".equalsIgnoreCase(System.getProperty("lophinya.parallel.enabled", "false"));
++
++    /**
++     * The first wired sub-feature: run a no-op phase through the full snapshot/submit/barrier/
++     * commit-validate pipeline for the entity {@link net.minecraft.world.entity.ai.Brain#tick}
++     * is about to process, without changing anything it does. Purpose is to measure the
++     * framework's own per-call overhead before any real phase (Sensor, Goal, ...) is attached -
++     * see project-docs/evidence/20260805-region-parallel-phase-framework-design.md 4.
++     */
++    public static final boolean SENSOR_SHADOW_ENABLED =
++        ENABLED && !"false".equalsIgnoreCase(System.getProperty("lophinya.parallel.sensorShadow", "true"));
++
++    /** Worker pool size: total minus this many, floor 1. Reserves cores for the existing region
++     *  pool / global work pool / network executor so this framework cannot starve them on a small
++     *  box (Goal explicitly forbids that). */
++    public static final int RESERVED_THREADS =
++        Integer.getInteger("lophinya.parallel.reservedThreads", 2);
++
++    /** Bounded queue capacity for the shared worker pool. Full queue means immediate synchronous
++     *  fallback on the calling thread, never a wait - see RegionParallelRunner. */
++    public static final int QUEUE_CAPACITY =
++        Integer.getInteger("lophinya.parallel.queueCapacity", 256);
++
++    /** Hard deadline for the barrier wait, in nanoseconds. Chosen well under a 50ms tick budget so
++     *  a full pool cannot itself cause the region thread to miss its tick. */
++    public static final long DEADLINE_NANOS =
++        Long.getLong("lophinya.parallel.deadlineNanos", 5_000_000L); // 5ms
++
++    private RegionParallelConfig() {
++    }
++}
+diff --git a/src/main/java/fun/bm/lophinya/parallel/RegionParallelPhase.java b/src/main/java/fun/bm/lophinya/parallel/RegionParallelPhase.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..7eb7a2e23b49ebf4cd120082f4c4f90e1addc0fa
+--- /dev/null
++++ b/src/main/java/fun/bm/lophinya/parallel/RegionParallelPhase.java
+@@ -0,0 +1,35 @@
++package fun.bm.lophinya.parallel;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++
++/**
++ * Lophinya: a region-tick sub-phase that can run its read-only compute step on a bounded worker
++ * pool instead of the region owner thread (DEC-69, Region-local parallel phase framework).
++ *
++ * <p>Full design rationale: {@code project-docs/evidence/20260805-region-parallel-phase-framework
++ * -design.md}. The three methods below are guaranteed to run on specific threads by
++ * {@link RegionParallelRunner} - implementations must not fight that guarantee:
++ *
++ * <ul>
++ *   <li>{@link #snapshot} - the calling (region owner) thread only. This is the one place allowed
++ *       to read live world/entity state.
++ *   <li>{@link #compute} - a worker thread. Must not touch {@code Entity}, {@code ServerLevel},
++ *       any Bukkit/Paper API, or call a plugin - only the snapshot value it was given.
++ *   <li>{@link #commit} - the calling (region owner) thread only, and only after
++ *       {@link RegionParallelRunner} has re-validated the entity is still alive, not removed, and
++ *       still owned by the calling region. This is the only place allowed to mutate anything.
++ * </ul>
++ *
++ * @param <E> the entity type this phase operates on
++ * @param <S> the immutable snapshot type produced on the owner thread and consumed by a worker
++ * @param <R> the result type produced by a worker and consumed back on the owner thread
++ */
++public interface RegionParallelPhase<E extends Entity, S, R> {
++
++    S snapshot(ServerLevel level, E entity);
++
++    R compute(S snapshot);
++
++    void commit(ServerLevel level, E entity, R result);
++}
+diff --git a/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java b/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7776d4cafaa50673273e6eb9e3b16aff8fbf46d
+--- /dev/null
++++ b/src/main/java/fun/bm/lophinya/parallel/RegionParallelRunner.java
+@@ -0,0 +1,156 @@
++package fun.bm.lophinya.parallel;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import org.bukkit.Bukkit;
++
++import java.util.List;
++import java.util.concurrent.ArrayBlockingQueue;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ExecutionException;
++import java.util.concurrent.Future;
++import java.util.concurrent.RejectedExecutionException;
++import java.util.concurrent.ThreadPoolExecutor;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.TimeoutException;
++
++/**
++ * Lophinya: bounded, server-wide driver for {@link RegionParallelPhase} (DEC-69).
++ *
++ * <p>Shape: region owner thread builds an immutable snapshot per entity -&gt; bounded workers
++ * compute in parallel -&gt; owner thread waits with a hard deadline -&gt; owner thread re-validates
++ * and commits. Full rationale: {@code project-docs/evidence/20260805-region-parallel-phase-
++ * framework-design.md}.
++ *
++ * <h2>Safety invariants (do not relax without a corresponding DECISIONS.md entry)</h2>
++ * <ul>
++ *   <li>{@code snapshot()} and {@code commit()} only ever run on the calling thread - the region
++ *       owner thread that called {@link #runPhase}. Never dispatched anywhere else.
++ *   <li>{@code compute()} never receives an {@code Entity}, {@code ServerLevel}, or any Bukkit/
++ *       Paper handle - only the snapshot value. It cannot touch live state even by accident.
++ *   <li>The queue is bounded ({@link RegionParallelConfig#QUEUE_CAPACITY}); a full queue means
++ *       immediate synchronous fallback on the calling thread, never a wait for room.
++ *   <li>The barrier wait has a hard deadline ({@link RegionParallelConfig#DEADLINE_NANOS}); a
++ *       result not ready by then is dropped, never awaited past it. The region tick thread must
++ *       never block indefinitely - see the {@code folia-economy-harness} incident recorded in
++ *       {@code SESSION_HANDOFF.md} 8 (an unconditional {@code CountDownLatch.await()} inside a
++ *       {@code RegionScheduler} task froze the whole server, because that task <i>is</i> the
++ *       region's tick).
++ *   <li>Every result is re-validated (alive, not removed, still owned by the calling region)
++ *       immediately before {@code commit()} - never trusted from snapshot time. This is what
++ *       makes region merge/split, entity unload, and shutdown safe without any special-case code
++ *       for those situations: a stale result simply fails this check and gets dropped.
++ * </ul>
++ *
++ * <p>The worker pool is shared across every region on the server, not one pool per region - on a
++ * small (e.g. 4 vCore) box, per-region pools would starve each other and the existing region/
++ * global/network executors, which the Goal this framework was built for explicitly forbids.
++ */
++public final class RegionParallelRunner {
++
++    private static final int WORKERS = Math.max(1,
++        Runtime.getRuntime().availableProcessors() - RegionParallelConfig.RESERVED_THREADS);
++
++    private static final ThreadPoolExecutor POOL = new ThreadPoolExecutor(
++        WORKERS, WORKERS, 60L, TimeUnit.SECONDS,
++        new ArrayBlockingQueue<>(RegionParallelConfig.QUEUE_CAPACITY),
++        runnable -> {
++            final Thread t = new Thread(runnable, "Lophinya Region Parallel Worker");
++            t.setDaemon(true);
++            return t;
++        },
++        new ThreadPoolExecutor.AbortPolicy() // caller catches RejectedExecutionException -> sync fallback, never blocks
++    );
++
++    private RegionParallelRunner() {
++    }
++
++    /** Diagnostics for one {@link #runPhase} call. Caller reports these to whatever counters it
++     *  is using (see {@code Brain#tick}'s {@code LProfilerRegistry} integration for the first
++     *  wiring) - this class does not know about the profiler itself, to keep it phase-agnostic. */
++    public static final class Stats {
++        public int submitted;
++        public int rejectedQueueFull;
++        public int computedInTime;
++        public int timedOut;
++        public int discardedInvalid;
++        public int discardedNotOwned;
++        public int committed;
++    }
++
++    /**
++     * Runs {@code phase} for every entity in {@code entities}. Must be called from the thread that
++     * currently owns the region ticking all of them - that thread is where {@code snapshot()} and
++     * {@code commit()} run.
++     */
++    public static <E extends Entity, S, R> Stats runPhase(
++        final ServerLevel level, final List<E> entities, final RegionParallelPhase<E, S, R> phase
++    ) {
++        final Stats stats = new Stats();
++        final int n = entities.size();
++        if (n == 0) {
++            return stats;
++        }
++
++        @SuppressWarnings("unchecked")
++        final S[] snapshots = (S[]) new Object[n];
++        for (int i = 0; i < n; i++) {
++            snapshots[i] = phase.snapshot(level, entities.get(i));
++        }
++
++        @SuppressWarnings("unchecked")
++        final Future<R>[] futures = new Future[n];
++        for (int i = 0; i < n; i++) {
++            final S snap = snapshots[i];
++            try {
++                futures[i] = POOL.submit(() -> phase.compute(snap));
++                stats.submitted++;
++            } catch (final RejectedExecutionException poolFull) {
++                // Queue is full and every worker is busy: do not wait for room, compute right here
++                // on the calling thread instead. This is the "bounded queue, no unbounded backlog"
++                // requirement - a full queue degrades to synchronous, it never blocks.
++                futures[i] = CompletableFuture.completedFuture(phase.compute(snap));
++                stats.rejectedQueueFull++;
++            }
++        }
++
++        final long deadline = System.nanoTime() + RegionParallelConfig.DEADLINE_NANOS;
++        for (int i = 0; i < n; i++) {
++            final E entity = entities.get(i);
++            final Future<R> future = futures[i];
++            final R result;
++            try {
++                final long remaining = deadline - System.nanoTime();
++                if (remaining <= 0) {
++                    throw new TimeoutException();
++                }
++                result = future.get(remaining, TimeUnit.NANOSECONDS);
++                stats.computedInTime++;
++            } catch (final TimeoutException | InterruptedException | ExecutionException giveUp) {
++                // Deadline missed (or the worker itself failed): drop this entity for this tick and
++                // move on. compute() must tolerate being abandoned mid-run - it never touches shared
++                // state, so an orphaned computation is wasted CPU, not a correctness problem.
++                future.cancel(true);
++                stats.timedOut++;
++                continue;
++            }
++
++            // Re-validate immediately before commit - never trust snapshot-time state. This single
++            // check is what makes region merge/split, entity unload, and shutdown safe: a stale
++            // result just fails here instead of needing its own special-case handling.
++            if (!entity.isAlive() || entity.isRemoved()) {
++                stats.discardedInvalid++;
++                continue;
++            }
++            if (!Bukkit.isOwnedByCurrentRegion(entity.getBukkitEntity())) {
++                stats.discardedNotOwned++;
++                continue;
++            }
++
++            phase.commit(level, entity, result);
++            stats.committed++;
++        }
++
++        return stats;
++    }
++}
+diff --git a/src/main/java/fun/bm/lophinya/parallel/SensorShadowPhase.java b/src/main/java/fun/bm/lophinya/parallel/SensorShadowPhase.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..eec8f84d90a51d6ff01b496162f221d1c719f9b6
+--- /dev/null
++++ b/src/main/java/fun/bm/lophinya/parallel/SensorShadowPhase.java
+@@ -0,0 +1,44 @@
++package fun.bm.lophinya.parallel;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++
++/**
++ * Lophinya: a no-op {@link RegionParallelPhase}, wired into {@code Brain#tick} as the first real
++ * call site for {@link RegionParallelRunner} (DEC-69).
++ *
++ * <p>snapshot/compute/commit all do nothing. Its only job is to exercise the framework's real
++ * submit -&gt; barrier -&gt; commit-validate machinery against a real entity on a real running
++ * server, so the framework's own per-call overhead can be measured with {@code /profiler} before
++ * any actual AI sub-phase (Sensor, Goal, Navigation, Brain behavior) is attached to it. Because
++ * every method is a no-op, running this with the feature on is provably behaviour-identical to
++ * running with it off - see the A/B check required before this leaves {@code exp/*}.
++ *
++ * <p>This is deliberately NOT yet "the Sensor phase" - splitting {@code Sensor#tick} into a real
++ * snapshot/compute/commit shape is separate follow-up work
++ * ({@code 20260805-region-parallel-phase-framework-design.md} 3): most vanilla sensors read
++ * nearby-entity/world state directly inside their own {@code tick()} with no snapshot step to
++ * reuse yet.
++ */
++public final class SensorShadowPhase implements RegionParallelPhase<Entity, Void, Void> {
++
++    public static final SensorShadowPhase INSTANCE = new SensorShadowPhase();
++
++    private SensorShadowPhase() {
++    }
++
++    @Override
++    public Void snapshot(final ServerLevel level, final Entity entity) {
++        return null;
++    }
++
++    @Override
++    public Void compute(final Void snapshot) {
++        return null;
++    }
++
++    @Override
++    public void commit(final ServerLevel level, final Entity entity, final Void result) {
++        // intentionally empty
++    }
++}

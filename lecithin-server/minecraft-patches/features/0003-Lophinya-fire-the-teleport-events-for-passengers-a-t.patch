@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 31 Jul 2026 19:33:28 +0800
+Subject: [PATCH] Lophinya: fire the teleport events for passengers a
+ teleported vehicle carries
+
+The hook half of paper-patch 0035. One call in Entity#teleportAsync, placed
+immediately after the root entity's own event hook and before the destination's
+unload read lock is acquired.
+
+That point has the four properties the call needs: the passenger tree is still
+attached so the passengers can be enumerated, the vehicle has not moved so its
+own from/to is what every node is about to be given, the root's event has
+already had its chance to cancel, and no lock is held so a handler that throws
+cannot leak one. It also sits above the same-region/cross-region branch, so one
+hook covers same region, cross region and cross world.
+
+See LophinyaPassengerTeleportEvents for the measured Paper baseline.
+
+Kill switch: -Dlophinya.compat.passengerTeleportEvents=false
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+index b31008f29e652ad8d2a352a5f322d577f8eb108f..cc145ef1bd8061c8fb897333d0927c8e50066700 100644
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -4591,6 +4591,14 @@ public abstract class Entity
+         }
+         // Lophinya end
+ 
++        // Lophinya start - the same events for the passengers this teleport carries along.
++        // The tree is still attached here and the vehicle has not moved, so the vehicle's own
++        // from/to is what every node is about to be moved to. Before the unload lock, so a handler
++        // that throws cannot leak it. See LophinyaPassengerTeleportEvents for the measured Paper
++        // baseline, including why a passenger's cancel is ignored.
++        fun.bm.lophinya.compat.LophinyaPassengerTeleportEvents.callForPassengers(this, destination, pos, yaw, pitch, cause);
++        // Lophinya end
++
+         // Luminol start - Level hot unload apis
+         if (!destination.levelUnloadStateLock.acquireRead()) {
+             return false;

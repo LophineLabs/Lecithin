@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 31 Jul 2026 15:12:18 +0800
+Subject: [PATCH] Lophinya: make an off-region block read fail attributably
+
+Level#getCurrentWorldData() returns null when the calling thread is not ticking
+a region of that world, and Level#getBlockStateIfLoaded dereferences it with no
+null check. A cross-region block read therefore does not end in
+TickThread.ensureTickThread's message - which carries thread context, world and
+position, and logs a stack trace - but in
+
+  NullPointerException: Cannot read field "captureTreeGeneration"
+    because the return value of "Level.getCurrentWorldData()" is null
+
+naming a field that has nothing to do with the problem. Measured: 26 of them in
+one soak run, all from CraftWorld#rayTraceBlocks called off-region, and working
+out what they meant needed a separate investigation.
+
+This fork's model is "let it load, then fail loudly at the real callsite", and
+that only works if the failure can be attributed. Nothing about the outcome
+changes: the read already failed and still fails, at the same place, for the
+same reason - only the exception's identity and diagnostics change. Same pure
+diagnostics category as patch 0024's runtime access guard.
+
+This adds the helper the Level hook calls. Scope is getBlockStateIfLoaded, the
+one path with measured evidence; other getCurrentWorldData() dereferences have
+the same shape but no observed occurrence.
+
+Kill switch: -Dlophinya.compat.regionReadDiagnostics=false
+
+diff --git a/src/main/java/fun/bm/lophinya/compat/LophinyaRegionReadDiagnostics.java b/src/main/java/fun/bm/lophinya/compat/LophinyaRegionReadDiagnostics.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..27adb4b0bbf99660b67e1f0d6fbf9d9e77b520cc
+--- /dev/null
++++ b/src/main/java/fun/bm/lophinya/compat/LophinyaRegionReadDiagnostics.java
+@@ -0,0 +1,65 @@
++package fun.bm.lophinya.compat;
++
++import ca.spottedleaf.moonrise.common.util.TickThread;
++import net.minecraft.core.BlockPos;
++import net.minecraft.world.level.Level;
++
++/**
++ * Lophinya: makes an off-region block read fail the way every other ownership violation fails.
++ *
++ * <h2>The gap</h2>
++ * {@code Level#getCurrentWorldData()} returns {@code null} when the calling thread is not ticking a
++ * region of that world - a global-region task, an async thread, the server thread. Folia's
++ * {@code Level#getBlockStateIfLoaded} dereferences it with no null check, so a cross-region block
++ * read does not end in {@code TickThread.ensureTickThread}'s message (which carries the thread
++ * context, the world and the position, and logs a stack trace). It ends in:
++ *
++ * <pre>
++ *   NullPointerException: Cannot read field "captureTreeGeneration"
++ *     because the return value of "Level.getCurrentWorldData()" is null
++ * </pre>
++ *
++ * <p>That names a field which has nothing to do with the problem, and nothing else. Measured: 26 of
++ * them in one soak run, all from {@code CraftWorld#rayTraceBlocks} called off-region. Working out
++ * what they meant took a separate investigation, and a probe run was written off as "some plugin ray
++ * traced my armour stand" because the exception could not be read.
++ *
++ * <h2>Why this matters here specifically</h2>
++ * This fork's whole model is "let it load, then fail loudly at the real callsite" - which only works
++ * if the failure can be attributed. An unattributable NPE is the one failure mode the model cannot
++ * absorb.
++ *
++ * <h2>What this changes</h2>
++ * Nothing about the outcome. The read already fails and still fails, with the same
++ * {@code RuntimeException}-ness, at the same place, for the same reason. It changes the exception's
++ * <i>identity</i> from an NPE about a random field into the platform's own ownership error, and adds
++ * the stack trace and context that error already logs. This is the same "pure diagnostics" category
++ * as patch 0024's runtime access guard.
++ *
++ * <p>If {@code ensureTickThread} unexpectedly does not throw - the thread does own the position but
++ * has no world data, which should not be reachable - the caller falls through to the original NPE.
++ * Diagnostics must not invent a new outcome.
++ *
++ * <h2>Scope</h2>
++ * Only {@code getBlockStateIfLoaded}, the one path with measured evidence. Other
++ * {@code getCurrentWorldData()} dereferences have the same shape but no observed occurrence yet, and
++ * a blanket sweep of them would be a behaviour change dressed as a diagnostic.
++ *
++ * <p>Kill switch: {@code -Dlophinya.compat.regionReadDiagnostics=false} restores the bare NPE.
++ */
++public final class LophinyaRegionReadDiagnostics {
++
++    public static final boolean ENABLED =
++        !"false".equalsIgnoreCase(System.getProperty("lophinya.compat.regionReadDiagnostics", "true"));
++
++    private LophinyaRegionReadDiagnostics() {
++    }
++
++    /**
++     * Throws the platform's ownership error if this thread has no regionized world data for
++     * {@code level}. Called only when the data is already known to be null.
++     */
++    public static void reportMissingWorldData(final Level level, final BlockPos pos) {
++        TickThread.ensureTickThread(level, pos, "Cannot read block state off-region");
++    }
++}

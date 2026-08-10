@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Mon, 3 Aug 2026 20:39:26 +0800
+Subject: [PATCH] Lophinya: let the startup bootstrap thread satisfy
+ ensureGlobalTickThread
+
+
+diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
+index ea95a6032417f901c930f365256d7046e8a84907..c695a3ba634ba843703e44cf2f0aee61124e9ad8 100644
+--- a/io/papermc/paper/threadedregions/RegionizedServer.java
++++ b/io/papermc/paper/threadedregions/RegionizedServer.java
+@@ -145,6 +145,11 @@ public final class RegionizedServer {
+ 
+     public static void ensureGlobalTickThread(final String reason) {
+         if (!isGlobalTickThread()) {
++            // Lophinya start - the bootstrap thread owns global state during startup, before any region ticks
++            if (fun.bm.lophinya.compat.LophinyaStartupGlobalContext.allow(reason)) {
++                return;
++            }
++            // Lophinya end
+             throw new IllegalStateException(reason);
+         }
+     }
