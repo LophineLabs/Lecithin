@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 30 Jul 2026 15:24:05 +0800
+Subject: [PATCH] per-account economy serialization at the services  and
+ command boundaries
+
+Restores, for one version-locked plugin jar, the serialization Paper used to provide
+implicitly by having a single main thread - without touching, patching or instrumenting
+a single byte of that plugin.
+
+The problem. A ledger written for Paper stores the balance in a plain non-volatile field
+and mutates it with a non-atomic read-modify-write spread across two calls
+(setMoney(getMoney().subtract(x))). On Paper every caller runs on the one main thread, so
+they serialize by construction. On Folia two players in two regions run on two threads,
+the read-modify-writes interleave, and one update is silently discarded - then written
+cleanly to disk by the plugin's own save executor. There is no exception, no log line and
+no thread-ownership violation, because a money field is not world state: the flow never
+reaches TickThread.ensureTickThread. The project's usual "ownership violations = 0" metric
+is structurally blind to this failure (project-docs evidence 20260729d-t01 section 6.4).
+
+What this does NOT do. It does not add a lock inside the plugin, make its balance field
+volatile, rewrite its data model, or transform its bytecode. Those remain DEC-19 B5 and
+out of scope. It does not make any refused plugin loadable either - the folia-supported
+gate's refusal list (patch 0025) is a separate mechanism and is untouched here.
+
+Where it hooks instead - two boundaries the core already owns:
+
+1. Services boundary. CraftServer's ServicesManager is a core object, and a plugin
+   registers its economy provider into it (for EssentialsX: Essentials.java:205 registers
+   VaultEconomyProvider under net.milkbowl.vault.economy.Economy). Every Vault consumer on
+   the server - shop plugins, reward plugins, server tweaks - resolves that one object, so
+   wrapping it once covers all of them. LophinyaServicesManager subclasses
+   SimpleServicesManager and hands each registration to
+   LophinyaEconomySerialization.wrapServiceProvider, which returns a java.lang.reflect.Proxy
+   holding a per-account lock for the duration of each call. Different accounts still run
+   fully in parallel; only same-account calls serialize.
+
+2. Legacy command boundary. The plugin's own economy commands (/pay, /eco, /sell,
+   /balance) never go through Vault - they call the plugin's internal API, which the core
+   cannot see. BukkitCommandNode:83 is the single point through which every plugin.yml
+   command is executed, so a guarded plugin's economy commands run there under a coarse
+   exclusive lock that also excludes every service-boundary call. The lock is coarse
+   because at that point the core knows which plugin owns the command but not which
+   accounts the body will touch - /pay names its target only inside the plugin's own
+   argument parsing, and hardcoding a third-party command's argument format into the core
+   is exactly the scattered plugin-specific hardcoding AGENTS.md line 12 forbids. These are
+   human-typed commands at single-digit frequency; the high-frequency path is the service
+   boundary, which stays per-account.
+
+Lock order and liveness. The only order ever taken is coarse -> account, and account locks
+are acquired in sorted key order when a call names more than one account. Nothing is held
+across a scheduler hand-off, a chunk load or a future: every critical section is a
+straight-line call into the plugin and back, so a region thread blocked on one of these is
+always waiting on a section that is itself making progress. ReentrantReadWriteLock permits
+taking the read lock while already holding the write lock, so a command that internally
+reaches back through the service boundary downgrades rather than self-deadlocking.
+
+Fail-open, unlike patch 0026. The scheduler dispatch registry fails closed (an unreadable
+field means "do not dispatch"). This one fails open: if the rule lookup, the jar hash or
+the proxy construction fails, the original provider is registered unwrapped and the server
+behaves exactly as it does today. The asymmetry is deliberate - this patch never grants a
+plugin new reach, it only narrows concurrency for a plugin that is already running, so a
+failure here can lose the added protection but can never create a new code path.
+
+Rule table. Keyed by exact jar SHA-256, same versioning discipline as patch 0026: a plugin
+update needs a fresh entry with fresh research, it never inherits the previous version's
+guard. The only entry is EssentialsX 2.22.1-dev+12-776f709, the artifact installed on s01.
+balancetop is deliberately not guarded: it is read-only and already scans the whole
+userdata set off-thread, so putting it under the exclusive lock would stall every region
+thread for a full scan to protect a value that is advisory by design.
+
+Kill switch: -Dlophinya.compat.economySerialization=true - defaults to OFF. With the switch
+off, LophinyaServicesManager registers every provider byte-for-byte as SimpleServicesManager
+did and the command hook is a single boolean test.
+
+Research and measurements: project-docs evidence 20260729d-t01-essentialsx-callsite-analysis.md
+and 20260730b-essentialsx-economy-serialization.md.
+
+diff --git a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+index 5c52b1563d20d7e977a5bb958c18b19dec5c365a..eedaa4bf1f63c59e1cd88141806703d56c96f1ed 100644
+--- a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
++++ b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+@@ -80,6 +80,20 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+             String[] args = org.apache.commons.lang3.StringUtils.split(content, ' '); // fix adjacent spaces (from console/plugins) causing empty array elements
+ 
+             // Note: we don't return the result of target.execute as thats success / failure, we return handled (true) or not handled (false)
++            // Lophinya start - economy serialization: this is the single choke point through which
++            // every legacy (plugin.yml) Bukkit command is executed, so it is where the core can put
++            // a guarded plugin's own economy commands under the same lock as its Vault provider.
++            // See fun.bm.lophinya.compat.LophinyaEconomySerialization; no-op when the switch is off.
++            if (fun.bm.lophinya.compat.LophinyaEconomySerialization.isGuardedCommand(this.command)) {
++                fun.bm.lophinya.compat.LophinyaEconomySerialization.beginExclusive();
++                try {
++                    this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
++                } finally {
++                    fun.bm.lophinya.compat.LophinyaEconomySerialization.endExclusive();
++                }
++                return 1;
++            }
++            // Lophinya end - economy serialization
+             this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
+ 
+             // return true as command was handled
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index e8359235c5fa0681c2d0d12cf66d6abbc0fe4d97..88d03cecae2861c263dfe9334af338d08db98b1c 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -266,7 +266,7 @@ public final class CraftServer implements Server {
+     private final String serverVersion;
+     private final String bukkitVersion = Versioning.getBukkitVersion();
+     private final Logger logger = Logger.getLogger("Minecraft");
+-    private final ServicesManager servicesManager = new SimpleServicesManager();
++    private final ServicesManager servicesManager = new fun.bm.lophinya.compat.LophinyaServicesManager(); // Lophinya - economy serialization: wrap version-locked economy providers on register (subclass is a no-op when the kill switch is off)
+     private final CraftScheduler scheduler = new CraftScheduler();
+     private final CraftCommandMap commandMap; // Paper - Move down
+     private final SimpleHelpMap helpMap = new SimpleHelpMap(this);

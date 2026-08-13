@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 30 Jul 2026 19:48:53 +0800
+Subject: [PATCH] restore Entity#teleport at the Bukkit API boundary
+
+Folia replaces CraftEntity/CraftPlayer teleport0 with an unconditional throw, so every Paper plugin that calls Entity#teleport(Location) is broken regardless of whether the move would be safe. Delegate to the platform's own teleportAsync and read the future without waiting: already-completed means Folia took its same-region fast path and did the move inline, so the real result is Paper's behaviour exactly; not-completed means the destination is another region/world and the teleport was accepted but has not happened yet, which is reported as true with a once-per-callsite diagnostic. No ownership check is bypassed and nothing is dispatched to the global scheduler.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+index a52c6981493e2b70be6c073a4f19d0ec7b6d32f3..dfb34588eefbc7e4d041fffb9a2aa0a5fe279dec 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+@@ -318,8 +318,13 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+ 
+     protected boolean teleport0(Location location, TeleportCause cause, TeleportFlag... flags) {
+         // Folia start - region threading
++        // Lophinya start - restore Paper's Entity#teleport at the API boundary; see LophinyaTeleportCompat
++        if (fun.bm.lecithin.config.modules.CompatConfig.teleportSemantics) {
++            return fun.bm.lophinya.compat.LophinyaTeleportCompat.teleport(this, location, cause, flags);
++        }
++        // Lophinya end
+         if (true) {
+-            throw new UnsupportedOperationException("Must use teleportAsync while in region threading");
++            throw new UnsupportedOperationException(fun.bm.lophinya.compat.LophinyaTeleportCompat.STOCK_MESSAGE); // Lophinya - same text, one definition
+         }
+         // Folia end - region threading
+         Entity entity = this.getHandle();
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 9135327aacf818d3b80ec1102e2b11f40ac93261..866da5bfe278653e68fafaff89dbfb348a0d521c 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -1342,9 +1342,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     @Override
+     protected boolean teleport0(Location location, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause, io.papermc.paper.entity.TeleportFlag... flags) {
+         // Folia start - region threading
+-        if (true) {
+-            throw new UnsupportedOperationException("Must use teleportAsync while in region threading");
++        // Lophinya start - fall through to the checks below and then CraftEntity's shimmed teleport0
++        if (!fun.bm.lecithin.config.modules.CompatConfig.teleportSemantics) {
++            throw new UnsupportedOperationException(fun.bm.lophinya.compat.LophinyaTeleportCompat.STOCK_MESSAGE);
+         }
++        // Lophinya end
+         // Folia end - region threading
+         if (this.getHandle().connection == null) {
+             return false;
