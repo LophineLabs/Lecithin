@@ -22,10 +22,10 @@ Kill switch: -Dlophinya.compat.passengerTeleportEvents=false
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index b31008f29e652ad8d2a352a5f322d577f8eb108f..cc145ef1bd8061c8fb897333d0927c8e50066700 100644
+index c6cff434e2b73bb35a031d46e8f59b4d9017237d..1e2d37257b405df5aec3e90c74143a3bf101ef34 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -4591,6 +4591,14 @@ public abstract class Entity
+@@ -4597,6 +4597,14 @@ public abstract class Entity
          }
          // Lophinya end
  

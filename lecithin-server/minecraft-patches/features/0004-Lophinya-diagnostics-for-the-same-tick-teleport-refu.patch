@@ -15,10 +15,10 @@ Switch: -Dlophinya.compat.teleportRefusalDiagnostics=true
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index cc145ef1bd8061c8fb897333d0927c8e50066700..81dde58eb456b7fb449aa95209923778decbaa01 100644
+index 1e2d37257b405df5aec3e90c74143a3bf101ef34..591ab874f0f3804ca914800fa970484c61a7854e 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -4551,6 +4551,13 @@ public abstract class Entity
+@@ -4557,6 +4557,13 @@ public abstract class Entity
          }
  
          if (!this.canTeleportAsync()) {
@@ -32,7 +32,7 @@ index cc145ef1bd8061c8fb897333d0927c8e50066700..81dde58eb456b7fb449aa95209923778
              return false;
          }
          this.getBukkitEntity(); // force bukkit entity to be created before TPing
-@@ -6405,6 +6412,13 @@ public abstract class Entity
+@@ -6416,6 +6423,13 @@ public abstract class Entity
  
      @Override
      public void setLevelCallback(final EntityInLevelCallback levelCallback) {

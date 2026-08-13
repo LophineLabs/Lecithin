@@ -164,10 +164,10 @@ index 0000000000000000000000000000000000000000..3b5fcb2159b830d90a9f6ee93b0336ee
 +    }
 +}
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index d51660ecccf8f1425ea1462ae7e1d455fd795451..163c284eaa80d4f1698084cc1d116fc6874420ea 100644
+index a52c6981493e2b70be6c073a4f19d0ec7b6d32f3..d24016e9993b75d040836179a8af74da4467a5fc 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -317,8 +317,13 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -318,8 +318,13 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      protected boolean teleport0(Location location, TeleportCause cause, TeleportFlag... flags) {
          // Folia start - region threading

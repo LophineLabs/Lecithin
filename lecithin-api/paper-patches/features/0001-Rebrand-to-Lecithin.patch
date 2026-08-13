@@ -5,10 +5,10 @@ Subject: [PATCH] Rebrand to Lecithin
 
 
 diff --git a/src/main/java/io/papermc/paper/ServerBuildInfo.java b/src/main/java/io/papermc/paper/ServerBuildInfo.java
-index ebe0290bf0235af2ba353ac1f74b29080daebba4..03ce43b9d368089a343366b412045b567d048de9 100644
+index ed558bea1f939ab902d3c45417573fba83307abc..b96770bab57d56b839a48051b3db30ffa34c2cf1 100644
 --- a/src/main/java/io/papermc/paper/ServerBuildInfo.java
 +++ b/src/main/java/io/papermc/paper/ServerBuildInfo.java
-@@ -30,6 +30,13 @@ public interface ServerBuildInfo {
+@@ -28,6 +28,13 @@ public interface ServerBuildInfo {
      Key BRAND_LOPHINE_ID = Key.key("lophinelabs", "lophine");
      // Lophine end
  

@@ -126,10 +126,10 @@ index 0000000000000000000000000000000000000000..1ae0120b6802085bd923fb57434f16ac
 +    }
 +}
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 9f0826321522858977a9de272da5cf7fc123f3a4..c1e3c138a88d74786c233988789a18f8e49973f6 100644
+index c969bb5a14a1e8fe2d38aa8d20a2d6aa318c2a40..6cde61f2e7c5fc114391c289bad07fe82413005c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -1186,7 +1186,12 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1198,7 +1198,12 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
                  ret.complete(Boolean.FALSE);
              }
          };
