@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Mon, 3 Aug 2026 23:22:28 +0800
+Subject: [PATCH] answer a cross-region block read from a residen chunk
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
+index b5dd9e16d11488318ef09b3d1adb614b45332d0c..1624de34871940f408d779b107ab4bda05f39eed 100644
+--- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
++++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
+@@ -82,6 +82,15 @@ public class CraftBlock implements Block {
+     public net.minecraft.world.level.block.state.BlockState getBlockState() {
+         // Folia start - region threading
+         if (this.level instanceof ServerLevel serverWorld) {
++            // Lophinya start - serve a read-only lookup from a resident chunk instead of refusing it
++            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverWorld, this.position)) {
++                final net.minecraft.world.level.block.state.BlockState resident =
++                    fun.bm.lophinya.compat.LophinyaCrossRegionBlockRead.readIfResident(serverWorld, this.position);
++                if (resident != null) {
++                    return resident;
++                }
++            }
++            // Lophinya end
+             ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
+         }
+         // Folia end - region threading

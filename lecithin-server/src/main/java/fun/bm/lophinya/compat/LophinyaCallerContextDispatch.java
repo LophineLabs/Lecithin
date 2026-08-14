@@ -112,6 +112,11 @@ public final class LophinyaCallerContextDispatch {
             if (Bukkit.isGlobalTickThread()) {
                 return new CapturedContext(null, true);
             }
+            if (CompatConfig.startupContextDispatch && callerIsStartupThread()) {
+                // Same reasoning as tryDispatch: the bootstrap thread's successor for global state
+                // is the global region, so an async task created during startup carries that.
+                return new CapturedContext(null, true);
+            }
             // Already contextless, or an inherited context - do not chain inheritance across a
             // second async hop, because each hop makes the captured region less likely to still be
             // the right one and nothing would bound the chain.
@@ -185,6 +190,12 @@ public final class LophinyaCallerContextDispatch {
                     ? Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, ignored -> task.run(), safeDelay, period)
                     : Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), safeDelay);
                 context = "global region (the caller was the global region)" + origin;
+            } else if (CompatConfig.startupContextDispatch && callerIsStartupThread()) {
+                scheduled = repeating
+                    ? Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, ignored -> task.run(), safeDelay, period)
+                    : Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), safeDelay);
+                context = "global region (scheduled during startup on the bootstrap thread; Paper "
+                    + "runs these on the main thread as init completes)";
             } else {
                 // No observable context. Inferring one here is exactly DEC-19 B1.
                 return null;
@@ -204,6 +215,16 @@ public final class LophinyaCallerContextDispatch {
 
     /** Package-private, not private: {@link CapturedContext} carries one across the async hop. */
     record OwnedChunk(World world, int chunkX, int chunkZ) {
+    }
+
+    /**
+     * True when the calling thread is the server bootstrap thread ("Server thread"). See
+     * {@link #STARTUP_CONTEXT} for why on this fork that identity implies "during startup" and why
+     * its context is the global region.
+     */
+    private static boolean callerIsStartupThread() {
+        final net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
+        return server != null && Thread.currentThread() == server.getRunningThread();
     }
 
     /**

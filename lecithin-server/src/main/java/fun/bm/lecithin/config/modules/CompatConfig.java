@@ -70,4 +70,16 @@ public class CompatConfig {
     @HotReloadUnsupported
     @ConfigInfo(name = "scoreboard-api")
     public static boolean scoreboardApi = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "cross-region-block-read")
+    public static boolean crossRegionBlockRead = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "startup-global-context")
+    public static boolean startupGlobalContext = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "startup-context-dispatch")
+    public static boolean startupContextDispatch = true;
 }
