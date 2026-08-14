@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 31 Jul 2026 21:37:57 +0800
+Subject: [PATCH] let a teleport wait for the entity's handover to finish
+
+D-40: a plugin that teleports the same entity twice in one tick gets true
+then false, and the second teleport silently does not happen. Paper does
+both.
+
+Measured, not argued: a cross-region teleport does not move the entity, it
+builds a copy (transformForAsyncTeleport) and hands it to the destination
+region, which adds it to its lookup on a later tick. In that window the copy
+is in no level's lookup, so canTeleportAsync() refuses through
+hasNullCallback(). Nothing sets the callback to NULL - the copy is born with
+it from the field initialiser, and the destination's add is the first thing
+ever to set it.
+
+CraftEntity#teleportAsync already has a path for "not ours to move right
+now": schedule on the entity's own EntityScheduler. The handover window was
+not taking it, because isOwnedByCurrentRegion is still true - the entity has
+not moved, only changed hands. Widen the condition.
+
+No ownership check is bypassed, no owner is guessed, nothing is dispatched to
+the global region scheduler, no callback or validity is faked, and the
+calling thread does not wait. Inline, this window can only produce false, so
+this widens and never narrows.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+index c312fa2ea50e247979936da79acbbff03dfb5377..779389fdfc380cdef80c8f07e85442a4be1970cd 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+@@ -1198,7 +1198,12 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+                 ret.complete(Boolean.FALSE);
+             }
+         };
+-        if (org.bukkit.Bukkit.isOwnedByCurrentRegion(this)) {
++        // Lophinya start - D-40: a previous teleport may still be handing this entity over. It is
++        // still owned by this region (it has not moved, only changed hands), so the inline path
++        // below would claim it and the platform would refuse it for having no level callback yet.
++        // Take the scheduler path the platform already has for "not ours to move right now".
++        if (org.bukkit.Bukkit.isOwnedByCurrentRegion(this) && !fun.bm.lophinya.compat.LophinyaTeleportHandover.isMidHandover(this)) {
++        // Lophinya end
+             run.accept(this.getHandle());
+             return ret;
+         }

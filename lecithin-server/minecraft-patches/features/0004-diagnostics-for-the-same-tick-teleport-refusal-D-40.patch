@@ -1,21 +1,34 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Fri, 31 Jul 2026 20:06:13 +0800
-Subject: [PATCH] Lophinya: diagnostics for the same-tick teleport refusal
- (D-40)
+Subject: [PATCH] diagnostics for the same-tick teleport refusal (D-40)
 
-The hook half of paper-patch 0036. Two calls, both guarded by the diagnostic's
-own default-off switch and both output-only: one at the canTeleportAsync()
-refusal in teleportAsync, one at setLevelCallback before the assignment.
+A plugin that calls Entity#teleport twice in one tick gets true then false, and
+the second teleport silently does not happen. Paper performs both. Four
+mechanism hypotheses have been written for this and all four were killed by
+measurement rather than by argument - chunk loading, isValid(), hasNullCallback,
+chunk readiness - each time by printing one more value instead of reasoning
+harder. The one predicate nobody could read is hasNullCallback(), which has no
+Bukkit API, so every hypothesis guessed which of canTeleportAsync()'s four
+conjuncts was false from outside.
 
-See LophinyaTeleportRefusalDiagnostics.
+This prints them. Two hooks, both output-only:
 
-Switch: -Dlophinya.compat.teleportRefusalDiagnostics=true
+  Entity#teleportAsync, at the refusal the platform has already decided - the
+  four predicates individually, plus removal reason, callback class, ownership,
+  both chunk states and the vehicle graph.
+
+  Entity#setLevelCallback - NULL <-> set transitions only, which is the other
+  half: when the entity actually leaves and rejoins the level lookup.
+
+Off by default, prints only on a refusal or a transition, never per tick, and
+returns void so it cannot influence the decision even by accident. Nothing about
+lifecycle, scheduling, return values or teleport results changes.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 1e2d37257b405df5aec3e90c74143a3bf101ef34..591ab874f0f3804ca914800fa970484c61a7854e 100644
+index 69fb3335742d5d12e6e365077638e38b2e4a00ba..3a5e476414c24d0c1a4d94833d1ded965cc96ba1 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -4557,6 +4557,13 @@ public abstract class Entity
@@ -25,7 +38,7 @@ index 1e2d37257b405df5aec3e90c74143a3bf101ef34..591ab874f0f3804ca914800fa970484c
 +            // Lophinya - D-40 diagnostics: this return is the silent second teleport. Print which of
 +            // canTeleportAsync()'s four predicates said no, rather than guessing from outside again.
 +            // Off by default; cannot affect the refusal, which has already been decided.
-+            if (fun.bm.lophinya.compat.LophinyaTeleportRefusalDiagnostics.ENABLED) {
++            if (fun.bm.lecithin.config.modules.CompatConfig.teleportRefusalDiagnostics) {
 +                fun.bm.lophinya.compat.LophinyaTeleportRefusalDiagnostics.reportRefusal(this, destination, pos);
 +            }
 +            // Lophinya end
@@ -39,7 +52,7 @@ index 1e2d37257b405df5aec3e90c74143a3bf101ef34..591ab874f0f3804ca914800fa970484c
 +        // Lophinya - D-40 diagnostics: record when the entity leaves and rejoins the level lookup.
 +        // Off by default, prints only on a NULL <-> set transition, and cannot alter the assignment
 +        // below. See LophinyaTeleportRefusalDiagnostics.
-+        if (fun.bm.lophinya.compat.LophinyaTeleportRefusalDiagnostics.ENABLED) {
++        if (fun.bm.lecithin.config.modules.CompatConfig.teleportRefusalDiagnostics) {
 +            fun.bm.lophinya.compat.LophinyaTeleportRefusalDiagnostics.reportCallbackTransition(this, this.levelCallback, levelCallback);
 +        }
 +        // Lophinya end

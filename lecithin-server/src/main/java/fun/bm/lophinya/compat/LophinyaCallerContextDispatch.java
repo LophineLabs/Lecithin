@@ -78,8 +78,70 @@ public final class LophinyaCallerContextDispatch {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    /**
+     * The context an async task inherited, for the duration of that task's body only.
+     *
+     * <p>Pool threads are reused, so this is always restored in a {@code finally} - a leaked context
+     * would hand the next unrelated task a region it never came from, which is the inference this
+     * whole class exists to avoid.
+     */
+    private static final ThreadLocal<CapturedContext> INHERITED = new ThreadLocal<>();
+
     /** Report each distinct (plugin, task class, context kind) once; a ticker would flood the log. */
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
+
+    /** What a thread was ticking when it scheduled something, or {@code null} if nothing. */
+    public record CapturedContext(OwnedChunk chunk, boolean global) {
+    }
+
+    /**
+     * The calling thread's context right now, to be replayed later by {@link #runInherited}.
+     * Called on the scheduling thread, so "now" is the honest answer.
+     *
+     * @return the context, or {@code null} when this thread has none to pass on
+     */
+    public static CapturedContext captureCallerContext() {
+        if (!CompatConfig.callerContextDispatch || !CompatConfig.asyncContextInheritance) {
+            return null;
+        }
+        try {
+            final OwnedChunk owned = callerRegionChunk();
+            if (owned != null) {
+                return new CapturedContext(owned, false);
+            }
+            if (Bukkit.isGlobalTickThread()) {
+                return new CapturedContext(null, true);
+            }
+            // Already contextless, or an inherited context - do not chain inheritance across a
+            // second async hop, because each hop makes the captured region less likely to still be
+            // the right one and nothing would bound the chain.
+            return null;
+        } catch (final Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * Run {@code body} with {@code captured} visible to {@link #tryDispatch}, then restore.
+     * A {@code null} context is a plain call, so the common path costs nothing.
+     */
+    public static void runInherited(final CapturedContext captured, final Runnable body) {
+        if (captured == null || !CompatConfig.callerContextDispatch || !CompatConfig.asyncContextInheritance) {
+            body.run();
+            return;
+        }
+        final CapturedContext previous = INHERITED.get();
+        INHERITED.set(captured);
+        try {
+            body.run();
+        } finally {
+            if (previous == null) {
+                INHERITED.remove();
+            } else {
+                INHERITED.set(previous);
+            }
+        }
+    }
 
     /**
      * @param task   the sync task stock Folia is about to reject
@@ -103,7 +165,13 @@ public final class LophinyaCallerContextDispatch {
 
             final ScheduledTask scheduled;
             final String context;
-            final OwnedChunk owned = callerRegionChunk();
+            final CapturedContext inherited = INHERITED.get();
+            final OwnedChunk direct = callerRegionChunk();
+            // The thread's own context always wins. The inherited one is only consulted when this
+            // thread has none, which is precisely the case that is refused today.
+            final OwnedChunk owned = direct != null ? direct
+                : (inherited != null ? inherited.chunk() : null);
+            final String origin = direct != null ? "" : " (inherited from the thread that scheduled this async task)";
             if (owned != null) {
                 scheduled = repeating
                     ? Bukkit.getRegionScheduler().runAtFixedRate(plugin, owned.world(), owned.chunkX(), owned.chunkZ(),
@@ -111,12 +179,12 @@ public final class LophinyaCallerContextDispatch {
                     : Bukkit.getRegionScheduler().runDelayed(plugin, owned.world(), owned.chunkX(), owned.chunkZ(),
                         ignored -> task.run(), safeDelay);
                 context = "region owning " + owned.world().getName() + " chunk ["
-                    + owned.chunkX() + ", " + owned.chunkZ() + ']';
-            } else if (Bukkit.isGlobalTickThread()) {
+                    + owned.chunkX() + ", " + owned.chunkZ() + ']' + origin;
+            } else if (Bukkit.isGlobalTickThread() || (inherited != null && inherited.global())) {
                 scheduled = repeating
                     ? Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, ignored -> task.run(), safeDelay, period)
                     : Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), safeDelay);
-                context = "global region (the caller was the global region)";
+                context = "global region (the caller was the global region)" + origin;
             } else {
                 // No observable context. Inferring one here is exactly DEC-19 B1.
                 return null;
@@ -134,7 +202,8 @@ public final class LophinyaCallerContextDispatch {
         }
     }
 
-    private record OwnedChunk(World world, int chunkX, int chunkZ) {
+    /** Package-private, not private: {@link CapturedContext} carries one across the async hop. */
+    record OwnedChunk(World world, int chunkX, int chunkZ) {
     }
 
     /**

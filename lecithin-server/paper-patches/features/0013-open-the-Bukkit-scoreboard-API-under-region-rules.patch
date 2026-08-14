@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Mon, 3 Aug 2026 13:43:12 +0800
-Subject: [PATCH] Lophinya: open the Bukkit scoreboard API under region rules
+Subject: [PATCH] open the Bukkit scoreboard API under region rules
 
 Folia blocks five scoreboard methods with an unconditional throw; the
 implementations behind them are intact. Open them under region-architecture
@@ -23,75 +23,8 @@ whose iterator also prunes cleared refs, so even reads mutate it. No lock on
 the hot path. The player's board override becomes volatile for the same
 cross-thread readers.
 
-Kill switch: -Dlophinya.compat.scoreboardApi=false restores the stock throw
-on all five methods.
-
-diff --git a/src/main/java/fun/bm/lophinya/compat/LophinyaScoreboardSupport.java b/src/main/java/fun/bm/lophinya/compat/LophinyaScoreboardSupport.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..94e2ce0d7c54ecd609591771f9e68e9fdc0728f0
---- /dev/null
-+++ b/src/main/java/fun/bm/lophinya/compat/LophinyaScoreboardSupport.java
-@@ -0,0 +1,58 @@
-+package fun.bm.lophinya.compat;
-+
-+import io.papermc.paper.threadedregions.RegionizedServer;
-+import net.minecraft.server.MinecraftServer;
-+
-+/**
-+ * Folia-conformant Bukkit scoreboard support.
-+ *
-+ * <p>Folia blocks five scoreboard API methods with an unconditional throw. The implementations
-+ * behind them are intact; this switch opens them under region-architecture rules instead of
-+ * single-main-thread rules:
-+ *
-+ * <ul>
-+ *   <li>Plugin-created boards are plain objects. Creation and structural changes broadcast through
-+ *       netty and a copy-on-write player list, both thread-safe, so any tick thread may do them.
-+ *   <li>The main scoreboard is global shared state and is persisted. Structural changes to it must
-+ *       run on the global tick thread - the same thread the vanilla /scoreboard command uses.
-+ *   <li>Assigning a board to a player is per-player display state and must run on the thread that
-+ *       owns that player.
-+ * </ul>
-+ *
-+ * <p>Neither check guesses an owner; both only verify the current thread and fail loudly with
-+ * attribution when it is the wrong one.
-+ *
-+ * <pre>
-+ *   -Dlophinya.compat.scoreboardApi=false   # revert to Folia stock: the five methods throw again
-+ * </pre>
-+ */
-+public final class LophinyaScoreboardSupport {
-+
-+    public static final boolean ENABLED =
-+        !"false".equalsIgnoreCase(System.getProperty("lophinya.compat.scoreboardApi", "true"));
-+
-+    private LophinyaScoreboardSupport() {
-+    }
-+
-+    /**
-+     * True when this handle is the persisted main scoreboard shared by every world.
-+     */
-+    public static boolean isMainBoard(final net.minecraft.world.scores.Scoreboard board) {
-+        return board == MinecraftServer.getServer().getScoreboard();
-+    }
-+
-+    /**
-+     * Structural changes to the main scoreboard follow the vanilla /scoreboard command's thread
-+     * rule: global region only. Off-thread callers fail loudly instead of corrupting a persisted
-+     * shared structure.
-+     */
-+    public static void ensureMainBoardStructuralChange(final String what) {
-+        if (!RegionizedServer.isGlobalTickThread()) {
-+            throw new IllegalStateException(
-+                "Lophinya: " + what + " on the main scoreboard requires the global region thread"
-+                    + " (current thread: " + Thread.currentThread().getName() + ")."
-+                    + " Schedule it with Bukkit.getGlobalRegionScheduler(), or use a plugin-created"
-+                    + " scoreboard (ScoreboardManager#getNewScoreboard).");
-+        }
-+    }
-+}
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index d001443c80dc6ca55240ea721aa1d9f591792c43..ba56df58ff23527a4d0e8af76d3f6f081358fef3 100644
+index 866da5bfe278653e68fafaff89dbfb348a0d521c..2ebb52822cb691c237a1a3ebb81a6e7f15c73ae5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -246,7 +246,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
@@ -104,7 +37,7 @@ index d001443c80dc6ca55240ea721aa1d9f591792c43..ba56df58ff23527a4d0e8af76d3f6f08
  
      // Folia start - region threading
 diff --git a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java
-index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..35077a476011381adac4594ef3db5e80118b65e2 100644
+index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..640aa8d31bd472da93858f01e01f5166e672625f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java
 +++ b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java
 @@ -32,7 +32,13 @@ public final class CraftScoreboard implements org.bukkit.scoreboard.Scoreboard {
@@ -114,7 +47,7 @@ index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..35077a476011381adac4594ef3db5e80
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        // Lophinya start - scoreboard support - plugin boards broadcast through thread-safe paths;
 +        // the main board is persisted global state and follows the /scoreboard command's thread rule
-+        if (!fun.bm.lophinya.compat.LophinyaScoreboardSupport.ENABLED) throw new UnsupportedOperationException(); // Folia - not supported yet
++        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        if (fun.bm.lophinya.compat.LophinyaScoreboardSupport.isMainBoard(this.board)) {
 +            fun.bm.lophinya.compat.LophinyaScoreboardSupport.ensureMainBoardStructuralChange("registerNewObjective");
 +        }
@@ -128,7 +61,7 @@ index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..35077a476011381adac4594ef3db5e80
      public Team registerNewTeam(String name) {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        // Lophinya start - scoreboard support
-+        if (!fun.bm.lophinya.compat.LophinyaScoreboardSupport.ENABLED) throw new UnsupportedOperationException(); // Folia - not supported yet
++        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        if (fun.bm.lophinya.compat.LophinyaScoreboardSupport.isMainBoard(this.board)) {
 +            fun.bm.lophinya.compat.LophinyaScoreboardSupport.ensureMainBoardStructuralChange("registerNewTeam");
 +        }
@@ -142,7 +75,7 @@ index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..35077a476011381adac4594ef3db5e80
      public void clearSlot(DisplaySlot slot) {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        // Lophinya start - scoreboard support
-+        if (!fun.bm.lophinya.compat.LophinyaScoreboardSupport.ENABLED) throw new UnsupportedOperationException(); // Folia - not supported yet
++        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        if (fun.bm.lophinya.compat.LophinyaScoreboardSupport.isMainBoard(this.board)) {
 +            fun.bm.lophinya.compat.LophinyaScoreboardSupport.ensureMainBoardStructuralChange("clearSlot");
 +        }
@@ -151,23 +84,10 @@ index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..35077a476011381adac4594ef3db5e80
          this.getHandle().setDisplayObjective(CraftScoreboardTranslations.fromBukkitSlot(slot), null);
      }
 diff --git a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java
-index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..ac0780678a1a809f0c588dc962e79d7b3ffd6b1a 100644
+index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..f7bde0c3d66392b1ea1ba546a282647462e2c85e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java
 +++ b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java
-@@ -1,6 +1,5 @@
- package org.bukkit.craftbukkit.scoreboard;
- 
--import java.util.Collection;
- import java.util.HashMap;
- import java.util.HashSet;
- import java.util.Map;
-@@ -16,13 +15,17 @@ import net.minecraft.world.scores.ScoreAccess;
- import net.minecraft.world.scores.ScoreHolder;
- import net.minecraft.world.scores.criteria.ObjectiveCriteria;
- import org.bukkit.craftbukkit.entity.CraftPlayer;
--import org.bukkit.craftbukkit.util.WeakCollection;
- import org.bukkit.scoreboard.ScoreboardManager;
- 
+@@ -22,7 +22,12 @@ import org.bukkit.scoreboard.ScoreboardManager;
  public final class CraftScoreboardManager implements ScoreboardManager {
      private final CraftScoreboard mainScoreboard;
      private final MinecraftServer server;
@@ -181,23 +101,23 @@ index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..ac0780678a1a809f0c588dc962e79d7b
  
      public CraftScoreboardManager(MinecraftServer server, net.minecraft.world.scores.Scoreboard scoreboard) {
          this.mainScoreboard = new CraftScoreboard(scoreboard);
-@@ -38,7 +41,7 @@ public final class CraftScoreboardManager implements ScoreboardManager {
+@@ -38,7 +43,7 @@ public final class CraftScoreboardManager implements ScoreboardManager {
  
      @Override
      public CraftScoreboard getNewScoreboard() {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        if (!fun.bm.lophinya.compat.LophinyaScoreboardSupport.ENABLED) throw new UnsupportedOperationException(); // Folia - not supported yet // Lophinya - scoreboard support
++        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet // Lophinya - scoreboard support
          org.spigotmc.AsyncCatcher.catchOp("scoreboard creation"); // Spigot
          CraftScoreboard scoreboard = new CraftScoreboard(new ServerScoreboard(this.server));
          if (io.papermc.paper.configuration.GlobalConfiguration.get().scoreboards.trackPluginScoreboards) {
-@@ -59,7 +62,15 @@ public final class CraftScoreboardManager implements ScoreboardManager {
+@@ -59,7 +64,15 @@ public final class CraftScoreboardManager implements ScoreboardManager {
      }
  
      public void setPlayerBoard(CraftPlayer player, CraftScoreboard scoreboard) {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        // Lophinya start - scoreboard support - per-player display state: owning region only.
 +        // The thread is verified, never inferred; a wrong thread fails loudly with attribution.
-+        if (!fun.bm.lophinya.compat.LophinyaScoreboardSupport.ENABLED) throw new UnsupportedOperationException(); // Folia - not supported yet
++        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(player.getHandle())) {
 +            throw new IllegalStateException(
 +                "Lophinya: Player#setScoreboard for " + player.getName() + " requires the region thread that owns the player"

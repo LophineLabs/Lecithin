@@ -57,11 +57,9 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  * {@code adjustRiders} then puts the mount offsets back. It also matches Paper exactly on same-world
  * teleports, same region and cross region.
  *
- * <p><b>Known divergence, measured:</b> Paper's <i>cross-world</i> path reports each passenger's own
- * offset position instead ({@code from} y −57.1 rather than the pig's −58.0, and the same offset on
- * {@code to}). Paper is not self-consistent here, no one rule matches both, and this takes the one
- * that matches five of the six measured rows and can be stated in a sentence. The difference is the
- * mount offset - under a block.
+ * <p>Paper's <i>cross-world</i> path reports each passenger's own offset position instead
+ * ({@code from} y −57.1 rather than the pig's −58.0, and the same offset on {@code to}). Patch 0035
+ * shipped with that as a registered divergence; {@link #CROSS_WORLD_OFFSET} now matches it.
  *
  * <h2>Where it is fired</h2>
  * In {@code Entity#teleportAsync}, immediately after the root entity's own event hook and
@@ -114,16 +112,59 @@ public final class LophinyaPassengerTeleportEvents {
             destination.getWorld(), pos.x, pos.y, pos.z,
             yaw == null ? from.getYaw() : yaw.floatValue(),
             pitch == null ? from.getPitch() : pitch.floatValue());
+        // Paper reports the vehicle's from/to on same-world teleports and each passenger's own
+        // offset position on cross-world ones. See CROSS_WORLD_OFFSET.
+        final boolean perPassenger = EventConfig.passengerTeleportCrossWorldOffset && destination != vehicle.level();
+        final Vec3 vehiclePos = vehicle.position();
 
         while (passengers.hasNext()) {
-            final org.bukkit.entity.Entity passenger = passengers.next().getBukkitEntity();
+            final Entity handle = passengers.next();
+            final org.bukkit.entity.Entity passenger = handle.getBukkitEntity();
             // Fresh clones per event: an event object hands its Locations to plugins, and a handler
             // that mutates one must not be able to change what the next passenger is told.
-            if (passenger instanceof org.bukkit.entity.Player player) {
-                new PlayerTeleportEvent(player, from.clone(), to.clone(), cause).callEvent();
+            final Location eventFrom;
+            final Location eventTo;
+            if (perPassenger) {
+                // The passenger's current position is not the offset to use, and measuring said so:
+                // on this platform a mounted passenger stays at exactly its vehicle's coordinates
+                // (offset 0.0 even after two ticks), while Paper's event reports vehicle + 0.9 for a
+                // stand on a pig - which is the pig's passenger attachment, not where the stand
+                // happens to be. Asking the vehicle where it seats this passenger gives that number
+                // on both platforms and does not depend on either one repositioning riders.
+                final Vec3 offset = ridingOffset(vehicle, handle);
+                eventFrom = from.clone().add(offset.x, offset.y, offset.z);
+                eventTo = new Location(
+                    destination.getWorld(), pos.x + offset.x, pos.y + offset.y, pos.z + offset.z,
+                    yaw == null ? from.getYaw() : yaw.floatValue(),
+                    pitch == null ? from.getPitch() : pitch.floatValue());
             } else {
-                new EntityTeleportEvent(passenger, from.clone(), to.clone()).callEvent();
+                eventFrom = from.clone();
+                eventTo = to.clone();
+            }
+            if (passenger instanceof org.bukkit.entity.Player player) {
+                new PlayerTeleportEvent(player, eventFrom, eventTo, cause).callEvent();
+            } else {
+                new EntityTeleportEvent(passenger, eventFrom, eventTo).callEvent();
             }
         }
+    }
+
+    /**
+     * Where {@code passenger} sits relative to the root {@code vehicle}, as a vector.
+     *
+     * <p>Walks the mount chain and adds one attachment point per level, so a stand riding a stand
+     * riding a pig gets both offsets rather than the pig's twice. Each term is asked of the entity
+     * that owns the seat, which is the only thing that knows where its seats are.
+     */
+    private static Vec3 ridingOffset(final Entity vehicle, final Entity passenger) {
+        Vec3 offset = Vec3.ZERO;
+        for (Entity node = passenger; node != null && node != vehicle; node = node.getVehicle()) {
+            final Entity mount = node.getVehicle();
+            if (mount == null) {
+                break;
+            }
+            offset = offset.add(mount.getPassengerRidingPosition(node).subtract(mount.position()));
+        }
+        return offset;
     }
 }

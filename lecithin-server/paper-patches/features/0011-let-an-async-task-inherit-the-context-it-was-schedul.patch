@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 1 Aug 2026 03:13:00 +0800
+Subject: [PATCH] let an async task inherit the context it was scheduled from
+
+EssentialsXSpawn handles a join as PlayerJoinEvent (region thread) ->
+runTaskAsynchronously -> delayedJoin -> scheduleSyncDelayedTask. On Paper the
+last hop means "back to the main thread"; here the async pool thread has no
+region context, so patch 0029 refuses it and everything after that line is
+skipped - which on a first join is the newbie spawnpoint, the announcement and
+the starter kit.
+
+Measured on a username that had never joined: empty inventory, no announcement,
+and the refusal fires on first joins only.
+
+This is not an inference. 0029 asks "which thread is asking"; the only change is
+that an async task now remembers the context it was created from, captured in
+CraftAsyncTask's constructor - which still runs on the thread that asked, so the
+context is a fact at that moment rather than something deduced later. Nothing
+looks inside the Runnable, so DEC-19 B1 and N18 stay closed, and the thread's own
+context always wins when it has one. Inheritance does not chain across a second
+async hop.
+
+The blast radius is exactly the tasks that are refused today: a task that never
+schedules a sync task is untouched, and one that does is currently not running at
+all. So this can only turn "never runs" into "runs on the region it came from",
+with genuinely cross-region access still failing loudly at the access - the same
+bargain DEC-54 accepted for 0029.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
+index e4e2e42d0ca25df7fe9f2dd4275610e45fcb2c84..5f53e298f79eae93a1ca92976f3a6e601d3cfc70 100644
+--- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
++++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
+@@ -11,6 +11,12 @@ class CraftAsyncTask extends CraftTask {
+ 
+     private final LinkedList<BukkitWorker> workers = new LinkedList<BukkitWorker>();
+     private final Map<Integer, CraftTask> runners;
++    // Lophinya start - carry the scheduling thread's context into this async task
++    // Captured here, not in run(): the constructor still runs on the thread that asked for the task,
++    // which is the only moment the context is a fact rather than a guess.
++    private final fun.bm.lophinya.compat.LophinyaCallerContextDispatch.CapturedContext lophinya$schedulingContext =
++        fun.bm.lophinya.compat.LophinyaCallerContextDispatch.captureCallerContext();
++    // Lophinya end
+ 
+     CraftAsyncTask(final Map<Integer, CraftTask> runners, final Plugin plugin, final Object task, final int id, final long delay) {
+         super(plugin, task, id, delay);
+@@ -54,7 +60,9 @@ class CraftAsyncTask extends CraftTask {
+         }
+         Throwable thrown = null;
+         try {
+-            super.run();
++            // Lophinya start - make the scheduling thread's context visible for this body only
++            fun.bm.lophinya.compat.LophinyaCallerContextDispatch.runInherited(this.lophinya$schedulingContext, super::run);
++            // Lophinya end
+         } catch (final Throwable t) {
+             thrown = t;
+             this.getOwner().getLogger().log(

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Fri, 31 Jul 2026 19:33:28 +0800
-Subject: [PATCH] fire the teleport events for passengers a  teleported vehicle
+Subject: [PATCH] fire the teleport events for passengers a teleported vehicle
  carries
 
 The hook half of paper-patch 0035. One call in Entity#teleportAsync, placed

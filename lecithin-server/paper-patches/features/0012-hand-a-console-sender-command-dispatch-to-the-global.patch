@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 1 Aug 2026 21:36:59 +0800
+Subject: [PATCH] hand a console-sender command dispatch to the global region
+
+Folia's CraftServer.dispatchCommand branches on the sender: an Entity sender
+requires that entity's region, a console/RCON sender requires the global region.
+A plugin handling a player event is on a region thread, so dispatching a command
+AS THE CONSOLE - which is how reward commands are almost always written - throws
+out of the event handler and everything after that line is skipped. Measured:
+LycoQuest's reward grant failed 7/7 that way.
+
+The parse stays on the calling thread and only the execution is handed to the
+global region, so Paper's only false (no such command) is preserved verbatim and
+returned synchronously. Parsing there is not a new exposure: Commands guards the
+dispatcher with no thread check, parse is a read-only walk of the Brigadier tree,
+and VanillaCommandWrapper.tabComplete does the same getListener+parse pair off
+the global thread today; the console CommandSourceStack reads server-level
+respawn data, not chunk or block state.
+
+This is not "route arbitrary work to the global scheduler": the owner is not
+inferred - the ensureGlobalTickThread call this replaces is the platform stating
+that the global region is where a console sender executes - and an Entity sender
+is untouched, so it is not all commands either. Only a thread that is ticking a
+region hands off; a thread with no observable context is still refused, exactly
+as stock.
+
+Not preserved: an exception thrown during execution no longer propagates out of
+the dispatchCommand call. Of 62 dispatch callsites in this plugin set, 57 discard
+the return value and the only real branch on it is in a BungeeCord proxy class
+the server never loads.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 88d03cecae2861c263dfe9334af338d08db98b1c..6bd1ef83af4c6e4d28b258a563fe1795511c4b6a 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -948,6 +948,12 @@ public final class CraftServer implements Server {
+         } else if (rawSender instanceof ConsoleCommandSender || rawSender instanceof net.minecraft.server.rcon.RconConsoleSource
+                 || rawSender instanceof org.bukkit.craftbukkit.command.CraftRemoteConsoleCommandSender
+                 || rawSender instanceof io.papermc.paper.commands.FeedbackForwardingSender) {
++            // Lophinya start - hand a console-sender dispatch to the region that sender belongs to
++            if (fun.bm.lophinya.compat.LophinyaCommandDispatch.shouldHandOff()) {
++                return fun.bm.lophinya.compat.LophinyaCommandDispatch.handOff(rawSender, commandLine,
++                    () -> this.dispatchCommand(rawSender, commandLine));
++            }
++            // Lophinya end
+             io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Dispatching command async");
+         } else {
+             // huh?

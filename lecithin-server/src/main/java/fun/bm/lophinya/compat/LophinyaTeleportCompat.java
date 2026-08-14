@@ -111,8 +111,10 @@ public final class LophinyaTeleportCompat {
                   callsite : {}
                   entity   : {} in {}
                   target   : {} at {}, {}, {}
-                  why      : the destination is in another region or world, or its chunks are not
-                             loaded, so Folia cannot move the entity on this thread. The teleport
+                  why      : the destination is in another region or world, its chunks are not
+                             loaded, or a previous teleport is still handing this entity over
+                             (see LophinyaTeleportHandover), so Folia cannot move the entity on
+                             this thread. The teleport
                              was accepted via the platform's async path and completes on the owning
                              region's thread; teleport() returned true before the entity moved.
                              Paper would have moved it before returning.""",

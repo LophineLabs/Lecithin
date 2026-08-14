@@ -14,4 +14,8 @@ public class EventConfig {
     @HotReloadUnsupported
     @ConfigInfo(name = "passenger-teleport-events")
     public static boolean passengerTeleportEvents = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "passenger-teleport-cross-world-offset")
+    public static boolean passengerTeleportCrossWorldOffset = true;
 }

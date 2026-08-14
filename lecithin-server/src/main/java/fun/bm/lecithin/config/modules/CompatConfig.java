@@ -46,4 +46,28 @@ public class CompatConfig {
     @HotReloadUnsupported
     @ConfigInfo(name = "riding-teleport")
     public static boolean ridingTeleport = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "teleport-refusal-diagnostics")
+    public static boolean teleportRefusalDiagnostics = false;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "teleport-handover")
+    public static boolean teleportHandover = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "async-context-inheritance")
+    public static boolean asyncContextInheritance = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "command-dispatch-handover")
+    public static boolean commandDispatchHandover = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "server-current-tick")
+    public static boolean serverCurrentTick = true;
+
+    @HotReloadUnsupported
+    @ConfigInfo(name = "scoreboard-api")
+    public static boolean scoreboardApi = true;
 }

@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Mon, 3 Aug 2026 16:28:37 +0800
-Subject: [PATCH] Lophinya: restore MinecraftServer.currentTick with
- global-region semantics
+Subject: [PATCH] restore MinecraftServer.currentTick with global-region
+ semantics
 
 Folia commented the field out; FastAsyncWorldEdit reads it reflectively
 in its NMS adapter (PaperweightFaweWorldNativeAccess) and every WorldEdit
@@ -11,27 +11,19 @@ once per main-thread tick; the global region tick is that loop's
 successor here, so it is the single writer. volatile for the
 cross-thread readers the old plain int already had in practice.
 
-Kill switch: -Dlophinya.compat.serverCurrentTick=false freezes the
-counter at 0 (the field itself stays present - that part is
-compile-time by nature).
-
 diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
-index 7577533f82688304f06c445fd5a1c3fa3c4575fc..ea95a6032417f901c930f365256d7046e8a84907 100644
+index 7577533f82688304f06c445fd5a1c3fa3c4575fc..0b5654ec1221294b43055fd1445e0c689389ad4b 100644
 --- a/io/papermc/paper/threadedregions/RegionizedServer.java
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -237,9 +237,15 @@ public final class RegionizedServer {
+@@ -237,9 +237,11 @@ public final class RegionizedServer {
      private long lastServerStatus;
      private long tickCount;
  
 +    // Lophinya - restore MinecraftServer.currentTick; kill switch freezes it at 0 (the field
-+    // itself stays present - that part is compile-time by nature)
-+    private static final boolean LOPHINYA_CURRENT_TICK =
-+        !"false".equalsIgnoreCase(System.getProperty("lophinya.compat.serverCurrentTick", "true"));
-+
      private void globalTick(final long tickCount) {
          final long tickStartNanos = System.nanoTime(); // Lophine - Carpet features
          ++this.tickCount;
-+        if (LOPHINYA_CURRENT_TICK) MinecraftServer.currentTick = (int) this.tickCount; // Lophinya - restore currentTick, single writer is this global tick
++        if (fun.bm.lecithin.config.modules.CompatConfig.serverCurrentTick) MinecraftServer.currentTick = (int) this.tickCount; // Lophinya - restore currentTick, single writer is this global tick
          // Luminol start - Add a config to enable tick command
          if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.commandTick) { // Lophine - redirect
              MinecraftServer.getServer().tickRateManager().tick();
