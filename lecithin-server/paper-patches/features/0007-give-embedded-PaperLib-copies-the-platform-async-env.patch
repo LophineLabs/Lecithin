@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 31 Jul 2026 02:09:45 +0800
+Subject: [PATCH] give embedded PaperLib copies the platform async environment
+
+Two hooks in Entity, both at points upstream already marks as event territory.
+
+teleportAsync: fire PlayerTeleportEvent (players) or EntityTeleportEvent
+(everything else) just above the destination unload lock. That is after all the
+validity checks and before anything is mutated, so a cancel is a plain return
+false - the same answer teleportAsync already gives for its own refusals - with
+no lock to unwind, and it sits above the same-region/cross-region branch so one
+hook covers same region, cross region and cross world. The thread is right by
+construction: teleportAsync opens with TickThread.ensureTickThread on this
+entity, so the handler runs on the region that owns it. Nothing blocks, nothing
+waits on another region, no ownership check is touched. A handler that redirects
+via setTo is honoured, including to another world.
+
+placeInAsync: fire PlayerChangedWorldEvent from the completion that runs on the
+destination region, once the entity has actually been placed - guarded on the
+world really having changed, because placeInAsync also handles same-world cross
+-region moves. It goes before teleportComplete because that callback releases
+the destination's unload read lock.
+
+Teleports whose cause is UNKNOWN are skipped: that is what Folia and Luminol
+pass for internal repositioning with no Paper counterpart (fixPassengerDesync,
+guardEntityTick's out-of-region recovery) and what TamableAnimal passes after
+having already fired EntityTeleportEvent itself. Everything with a real cause is
+a teleport Paper would also have reported, and no Bukkit API overload produces
+UNKNOWN by default.
+
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+index 5eb4529dbc3057bb0a98a333a989ad98833992da..bda722ca187388ac88d0752824b3c5c454d786aa 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+@@ -197,6 +197,10 @@ class PaperPluginInstanceManager {
+                 }
+             } // Paper
+ 
++            // Lophinya start - Folia-aware environment for embedded PaperLib copies
++            fun.bm.lophinya.compat.LophinyaPaperLibAdapter.install(jPlugin);
++            // Lophinya end
++
+             try {
+                 jPlugin.setEnabled(true);
+             } catch (Throwable ex) {

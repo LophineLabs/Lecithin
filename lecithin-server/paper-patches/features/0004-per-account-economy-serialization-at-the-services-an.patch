@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Thu, 30 Jul 2026 15:24:05 +0800
-Subject: [PATCH] per-account economy serialization at the services  and
- command boundaries
+Subject: [PATCH] per-account economy serialization at the services and command
+ boundaries
 
 Restores, for one version-locked plugin jar, the serialization Paper used to provide
 implicitly by having a single main thread - without touching, patching or instrumenting

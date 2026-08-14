@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Lophinya <lophinya@localhost>
 Date: Mon, 27 Jul 2026 00:25:30 +0800
-Subject: [PATCH] Runtime access guard + restore Bukkit async  scheduler
+Subject: [PATCH] Runtime access guard + restore Bukkit async scheduler
 
 Folia replaces CraftScheduler.handle with an unconditional, message-less throw.
 Two problems with that, addressed separately and both switchable:

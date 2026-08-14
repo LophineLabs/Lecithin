@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Fri, 31 Jul 2026 15:14:59 +0800
-Subject: [PATCH] Lophinya: fire the Bukkit teleport events Folia left
- unimplemented
+Subject: [PATCH] fire the Bukkit teleport events Folia left unimplemented
 
 Two hooks in Entity, both at points upstream already marks as event territory.
 
@@ -30,10 +29,8 @@ having already fired EntityTeleportEvent itself. Everything with a real cause is
 a teleport Paper would also have reported, and no Bukkit API overload produces
 UNKNOWN by default.
 
-Kill switch: -Dlophinya.compat.teleportEvents=false
-
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index ef8f41f05255de25b5f831275bd1e5e1340f6141..c6cff434e2b73bb35a031d46e8f59b4d9017237d 100644
+index ef8f41f05255de25b5f831275bd1e5e1340f6141..3cd2907a664d095c89e0a56c6981946e592610fd 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -4407,6 +4407,17 @@ public abstract class Entity
@@ -44,7 +41,7 @@ index ef8f41f05255de25b5f831275bd1e5e1340f6141..c6cff434e2b73bb35a031d46e8f59b4d
 +                    // cross-region moves, so the world really has to have changed. Fired before
 +                    // teleportComplete because that callback releases the destination's unload read
 +                    // lock, and the handler should still be covered by it.
-+                    if (originWorld != destination && fun.bm.lophinya.compat.LophinyaTeleportEvents.ENABLED) {
++                    if (originWorld != destination && fun.bm.lecithin.config.modules.EventConfig.teleportEvents) {
 +                        for (EntityTreeNode node : fullTree) {
 +                            fun.bm.lophinya.compat.LophinyaTeleportEvents.callChangedWorld(node.root, originWorld);
 +                        }
@@ -61,7 +58,7 @@ index ef8f41f05255de25b5f831275bd1e5e1340f6141..c6cff434e2b73bb35a031d46e8f59b4d
 +        // Lophinya start - fire the Bukkit teleport events Folia left as a TODO below
 +        // Deliberately above the unload lock: a cancel here is a plain return, with no lock to
 +        // unwind and nothing mutated yet. See LophinyaTeleportEvents for the full rationale.
-+        if (fun.bm.lophinya.compat.LophinyaTeleportEvents.ENABLED) {
++        if (fun.bm.lecithin.config.modules.EventConfig.teleportEvents) {
 +            final fun.bm.lophinya.compat.LophinyaTeleportEvents.Destination lophinyaDestination =
 +                fun.bm.lophinya.compat.LophinyaTeleportEvents.callTeleportEvent(this, destination, pos, yaw, pitch, cause);
 +            if (lophinyaDestination == null) {

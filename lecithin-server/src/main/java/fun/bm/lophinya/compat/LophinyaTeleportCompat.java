@@ -77,9 +77,6 @@ public final class LophinyaTeleportCompat {
     /** One log line per distinct callsite; a per-tick teleport would otherwise flood the log. */
     private static final Set<String> DEFERRED_REPORTED = ConcurrentHashMap.newKeySet();
 
-    private LophinyaTeleportCompat() {
-    }
-
     /**
      * @param entity   the entity being teleported, already validated by the caller
      * @param location destination, already validated by the caller

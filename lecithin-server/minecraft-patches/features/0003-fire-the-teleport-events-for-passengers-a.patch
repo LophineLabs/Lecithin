@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Fri, 31 Jul 2026 19:33:28 +0800
-Subject: [PATCH] Lophinya: fire the teleport events for passengers a
- teleported vehicle carries
+Subject: [PATCH] fire the teleport events for passengers a  teleported vehicle
+ carries
 
 The hook half of paper-patch 0035. One call in Entity#teleportAsync, placed
 immediately after the root entity's own event hook and before the destination's
@@ -17,12 +17,10 @@ hook covers same region, cross region and cross world.
 
 See LophinyaPassengerTeleportEvents for the measured Paper baseline.
 
-Kill switch: -Dlophinya.compat.passengerTeleportEvents=false
-
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index c6cff434e2b73bb35a031d46e8f59b4d9017237d..1e2d37257b405df5aec3e90c74143a3bf101ef34 100644
+index 3cd2907a664d095c89e0a56c6981946e592610fd..69fb3335742d5d12e6e365077638e38b2e4a00ba 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -4597,6 +4597,14 @@ public abstract class Entity

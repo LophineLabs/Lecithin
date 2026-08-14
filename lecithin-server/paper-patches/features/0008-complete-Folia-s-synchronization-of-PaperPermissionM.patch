@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TinyYana <yanasakuranight@gmail.com>
 Date: Fri, 31 Jul 2026 15:12:06 +0800
-Subject: [PATCH] Lophinya: complete Folia's synchronization of
- PaperPermissionManager
+Subject: [PATCH] complete Folia's synchronization of PaperPermissionManager
 
 Folia wrapped every method of that class in synchronized (this) except two:
 getDefaultPermissions(boolean), which copies defaultPerms().get(op), and
@@ -23,57 +22,8 @@ dirtyPermissibles outside their own block exactly as before.
 removePermission is fixed alongside it with no crash of its own on record: a
 class synchronized everywhere except one writer is not synchronized.
 
-Kill switch: -Dlophinya.compat.permissionLocking=false
-
-diff --git a/src/main/java/fun/bm/lophinya/compat/LophinyaPermissionLocking.java b/src/main/java/fun/bm/lophinya/compat/LophinyaPermissionLocking.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..b21ca2fa866f8204d85b298038ee0692b023280f
---- /dev/null
-+++ b/src/main/java/fun/bm/lophinya/compat/LophinyaPermissionLocking.java
-@@ -0,0 +1,41 @@
-+package fun.bm.lophinya.compat;
-+
-+/**
-+ * Lophinya: completes Folia's synchronization of {@code PaperPermissionManager}.
-+ *
-+ * <h2>The gap</h2>
-+ * Folia wrapped that class's methods in {@code synchronized (this)} - all of them except two:
-+ * {@code getDefaultPermissions(boolean)}, which copies {@code defaultPerms().get(op)}, and
-+ * {@code removePermission(String)}, which mutates {@code permissions()}. Everything those two touch
-+ * is guarded everywhere else.
-+ *
-+ * <p>The reader is the one that actually bites. {@code ImmutableSet.copyOf} allocates an array from
-+ * the set's current size and then fills it; if another thread adds a permission in between,
-+ * {@code LinkedHashMap.keysToArray} runs off the end and throws
-+ * {@code ArrayIndexOutOfBoundsException}. Two threads really do register permissions concurrently
-+ * during boot: Luminol loads its config on a {@code ForkJoinPool} thread and registers Leaves
-+ * command permissions from there ({@code ConfigsInstance.setupLatch} ->
-+ * {@code RootNode.register} -> {@code CommandUtils.registerPermissions}) while the main thread is
-+ * doing the same. Measured on the 38-jar mirror: <b>3 aborted starts in about 12</b>.
-+ *
-+ * <p>This is a defect in the execution base, not a plugin compatibility gap - it happens with no
-+ * plugins loaded at all, and it aborts the whole server rather than one plugin.
-+ *
-+ * <h2>Why locking the reader is enough, and safe</h2>
-+ * The writers already hold this monitor while they mutate. Making the copy hold it too closes the
-+ * window. Only {@code Set.toArray} runs inside the block - no plugin code, no callback, no second
-+ * lock - so no lock-ordering edge is added. That distinction is exactly why the writers push
-+ * {@code dirtyPermissibles} (which does call into arbitrary {@code Permissible} implementations)
-+ * outside their own block, and this change keeps that arrangement untouched.
-+ *
-+ * <p>Kill switch: {@code -Dlophinya.compat.permissionLocking=false} restores the unsynchronized
-+ * upstream bodies, and with it the boot crash.
-+ */
-+public final class LophinyaPermissionLocking {
-+
-+    public static final boolean ENABLED =
-+        !"false".equalsIgnoreCase(System.getProperty("lophinya.compat.permissionLocking", "true"));
-+
-+    private LophinyaPermissionLocking() {
-+    }
-+}
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java
-index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..430fe91af585a7dc3a226270e59b17aa24b50776 100644
+index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..02ff79e68da162649461dd5ec4eb3106fc0d3502 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java
 @@ -77,7 +77,21 @@ abstract class PaperPermissionManager implements PermissionManager {
@@ -88,7 +38,7 @@ index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..430fe91af585a7dc3a226270e59b17aa
 +        // is still registering its own, and the server dies during boot roughly one start in four.
 +        // Nothing but a set copy runs under the monitor, so this adds no lock-ordering edge - which
 +        // is why the writers deliberately call dirtyPermissibles outside their own block.
-+        if (!fun.bm.lophinya.compat.LophinyaPermissionLocking.ENABLED) {
++        if (!fun.bm.lecithin.config.modules.CompatConfig.permissionLocking) {
 +            return ImmutableSet.copyOf(this.defaultPerms().get(op)); // stock body, kill switch
 +        }
 +        synchronized (this) {
@@ -106,7 +56,7 @@ index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..430fe91af585a7dc3a226270e59b17aa
 +        // mutation of permissions() holds the monitor; this one races getPermissions()'s copy the
 +        // same way getDefaultPermissions raced above. No crash observed from it yet - it is fixed
 +        // because a class that is synchronized everywhere except one writer is not synchronized.
-+        if (!fun.bm.lophinya.compat.LophinyaPermissionLocking.ENABLED) {
++        if (!fun.bm.lecithin.config.modules.CompatConfig.permissionLocking) {
 +            this.permissions().remove(name.toLowerCase(java.util.Locale.ENGLISH)); // stock body, kill switch
 +            return;
 +        }

@@ -429,7 +429,7 @@ public final class LophinyaPluginSchedulerDispatch {
                 }
             }
 
-            DISPATCHED.computeIfAbsent(plugin, p -> new CopyOnWriteArrayList<>()).add(scheduled);
+            track(plugin, scheduled);
             LOGGER.warn("[Lophinya] {}: redispatched {} ({}, delay={}, period={}) - version-locked "
                 + "rule table entry, not a general sync-to-global shim",
                 plugin.getName(), className, matched.strategy(), delay, period);
@@ -478,6 +478,16 @@ public final class LophinyaPluginSchedulerDispatch {
         }
         final char separator = className.charAt(want.length());
         return separator == '/' || separator == '$';
+    }
+
+    /**
+     * Register a redispatched task for cancellation on plugin disable. Shared with
+     * {@link LophinyaCallerContextDispatch} so both dispatch paths are cleaned up by the same hook -
+     * a redispatched task that outlives its plugin is the bug class {@code DEC-17} fixed for async
+     * tasks, and it would come straight back if only one path were tracked.
+     */
+    static void track(final Plugin plugin, final ScheduledTask scheduled) {
+        DISPATCHED.computeIfAbsent(plugin, p -> new CopyOnWriteArrayList<>()).add(scheduled);
     }
 
     /** Called from the plugin-disable path so a disabled plugin's redispatched tasks stop running. */

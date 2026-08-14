@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 30 Jul 2026 20:21:08 +0800
+Subject: [PATCH] redispatch rejected sync scheduler tasks to the caller's own
+ context
+
+Generalises the per-plugin dispatch rule table. Paper's scheduleSyncDelayedTask means 'the thread you are on, later'; on Folia the nearest true statement is 'the region you are on, later'. Which thread asked is observable, so this is not DEC-19 B1's inference from a contextless Runnable: region tick thread goes to that region, global region goes to the global region, and anything else is still rejected exactly as on stock Folia. Distinct from the DEC-05/N13 sync-to-global shim, which moved region-scoped tasks onto a thread that owns nothing. Fixes GriefPrevention's claim visualization, whose one-tick revert task took PlayerInteractEvent down with it.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+index 0e3c35e294e31e24ba260dbbf3eb5d8904ca0ddd..b6104012c015eec7e7c51f9b16b0eae6a3440148 100644
+--- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
++++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+@@ -554,7 +554,14 @@ public class CraftScheduler implements BukkitScheduler {
+         // LophinyaPluginSchedulerDispatch for scope and rationale). Only reached for sync tasks on
+         // the main (non-async) scheduler - exactly the case stock Folia has no home for.
+         if (!this.isAsyncScheduler && task.isSync()) {
+-            final CraftTask redispatched = fun.bm.lophinya.compat.LophinyaPluginSchedulerDispatch.tryDispatch(task, delay, task.getPeriod());
++            CraftTask redispatched = fun.bm.lophinya.compat.LophinyaPluginSchedulerDispatch.tryDispatch(task, delay, task.getPeriod());
++            if (redispatched == null) {
++                // No researched rule for this task. Fall back to the caller's own execution context,
++                // which needs no per-plugin entry - see LophinyaCallerContextDispatch. Still returns
++                // null, and so still falls through to the throw below, when the calling thread has no
++                // observable context to run the task on.
++                redispatched = fun.bm.lophinya.compat.LophinyaCallerContextDispatch.tryDispatch(task, delay, task.getPeriod());
++            }
+             if (redispatched != null) {
+                 return redispatched;
+             }

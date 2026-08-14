@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 31 Jul 2026 15:15:10 +0800
+Subject: [PATCH] make an off-region block read fail attributably
+
+Level#getCurrentWorldData() returns null when the calling thread is not ticking
+a region of that world, and Level#getBlockStateIfLoaded dereferences it with no
+null check. A cross-region block read therefore does not end in
+TickThread.ensureTickThread's message - which carries thread context, world and
+position, and logs a stack trace - but in
+
+  NullPointerException: Cannot read field "captureTreeGeneration"
+    because the return value of "Level.getCurrentWorldData()" is null
+
+naming a field that has nothing to do with the problem. Measured: 26 of them in
+one soak run, all from CraftWorld#rayTraceBlocks called off-region, and working
+out what they meant needed a separate investigation.
+
+This fork's model is "let it load, then fail loudly at the real callsite", and
+that only works if the failure can be attributed. Nothing about the outcome
+changes: the read already failed and still fails, at the same place, for the
+same reason - only the exception's identity and diagnostics change. Same pure
+diagnostics category as patch 0024's runtime access guard.
+
+This adds the helper the Level hook calls. Scope is getBlockStateIfLoaded, the
+one path with measured evidence; other getCurrentWorldData() dereferences have
+the same shape but no observed occurrence.
+
+diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
+index ca92bb3a8b739c0da3f48a2dd16c5fb4fa7e8453..6cff4927ff5c9634ea8178624ccb169741e3f83a 100644
+--- a/net/minecraft/world/level/Level.java
++++ b/net/minecraft/world/level/Level.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.level;
+ 
++import ca.spottedleaf.moonrise.common.util.TickThread;
+ import com.google.common.collect.Lists;
+ import com.mojang.serialization.Codec;
+ import java.io.IOException;
+@@ -1012,6 +1013,11 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+     @Override
+     @Nullable
+     public final BlockState getBlockStateIfLoaded(BlockPos pos) {
++        // Lophinya start - attribute the off-region read instead of letting it NPE on a field name
++        if (fun.bm.lecithin.config.modules.CompatConfig.regionReadDiagnostics && this.getCurrentWorldData() == null) {
++            TickThread.ensureTickThread(this, pos, "Cannot read block state off-region");
++        }
++        // Lophinya end
+         // CraftBukkit start - tree generation
+         if (this.getCurrentWorldData().captureTreeGeneration) { // Folia - region threading
+             CraftBlockState previous = this.getCurrentWorldData().capturedBlockStates.get(pos); // Folia - region threading
