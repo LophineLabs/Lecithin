@@ -67,7 +67,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  *   <li>{@code TamableAnimal#maybeTeleportTo} - fires {@code EntityTeleportEvent} itself and
  *       <i>then</i> schedules the {@code teleportAsync}; firing again here would double it.</li>
  * </ul>
- *
+ * <p>
  * Everything with a real cause is a teleport Paper would also have reported: {@code COMMAND}
  * (vanilla {@code /tp}), {@code ENDER_PEARL}, {@code END_GATEWAY}, {@code NETHER_PORTAL},
  * {@code END_PORTAL}, and {@code PLUGIN} (the Bukkit API, whose {@code teleport}/{@code teleportAsync}
@@ -113,9 +113,9 @@ public final class LophinyaTeleportEvents {
         final org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
         final Location from = bukkitEntity.getLocation();
         final Location to = new Location(
-            destination.getWorld(), pos.x, pos.y, pos.z,
-            yaw == null ? from.getYaw() : yaw.floatValue(),
-            pitch == null ? from.getPitch() : pitch.floatValue());
+                destination.getWorld(), pos.x, pos.y, pos.z,
+                yaw == null ? from.getYaw() : yaw.floatValue(),
+                pitch == null ? from.getPitch() : pitch.floatValue());
 
         final Location redirected;
         if (bukkitEntity instanceof org.bukkit.entity.Player player) {
@@ -144,9 +144,9 @@ public final class LophinyaTeleportEvents {
             return unchanged; // untouched - keep the platform's own null rotations
         }
         return new Destination(
-            ((CraftWorld) world).getHandle(),
-            new Vec3(redirected.getX(), redirected.getY(), redirected.getZ()),
-            Float.valueOf(redirected.getYaw()), Float.valueOf(redirected.getPitch()));
+                ((CraftWorld) world).getHandle(),
+                new Vec3(redirected.getX(), redirected.getY(), redirected.getZ()),
+                Float.valueOf(redirected.getYaw()), Float.valueOf(redirected.getPitch()));
     }
 
     /**

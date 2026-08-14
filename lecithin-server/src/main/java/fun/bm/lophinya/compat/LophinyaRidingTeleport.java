@@ -13,7 +13,7 @@ import fun.bm.lecithin.config.modules.CompatConfig;
  *       if (this.isPassenger()) { return false; }
  *   }
  * </pre>
- *
+ * <p>
  * and {@code CraftEntity#teleportAsync} always passes that flag. So every Bukkit API teleport of a
  * riding entity returns {@code false} and does nothing - boats, minecarts, horses, GSit seats,
  * Citizens mounts. Measured exposure in the delivery set: 25 {@code teleport(...)Z} callsites across
@@ -84,7 +84,7 @@ public final class LophinyaRidingTeleport {
      * place where the vehicle relationship can be touched safely.
      *
      * @return the vehicle it was riding, so the caller can put it back if the teleport is refused,
-     *         or {@code null} if it was not riding anything
+     * or {@code null} if it was not riding anything
      */
     public static net.minecraft.world.entity.Entity dismountForTeleport(final net.minecraft.world.entity.Entity entity) {
         if (!CompatConfig.ridingTeleport || !entity.isPassenger()) {

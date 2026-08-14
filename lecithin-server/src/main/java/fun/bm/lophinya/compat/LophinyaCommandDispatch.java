@@ -85,8 +85,8 @@ public final class LophinyaCommandDispatch {
      */
     public static boolean shouldHandOff() {
         return CompatConfig.commandDispatchHandover
-            && !RegionizedServer.isGlobalTickThread()
-            && TickRegionScheduler.getCurrentRegion() != null;
+                && !RegionizedServer.isGlobalTickThread()
+                && TickRegionScheduler.getCurrentRegion() != null;
     }
 
     /**
@@ -96,7 +96,7 @@ public final class LophinyaCommandDispatch {
      * @param commandLine the command line, exactly as the caller passed it
      * @param redispatch  re-runs the original {@code dispatchCommand}, on the global region
      * @return {@code false} if the command does not exist (verbatim Paper behaviour), else
-     *         {@code true} once the execution has been queued
+     * {@code true} once the execution has been queued
      */
     public static boolean handOff(final CommandSender sender, final String commandLine,
                                   final Runnable redispatch) {
@@ -122,11 +122,11 @@ public final class LophinyaCommandDispatch {
         try {
             final CommandSourceStack source = VanillaCommandWrapper.getListener(sender);
             final ParseResults<CommandSourceStack> results = net.minecraft.server.MinecraftServer.getServer()
-                .getCommands().getDispatcher().parse(command, source);
+                    .getCommands().getDispatcher().parse(command, source);
             return !results.getContext().getNodes().isEmpty();
         } catch (final Throwable t) {
             LOGGER.warn("[Lophinya] could not pre-parse '{}' off the global region; handing it off "
-                + "anyway so the real dispatch reports the real error", command, t);
+                    + "anyway so the real dispatch reports the real error", command, t);
             return true;
         }
     }
@@ -140,9 +140,9 @@ public final class LophinyaCommandDispatch {
             return;
         }
         LOGGER.info("[Lophinya] console-sender dispatch of '{}' was handed to the global region, "
-            + "which is where stock Folia requires a console sender to execute. The parse still ran "
-            + "here, so an unknown command still returns false synchronously; only the execution is "
-            + "deferred, and an exception thrown by it now surfaces on the global region instead of "
-            + "propagating out of this call.", root);
+                + "which is where stock Folia requires a console sender to execute. The parse still ran "
+                + "here, so an unknown command still returns false synchronously; only the execution is "
+                + "deferred, and an exception thrown by it now surfaces on the global region instead of "
+                + "propagating out of this call.", root);
     }
 }

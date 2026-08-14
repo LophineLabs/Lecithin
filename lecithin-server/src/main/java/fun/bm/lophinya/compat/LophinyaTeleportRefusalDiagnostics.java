@@ -30,7 +30,7 @@ import net.minecraft.world.entity.Entity;
 public final class LophinyaTeleportRefusalDiagnostics {
 
     private static final org.slf4j.Logger LOGGER =
-        com.mojang.logging.LogUtils.getLogger();
+            com.mojang.logging.LogUtils.getLogger();
 
     /**
      * Prints why {@code canTeleportAsync()} said no, plus the state DEC-59 asks for.
@@ -47,31 +47,31 @@ public final class LophinyaTeleportRefusalDiagnostics {
         try {
             final StringBuilder sb = new StringBuilder(512);
             sb.append("[Lophinya][D-40] teleportAsync refused by canTeleportAsync()")
-              .append("\n  entity           : ").append(entity.getType().toShortString())
-              .append(" id=").append(entity.getId()).append(" uuid=").append(entity.getUUID())
-              // The four predicates of canTeleportAsync(), separately.
-              .append("\n  hasNullCallback  : ").append(entity.hasNullCallback())
-              .append("   <- no Bukkit API for this; it is why the patch exists")
-              .append("\n  isRemoved        : ").append(entity.isRemoved())
-              .append("\n  isAlive          : ").append(entity.isAlive())
-              .append("\n  isSleeping       : ")
-              .append(entity instanceof net.minecraft.world.entity.LivingEntity living
-                  ? String.valueOf(living.isSleeping()) : "n/a (not a LivingEntity)")
-              .append("\n  removalReason    : ").append(entity.getRemovalReason())
-              .append("\n  levelCallback    : ").append(describeCallback(entity))
-              // Ownership and position: the two things previously assumed rather than read.
-              .append("\n  ownedByCurrent   : ").append(ownedByCurrentRegion(entity))
-              .append("\n  from             : ").append(String.valueOf(entity.level().dimension()))
-              .append(' ').append(fmt(entity.position()))
-              .append("\n  to               : ").append(String.valueOf(destination.dimension()))
-              .append(' ').append(fmt(pos))
-              .append("\n  fromChunk        : ").append(chunkState(entity.level(), entity.position()))
-              .append("\n  toChunk          : ").append(chunkState(destination, pos))
-              // The vehicle graph, because a teleport of a rider and a teleport of a vehicle reach
-              // this refusal by different routes.
-              .append("\n  isPassenger      : ").append(entity.isPassenger())
-              .append("  isVehicle=").append(entity.isVehicle())
-              .append("  passengers=").append(entity.getPassengers().size());
+                    .append("\n  entity           : ").append(entity.getType().toShortString())
+                    .append(" id=").append(entity.getId()).append(" uuid=").append(entity.getUUID())
+                    // The four predicates of canTeleportAsync(), separately.
+                    .append("\n  hasNullCallback  : ").append(entity.hasNullCallback())
+                    .append("   <- no Bukkit API for this; it is why the patch exists")
+                    .append("\n  isRemoved        : ").append(entity.isRemoved())
+                    .append("\n  isAlive          : ").append(entity.isAlive())
+                    .append("\n  isSleeping       : ")
+                    .append(entity instanceof net.minecraft.world.entity.LivingEntity living
+                            ? String.valueOf(living.isSleeping()) : "n/a (not a LivingEntity)")
+                    .append("\n  removalReason    : ").append(entity.getRemovalReason())
+                    .append("\n  levelCallback    : ").append(describeCallback(entity))
+                    // Ownership and position: the two things previously assumed rather than read.
+                    .append("\n  ownedByCurrent   : ").append(ownedByCurrentRegion(entity))
+                    .append("\n  from             : ").append(String.valueOf(entity.level().dimension()))
+                    .append(' ').append(fmt(entity.position()))
+                    .append("\n  to               : ").append(String.valueOf(destination.dimension()))
+                    .append(' ').append(fmt(pos))
+                    .append("\n  fromChunk        : ").append(chunkState(entity.level(), entity.position()))
+                    .append("\n  toChunk          : ").append(chunkState(destination, pos))
+                    // The vehicle graph, because a teleport of a rider and a teleport of a vehicle reach
+                    // this refusal by different routes.
+                    .append("\n  isPassenger      : ").append(entity.isPassenger())
+                    .append("  isVehicle=").append(entity.isVehicle())
+                    .append("  passengers=").append(entity.getPassengers().size());
             LOGGER.warn(sb.toString());
         } catch (final Throwable t) {
             // A diagnostic that can break the thing it observes is worse than no diagnostic.
@@ -103,17 +103,19 @@ public final class LophinyaTeleportRefusalDiagnostics {
         }
         try {
             LOGGER.warn("[Lophinya][D-40] levelCallback {} -> {}  entity={} id={} at={} thread={}{}",
-                wasNull ? "NULL" : "set", isNull ? "NULL" : "set",
-                entity.getType().toShortString(), entity.getId(), fmt(entity.position()),
-                Thread.currentThread().getName(), stackSample());
+                    wasNull ? "NULL" : "set", isNull ? "NULL" : "set",
+                    entity.getType().toShortString(), entity.getId(), fmt(entity.position()),
+                    Thread.currentThread().getName(), stackSample());
         } catch (final Throwable t) {
             LOGGER.warn("[Lophinya][D-40] diagnostic itself failed: {}", t.toString());
         }
     }
 
-    /** How many callback transitions still get a stack sample; after that, only the one-liner. */
+    /**
+     * How many callback transitions still get a stack sample; after that, only the one-liner.
+     */
     private static final java.util.concurrent.atomic.AtomicInteger STACK_SAMPLES_LEFT =
-        new java.util.concurrent.atomic.AtomicInteger(24);
+            new java.util.concurrent.atomic.AtomicInteger(24);
 
     /**
      * The call path of a callback transition, for the first few transitions only.
@@ -140,20 +142,22 @@ public final class LophinyaTeleportRefusalDiagnostics {
     private static String describeCallback(final Entity entity) {
         final Object callback = entity.levelCallback;
         return callback == net.minecraft.world.level.entity.EntityInLevelCallback.NULL
-            ? "NULL" : callback.getClass().getName();
+                ? "NULL" : callback.getClass().getName();
     }
 
     private static String ownedByCurrentRegion(final Entity entity) {
         try {
             return String.valueOf(io.papermc.paper.threadedregions.RegionizedServer.isGlobalTickThread()
-                ? "global-region-thread"
-                : ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(entity));
+                    ? "global-region-thread"
+                    : ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(entity));
         } catch (final Throwable t) {
             return "<unavailable: " + t.getClass().getSimpleName() + '>';
         }
     }
 
-    /** Loaded-ness of the chunk holding {@code pos}, read without forcing it to load. */
+    /**
+     * Loaded-ness of the chunk holding {@code pos}, read without forcing it to load.
+     */
     private static String chunkState(final net.minecraft.world.level.Level level,
                                      final net.minecraft.world.phys.Vec3 pos) {
         try {

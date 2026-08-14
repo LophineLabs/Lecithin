@@ -31,18 +31,24 @@ public final class LophinyaSchedulerDiagnostics {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    /** Report each distinct (plugin, callsite, method) once. A rejected ticker would otherwise spam. */
+    /**
+     * Report each distinct (plugin, callsite, method) once. A rejected ticker would otherwise spam.
+     */
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
 
-    /** SHA-256 of a plugin jar is stable for the run; hashing a 10 MB jar per call would not be free. */
+    /**
+     * SHA-256 of a plugin jar is stable for the run; hashing a 10 MB jar per call would not be free.
+     */
     private static final Map<String, String> JAR_SHA = new ConcurrentHashMap<>();
 
-    /** Frames belonging to the scheduler plumbing itself — never the answer to "who called this". */
+    /**
+     * Frames belonging to the scheduler plumbing itself — never the answer to "who called this".
+     */
     private static final String[] PLUMBING = {
-        "org.bukkit.craftbukkit.scheduler.",
-        "org.bukkit.scheduler.",
-        "io.papermc.paper.threadedregions.",
-        "fun.bm.lophinya.compat.",
+            "org.bukkit.craftbukkit.scheduler.",
+            "org.bukkit.scheduler.",
+            "io.papermc.paper.threadedregions.",
+            "fun.bm.lophinya.compat.",
     };
 
     /**
@@ -65,27 +71,27 @@ public final class LophinyaSchedulerDiagnostics {
             final String key = name + '|' + callsite + '|' + method;
 
             final String reason = (async ? "async" : "sync")
-                + " Bukkit scheduler task from " + name
-                + " (" + method + ", delay=" + delay + ", period=" + period + ") "
-                + "is not supported under regionised threading";
+                    + " Bukkit scheduler task from " + name
+                    + " (" + method + ", delay=" + delay + ", period=" + period + ") "
+                    + "is not supported under regionised threading";
 
             if (!CompatConfig.diagnostics || !REPORTED.add(key)) {
                 return reason;
             }
 
             LOGGER.warn("""
-                [Lophinya] Rejected Bukkit scheduler call
-                  plugin    : {} v{}
-                  jar       : {}
-                  jar sha256: {}
-                  scheduler : {} (delay={} ticks, period={} ticks, async={})
-                  callsite  : {}
-                  context   : {}
-                  why       : Folia has no single main thread. Use RegionScheduler (block/location),
-                              EntityScheduler (entity), GlobalRegionScheduler (server-global) or
-                              AsyncScheduler. This message is diagnostic only; the call still fails.""",
-                name, version(plugin), jarName(plugin), jarSha(plugin),
-                method, delay, period, async, callsite, context());
+                            [Lophinya] Rejected Bukkit scheduler call
+                              plugin    : {} v{}
+                              jar       : {}
+                              jar sha256: {}
+                              scheduler : {} (delay={} ticks, period={} ticks, async={})
+                              callsite  : {}
+                              context   : {}
+                              why       : Folia has no single main thread. Use RegionScheduler (block/location),
+                                          EntityScheduler (entity), GlobalRegionScheduler (server-global) or
+                                          AsyncScheduler. This message is diagnostic only; the call still fails.""",
+                    name, version(plugin), jarName(plugin), jarSha(plugin),
+                    method, delay, period, async, callsite, context());
 
             return reason;
         } catch (final Throwable t) {
@@ -125,7 +131,9 @@ public final class LophinyaSchedulerDiagnostics {
         return out;
     }
 
-    /** Which thread and which region we were on when the call came in. */
+    /**
+     * Which thread and which region we were on when the call came in.
+     */
     private static String context() {
         final StringBuilder sb = new StringBuilder(96);
         sb.append("thread=").append(Thread.currentThread().getName());

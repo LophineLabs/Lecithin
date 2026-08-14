@@ -42,10 +42,10 @@ public final class LophinyaScoreboardSupport {
     public static void ensureMainBoardStructuralChange(final String what) {
         if (!RegionizedServer.isGlobalTickThread()) {
             throw new IllegalStateException(
-                "Lophinya: " + what + " on the main scoreboard requires the global region thread"
-                    + " (current thread: " + Thread.currentThread().getName() + ")."
-                    + " Schedule it with Bukkit.getGlobalRegionScheduler(), or use a plugin-created"
-                    + " scoreboard (ScoreboardManager#getNewScoreboard).");
+                    "Lophinya: " + what + " on the main scoreboard requires the global region thread"
+                            + " (current thread: " + Thread.currentThread().getName() + ")."
+                            + " Schedule it with Bukkit.getGlobalRegionScheduler(), or use a plugin-created"
+                            + " scoreboard (ScoreboardManager#getNewScoreboard).");
         }
     }
 }

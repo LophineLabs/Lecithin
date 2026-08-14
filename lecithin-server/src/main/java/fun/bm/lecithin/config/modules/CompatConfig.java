@@ -1,12 +1,13 @@
 package fun.bm.lecithin.config.modules;
 
+import me.earthme.luminol.config.IConfigModule;
 import me.earthme.luminol.config.flags.ConfigClassInfo;
 import me.earthme.luminol.config.flags.ConfigInfo;
 import me.earthme.luminol.config.flags.HotReloadUnsupported;
 import me.earthme.luminol.enums.EnumConfigCategory;
 
 @ConfigClassInfo(name = "compat-config", category = EnumConfigCategory.ROOT)
-public class CompatConfig {
+public class CompatConfig implements IConfigModule {
     @HotReloadUnsupported
     @ConfigInfo(name = "restore-async-scheduler")
     public static boolean restoreAsyncScheduler = true;

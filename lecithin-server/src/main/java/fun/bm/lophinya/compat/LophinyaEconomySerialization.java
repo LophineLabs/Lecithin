@@ -17,14 +17,7 @@ import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -101,36 +94,40 @@ public final class LophinyaEconomySerialization {
     }
 
     private static final Map<String, Guard> RULES = Map.of(
-        // EssentialsX 2.22.1-dev+12-776f709 (the exact artifact installed on s01). Research:
-        // evidence/20260729d-t01-essentialsx-callsite-analysis.md (the read-modify-write and the
-        // zero-lock scan), evidence/20260730b-essentialsx-economy-serialization.md (this design,
-        // the full mutation call graph, and the concurrency harness results).
-        //
-        // Every balance mutation in the plugin funnels through User.setMoney(BigDecimal, Cause) and
-        // every read through User.getMoney(); the mutation origins are exactly five, and each is
-        // reachable only via one of the two boundaries guarded here:
-        //   api/Economy.java:253,331 (statics) .......... service boundary (VaultEconomyProvider)
-        //   User.payUser:312-313 ........................ command boundary (/pay)
-        //   Trade.java:239,307,326 ...................... command boundary (/sell, command costs)
-        //   commands/Commandeco.java:58,63,75 ........... command boundary (/eco)
-        //   commands/Commandsell.java:122 ............... command boundary (/sell)
-        // Sign shops are the one other Trade entry point; they are disabled on s01 (config.yml
-        // "enabledSigns:" is empty), which is recorded as a scope limit, not as a fix.
-        //
-        // balancetop is deliberately NOT guarded: it is read-only and already runs off-thread over
-        // the whole userdata set, so putting it under the exclusive lock would stall every region
-        // thread for the length of a full scan to protect a value that is advisory by design.
-        "ED0C4432BB286CE06820BA5A162FFAC91E34E02EBA644CFCF66AEC4FDA86AF42", new Guard(
-            Set.of("net.milkbowl.vault.economy.Economy"),
-            Set.of("pay", "eco", "sell", "balance")
-        )
+            // EssentialsX 2.22.1-dev+12-776f709 (the exact artifact installed on s01). Research:
+            // evidence/20260729d-t01-essentialsx-callsite-analysis.md (the read-modify-write and the
+            // zero-lock scan), evidence/20260730b-essentialsx-economy-serialization.md (this design,
+            // the full mutation call graph, and the concurrency harness results).
+            //
+            // Every balance mutation in the plugin funnels through User.setMoney(BigDecimal, Cause) and
+            // every read through User.getMoney(); the mutation origins are exactly five, and each is
+            // reachable only via one of the two boundaries guarded here:
+            //   api/Economy.java:253,331 (statics) .......... service boundary (VaultEconomyProvider)
+            //   User.payUser:312-313 ........................ command boundary (/pay)
+            //   Trade.java:239,307,326 ...................... command boundary (/sell, command costs)
+            //   commands/Commandeco.java:58,63,75 ........... command boundary (/eco)
+            //   commands/Commandsell.java:122 ............... command boundary (/sell)
+            // Sign shops are the one other Trade entry point; they are disabled on s01 (config.yml
+            // "enabledSigns:" is empty), which is recorded as a scope limit, not as a fix.
+            //
+            // balancetop is deliberately NOT guarded: it is read-only and already runs off-thread over
+            // the whole userdata set, so putting it under the exclusive lock would stall every region
+            // thread for the length of a full scan to protect a value that is advisory by design.
+            "ED0C4432BB286CE06820BA5A162FFAC91E34E02EBA644CFCF66AEC4FDA86AF42", new Guard(
+                    Set.of("net.milkbowl.vault.economy.Economy"),
+                    Set.of("pay", "eco", "sell", "balance")
+            )
     );
 
-    /** coarse -> account is the only lock order taken anywhere in this class. */
+    /**
+     * coarse -> account is the only lock order taken anywhere in this class.
+     */
     private static final ReentrantReadWriteLock COARSE = new ReentrantReadWriteLock(true);
     private static final Map<String, ReentrantLock> ACCOUNT_LOCKS = new ConcurrentHashMap<>();
     private static final Map<Path, String> SHA_CACHE = new ConcurrentHashMap<>();
-    /** Log the first time each guarded command actually goes through layer B, not every time. */
+    /**
+     * Log the first time each guarded command actually goes through layer B, not every time.
+     */
     private static final Set<String> COMMANDS_LOGGED = ConcurrentHashMap.newKeySet();
 
     // ---------------------------------------------------------------- service boundary
@@ -139,7 +136,7 @@ public final class LophinyaEconomySerialization {
      * Called from the services manager on every {@code register(...)}.
      *
      * @return the wrapped provider, or {@code provider} unchanged when no rule applies or anything
-     *         at all goes wrong (fail-open, see class docs)
+     * at all goes wrong (fail-open, see class docs)
      */
     public static Object wrapServiceProvider(final Class<?> service, final Object provider, final Plugin plugin) {
         if (!CompatConfig.economySerialization || service == null || provider == null || plugin == null || !service.isInterface()) {
@@ -151,13 +148,13 @@ public final class LophinyaEconomySerialization {
                 return provider;
             }
             final Object wrapped = Proxy.newProxyInstance(
-                provider.getClass().getClassLoader(),
-                new Class<?>[]{service},
-                new SerializingHandler(provider)
+                    provider.getClass().getClassLoader(),
+                    new Class<?>[]{service},
+                    new SerializingHandler(provider)
             );
             LOGGER.warn("[Lophinya] {}: serializing economy service {} per account - version-locked "
-                + "rule table entry; different accounts still run in parallel",
-                plugin.getName(), service.getName());
+                            + "rule table entry; different accounts still run in parallel",
+                    plugin.getName(), service.getName());
             return wrapped;
         } catch (final Throwable t) {
             LOGGER.warn("[Lophinya] economy service wrap failed (leaving provider unwrapped)", t);
@@ -251,8 +248,8 @@ public final class LophinyaEconomySerialization {
 
     /**
      * @return {@code true} when this command belongs to a guarded plugin and is one of its guarded
-     *         economy commands, meaning the caller must run it inside
-     *         {@link #beginExclusive()}/{@link #endExclusive()}
+     * economy commands, meaning the caller must run it inside
+     * {@link #beginExclusive()}/{@link #endExclusive()}
      */
     public static boolean isGuardedCommand(final Command command) {
         if (!CompatConfig.economySerialization || !(command instanceof PluginCommand pc)) {
@@ -269,7 +266,7 @@ public final class LophinyaEconomySerialization {
             // never having matched. One line per command name, once per server lifetime.
             if (COMMANDS_LOGGED.add(name)) {
                 LOGGER.info("[Lophinya] {}: running /{} under the exclusive economy lock - first hit "
-                    + "this run; version-locked rule table entry", pc.getPlugin().getName(), name);
+                        + "this run; version-locked rule table entry", pc.getPlugin().getName(), name);
             }
             return true;
         } catch (final Throwable t) {

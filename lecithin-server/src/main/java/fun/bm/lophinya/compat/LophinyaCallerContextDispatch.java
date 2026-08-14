@@ -42,7 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *       inferred and the call is rejected exactly as on stock Folia</b>, with the existing
  *       diagnostics. This is the case B1 is about, and it stays closed.</li>
  * </ul>
- *
+ * <p>
  * This is also not the "route any rejected sync task to GlobalRegionScheduler" shim that
  * {@code DEC-05} / {@code N13} rejected on measured grounds. That proposal sent tasks to the global
  * region <i>regardless of where they came from</i>, which relocates a region-scoped task onto a
@@ -87,10 +87,14 @@ public final class LophinyaCallerContextDispatch {
      */
     private static final ThreadLocal<CapturedContext> INHERITED = new ThreadLocal<>();
 
-    /** Report each distinct (plugin, task class, context kind) once; a ticker would flood the log. */
+    /**
+     * Report each distinct (plugin, task class, context kind) once; a ticker would flood the log.
+     */
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
 
-    /** What a thread was ticking when it scheduled something, or {@code null} if nothing. */
+    /**
+     * What a thread was ticking when it scheduled something, or {@code null} if nothing.
+     */
     public record CapturedContext(OwnedChunk chunk, boolean global) {
     }
 
@@ -175,27 +179,27 @@ public final class LophinyaCallerContextDispatch {
             // The thread's own context always wins. The inherited one is only consulted when this
             // thread has none, which is precisely the case that is refused today.
             final OwnedChunk owned = direct != null ? direct
-                : (inherited != null ? inherited.chunk() : null);
+                    : (inherited != null ? inherited.chunk() : null);
             final String origin = direct != null ? "" : " (inherited from the thread that scheduled this async task)";
             if (owned != null) {
                 scheduled = repeating
-                    ? Bukkit.getRegionScheduler().runAtFixedRate(plugin, owned.world(), owned.chunkX(), owned.chunkZ(),
+                        ? Bukkit.getRegionScheduler().runAtFixedRate(plugin, owned.world(), owned.chunkX(), owned.chunkZ(),
                         ignored -> task.run(), safeDelay, period)
-                    : Bukkit.getRegionScheduler().runDelayed(plugin, owned.world(), owned.chunkX(), owned.chunkZ(),
+                        : Bukkit.getRegionScheduler().runDelayed(plugin, owned.world(), owned.chunkX(), owned.chunkZ(),
                         ignored -> task.run(), safeDelay);
                 context = "region owning " + owned.world().getName() + " chunk ["
-                    + owned.chunkX() + ", " + owned.chunkZ() + ']' + origin;
+                        + owned.chunkX() + ", " + owned.chunkZ() + ']' + origin;
             } else if (Bukkit.isGlobalTickThread() || (inherited != null && inherited.global())) {
                 scheduled = repeating
-                    ? Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, ignored -> task.run(), safeDelay, period)
-                    : Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), safeDelay);
+                        ? Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, ignored -> task.run(), safeDelay, period)
+                        : Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), safeDelay);
                 context = "global region (the caller was the global region)" + origin;
             } else if (CompatConfig.startupContextDispatch && callerIsStartupThread()) {
                 scheduled = repeating
-                    ? Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, ignored -> task.run(), safeDelay, period)
-                    : Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), safeDelay);
+                        ? Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, ignored -> task.run(), safeDelay, period)
+                        : Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), safeDelay);
                 context = "global region (scheduled during startup on the bootstrap thread; Paper "
-                    + "runs these on the main thread as init completes)";
+                        + "runs these on the main thread as init completes)";
             } else {
                 // No observable context. Inferring one here is exactly DEC-19 B1.
                 return null;
@@ -208,12 +212,14 @@ public final class LophinyaCallerContextDispatch {
             // Any failure must fall through to stock rejection, never report success without
             // having actually scheduled anything.
             LOGGER.warn("[Lophinya] caller-context scheduler dispatch failed "
-                + "(falling through to stock rejection)", t);
+                    + "(falling through to stock rejection)", t);
             return null;
         }
     }
 
-    /** Package-private, not private: {@link CapturedContext} carries one across the async hop. */
+    /**
+     * Package-private, not private: {@link CapturedContext} carries one across the async hop.
+     */
     record OwnedChunk(World world, int chunkX, int chunkZ) {
     }
 
@@ -254,9 +260,9 @@ public final class LophinyaCallerContextDispatch {
         final long sectionKey = sections.nextLong();
         final int shift = TickRegions.getRegionChunkShift();
         return new OwnedChunk(
-            worldData.world.getWorld(),
-            ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkX(sectionKey) << shift,
-            ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkZ(sectionKey) << shift
+                worldData.world.getWorld(),
+                ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkX(sectionKey) << shift,
+                ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkZ(sectionKey) << shift
         );
     }
 
@@ -269,8 +275,8 @@ public final class LophinyaCallerContextDispatch {
             return;
         }
         LOGGER.info("[Lophinya] {}: sync scheduler task {} (delay={}, period={}) redispatched to the "
-            + "caller's own context: {}. No region ownership was inferred - the calling thread's "
-            + "context is the context. Cross-region access inside the task still fails at the access.",
-            plugin.getName(), taskClass, delay, period, context);
+                        + "caller's own context: {}. No region ownership was inferred - the calling thread's "
+                        + "context is the context. Cross-region access inside the task still fails at the access.",
+                plugin.getName(), taskClass, delay, period, context);
     }
 }

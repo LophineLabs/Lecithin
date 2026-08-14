@@ -11,11 +11,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
 
 import java.io.File;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.Proxy;
+import java.lang.reflect.*;
 import java.net.URI;
 import java.security.CodeSource;
 import java.util.ArrayList;
@@ -86,11 +82,15 @@ public final class LophinyaPaperLibAdapter {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    /** Field names are part of the library's own shape, the same way its method signatures are. */
+    /**
+     * Field names are part of the library's own shape, the same way its method signatures are.
+     */
     private static final String CHUNKS_FIELD = "asyncChunksHandler";
     private static final String TELEPORT_FIELD = "asyncTeleportHandler";
 
-    /** One install attempt per class loader; a plugin can be enabled more than once. */
+    /**
+     * One install attempt per class loader; a plugin can be enabled more than once.
+     */
     private static final Set<ClassLoader> DONE = ConcurrentHashMap.newKeySet();
 
     /**
@@ -208,15 +208,15 @@ public final class LophinyaPaperLibAdapter {
             chunksField.set(environment, proxy(chunksField.getType(), new AsyncChunksHandler()));
             teleportField.set(environment, proxy(teleportField.getType(), new AsyncTeleportHandler()));
             LOGGER.info(
-                "[Lophinya] {}: embedded PaperLib ({}) was using {} / {} - a synchronous pair it picked because"
-                    + " its version regex cannot read \"{}\". Replaced with the platform's async chunk and teleport"
-                    + " API so its callers work across region boundaries. Nothing about the reported version was"
-                    + " changed; disable with -Dlophinya.compat.paperLibEnvironment=false.",
-                plugin.getName(),
-                binaryName,
-                simpleName(previousChunks),
-                simpleName(previousTeleport),
-                org.bukkit.Bukkit.getVersion()
+                    "[Lophinya] {}: embedded PaperLib ({}) was using {} / {} - a synchronous pair it picked because"
+                            + " its version regex cannot read \"{}\". Replaced with the platform's async chunk and teleport"
+                            + " API so its callers work across region boundaries. Nothing about the reported version was"
+                            + " changed; disable with -Dlophinya.compat.paperLibEnvironment=false.",
+                    plugin.getName(),
+                    binaryName,
+                    simpleName(previousChunks),
+                    simpleName(previousTeleport),
+                    org.bukkit.Bukkit.getVersion()
             );
         } catch (final Throwable t) {
             LOGGER.warn("[Lophinya] {}: could not install the platform environment into {}", plugin.getName(), binaryName, t);
@@ -267,12 +267,12 @@ public final class LophinyaPaperLibAdapter {
 
     private static boolean isAsyncChunksInterface(final Class<?> type) {
         return type.isInterface() && hasMethod(type, "getChunkAtAsync", CompletableFuture.class,
-            World.class, int.class, int.class, boolean.class, boolean.class);
+                World.class, int.class, int.class, boolean.class, boolean.class);
     }
 
     private static boolean isAsyncTeleportInterface(final Class<?> type) {
         return type.isInterface() && hasMethod(type, "teleportAsync", CompletableFuture.class,
-            Entity.class, Location.class, PlayerTeleportEvent.TeleportCause.class);
+                Entity.class, Location.class, PlayerTeleportEvent.TeleportCause.class);
     }
 
     private static boolean hasMethod(final Class<?> type, final String name, final Class<?> returnType, final Class<?>... params) {
@@ -283,7 +283,9 @@ public final class LophinyaPaperLibAdapter {
         }
     }
 
-    /** Defined in the library's own loader so the result is assignable to the field. */
+    /**
+     * Defined in the library's own loader so the result is assignable to the field.
+     */
     private static Object proxy(final Class<?> itf, final InvocationHandler handler) {
         return Proxy.newProxyInstance(itf.getClassLoader(), new Class<?>[]{itf}, handler);
     }
@@ -317,8 +319,8 @@ public final class LophinyaPaperLibAdapter {
             final Entity entity = (Entity) args[0];
             final Location destination = (Location) args[1];
             final PlayerTeleportEvent.TeleportCause cause = args.length > 2
-                ? (PlayerTeleportEvent.TeleportCause) args[2]
-                : PlayerTeleportEvent.TeleportCause.PLUGIN;
+                    ? (PlayerTeleportEvent.TeleportCause) args[2]
+                    : PlayerTeleportEvent.TeleportCause.PLUGIN;
             return entity.teleportAsync(destination, cause);
         }
     }

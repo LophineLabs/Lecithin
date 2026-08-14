@@ -1,8 +1,5 @@
 package fun.bm.lophinya.compat;
 
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 import fun.bm.lecithin.config.modules.CompatConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -13,6 +10,9 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Lophinya: serve a <em>read-only</em> block lookup from an already-loaded chunk when the calling
@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
  * creation both die on exactly this, and there is no thread the plugin could have used instead.
  *
  * <h2>Why this is narrowing the check rather than disabling it</h2>
- *
+ * <p>
  * The blanket refusal in {@code CraftBlock} guards two different things, and only one of them is
  * still real for a read:
  *
@@ -41,7 +41,7 @@ import org.apache.logging.log4j.Logger;
  *       synchronization". A reader therefore takes one consistent snapshot and indexes into it.
  *       {@code LevelChunk.getBlockStateFinal} adds only a bounds check and a plain int read.</li>
  * </ol>
- *
+ * <p>
  * So the worst outcome of a read served here is a block state that is one tick stale - which is the
  * same thing every check-then-act plugin already races against on single-threaded Paper. It cannot
  * throw, cannot deadlock, cannot corrupt, and cannot observe a torn value: entries never span two
@@ -68,7 +68,9 @@ public final class LophinyaCrossRegionBlockRead {
 
     private static final Logger LOGGER = LogManager.getLogger(LophinyaCrossRegionBlockRead.class);
 
-    /** One diagnostic line per distinct world pair, so the behaviour is observable without flooding. */
+    /**
+     * One diagnostic line per distinct world pair, so the behaviour is observable without flooding.
+     */
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
 
     /**
@@ -118,7 +120,7 @@ public final class LophinyaCrossRegionBlockRead {
             // within one Data, and a resize publishes a whole new Data, so an old index always still
             // maps to the value it mapped to.
             LOGGER.warn("[Lophinya] Cross-region block read raced a palette update at {} in {}; "
-                + "falling through to the stock ownership check", pos, level.getWorld().getName(), race);
+                    + "falling through to the stock ownership check", pos, level.getWorld().getName(), race);
             return null;
         }
     }
@@ -128,7 +130,7 @@ public final class LophinyaCrossRegionBlockRead {
      * it yet.
      *
      * <h2>The invariant this restores</h2>
-     *
+     * <p>
      * On Paper, {@code MinecraftServer.prepareLevel} activates the world's saved tickets inside
      * {@code ChunkLoadCounter.track(...)} and then spins on {@code executeModerately()} until
      * {@code pendingChunks() == 0}. So by the time any plugin is enabled, the chunks the world's
@@ -142,7 +144,7 @@ public final class LophinyaCrossRegionBlockRead {
      * ownership check then throws - every boot, identically, with no way for the plugin to avoid it.
      *
      * <h2>Why the wait is restored here and not in {@code prepareLevel}</h2>
-     *
+     * <p>
      * Because it structurally cannot be restored there. Region tick threads do not exist yet at that
      * point - {@code RegionizedServer.init()} calls {@code TickRegions.start()} and it runs
      * <em>after</em> {@code initServer()}, which is where plugin enable happens - so anything that
@@ -162,7 +164,7 @@ public final class LophinyaCrossRegionBlockRead {
      * read needs. It is not ticking and nothing here makes it tick.
      *
      * <h2>Which threads, and why exactly those</h2>
-     *
+     * <p>
      * The condition is {@code TickRegionScheduler.getCurrentRegion() == null}: the calling thread is
      * not ticking any region. On this platform that is a closed set of exactly two threads, and both
      * of them own no chunks anywhere:
@@ -174,7 +176,7 @@ public final class LophinyaCrossRegionBlockRead {
      *       class doc above already says a read from it "cannot legally read any block anywhere" -
      *       there is no other thread the caller could have used.</li>
      * </ul>
-     *
+     * <p>
      * A thread that <em>is</em> ticking a region takes none of this: it returns {@code null} and gets
      * the stock refusal, so "let any region thread pull in any chunk" stays exactly as closed as it
      * was. That question is {@code D-52} and this does not answer it.
@@ -188,7 +190,7 @@ public final class LophinyaCrossRegionBlockRead {
      * succeed afterwards.
      *
      * <h2>The cost, named</h2>
-     *
+     * <p>
      * This blocks the calling thread until the chunk is published. On the bootstrap thread that is
      * free - nothing else is running. On the global region thread it is not: the region's tick is
      * stalled for the duration, and the watchdog logs "Global region has not responded" past 5s.
@@ -214,7 +216,7 @@ public final class LophinyaCrossRegionBlockRead {
         final int chunkZ = pos.getZ() >> 4;
         try {
             final ChunkAccess loaded = level.moonrise$getChunkTaskScheduler()
-                .syncLoadNonFull(chunkX, chunkZ, ChunkStatus.FULL.getParent());
+                    .syncLoadNonFull(chunkX, chunkZ, ChunkStatus.FULL.getParent());
             if (loaded == null) {
                 return null;
             }
@@ -224,7 +226,7 @@ public final class LophinyaCrossRegionBlockRead {
             // Falling through is not swallowing it: the caller then hits the stock ownership check
             // and fails exactly as it does today, naming the world and position.
             LOGGER.warn("[Lophinya] Startup chunk load for a block read at {} in {} did not complete; "
-                + "falling through to the stock ownership check", pos, level.getWorld().getName(), failed);
+                    + "falling through to the stock ownership check", pos, level.getWorld().getName(), failed);
             return null;
         }
     }
@@ -233,19 +235,19 @@ public final class LophinyaCrossRegionBlockRead {
         final String where = LophinyaStartupGlobalContext.isStartupThread() ? "startup thread" : "global region thread";
         if (REPORTED.add("no-region-load " + where + " -> " + level.getWorld().getName())) {
             LOGGER.info("""
-                [Lophinya] Loaded a chunk on the {} to answer a block read in world '{}'
-                  why     : Paper's prepareLevel blocks until the world's ticketed chunks are in \
-                memory before any plugin is enabled; Folia drops that wait. A plugin reading the \
-                world spawn - in onEnable, or right after creating a world - therefore finds no \
-                chunk, and neither of these two threads owns a region it could read from instead.
-                  how     : ChunkTaskScheduler.syncLoadNonFull at FULL.getParent(), the same call \
-                prepareLevel and PlayerSpawnFinder already make from these same threads. Non-full \
-                and asynchronous, so it cannot deadlock against a region.
-                  scope   : threads that tick no region at all - the bootstrap thread and the global \
-                region thread. A thread ticking a region still refuses, so this does not become a \
-                general off-region chunk load.
-                  disable : -Dlophinya.compat.crossRegionBlockRead=false""",
-                where, level.getWorld().getName());
+                            [Lophinya] Loaded a chunk on the {} to answer a block read in world '{}'
+                              why     : Paper's prepareLevel blocks until the world's ticketed chunks are in \
+                            memory before any plugin is enabled; Folia drops that wait. A plugin reading the \
+                            world spawn - in onEnable, or right after creating a world - therefore finds no \
+                            chunk, and neither of these two threads owns a region it could read from instead.
+                              how     : ChunkTaskScheduler.syncLoadNonFull at FULL.getParent(), the same call \
+                            prepareLevel and PlayerSpawnFinder already make from these same threads. Non-full \
+                            and asynchronous, so it cannot deadlock against a region.
+                              scope   : threads that tick no region at all - the bootstrap thread and the global \
+                            region thread. A thread ticking a region still refuses, so this does not become a \
+                            general off-region chunk load.
+                              disable : -Dlophinya.compat.crossRegionBlockRead=false""",
+                    where, level.getWorld().getName());
         }
     }
 
@@ -254,14 +256,14 @@ public final class LophinyaCrossRegionBlockRead {
         final String key = (global ? "global region" : "a region thread") + " -> " + level.getWorld().getName();
         if (REPORTED.add(key)) {
             LOGGER.info("""
-                [Lophinya] Served a cross-region block read from a resident chunk: {}
-                  why     : every world has its own regioniser, so a tick thread can never own another \
-                world's chunks - this read has no legal thread and would otherwise be impossible, not \
-                merely misplaced.
-                  safety  : resident chunks only (an absent chunk still throws, so nothing loads here), \
-                reads only (writes are unchanged), and PalettedContainer is already concurrent-read \
-                safe upstream. Worst case is a one-tick-stale block state.
-                  disable : -Dlophinya.compat.crossRegionBlockRead=false""", key);
+                    [Lophinya] Served a cross-region block read from a resident chunk: {}
+                      why     : every world has its own regioniser, so a tick thread can never own another \
+                    world's chunks - this read has no legal thread and would otherwise be impossible, not \
+                    merely misplaced.
+                      safety  : resident chunks only (an absent chunk still throws, so nothing loads here), \
+                    reads only (writes are unchanged), and PalettedContainer is already concurrent-read \
+                    safe upstream. Worst case is a one-tick-stale block state.
+                      disable : -Dlophinya.compat.crossRegionBlockRead=false""", key);
         }
     }
 }

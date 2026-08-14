@@ -24,7 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class LophinyaServicesManager extends SimpleServicesManager {
 
-    /** original provider -> wrapper actually registered. Identity, because providers may not implement equals. */
+    /**
+     * original provider -> wrapper actually registered. Identity, because providers may not implement equals.
+     */
     private final Map<Object, Object> wrappers = new ConcurrentHashMap<>();
 
     @Override

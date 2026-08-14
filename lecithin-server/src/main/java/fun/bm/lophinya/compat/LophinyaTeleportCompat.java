@@ -71,10 +71,14 @@ public final class LophinyaTeleportCompat {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    /** Stock Folia's message, kept verbatim so the kill switch is a true revert. */
+    /**
+     * Stock Folia's message, kept verbatim so the kill switch is a true revert.
+     */
     public static final String STOCK_MESSAGE = "Must use teleportAsync while in region threading";
 
-    /** One log line per distinct callsite; a per-tick teleport would otherwise flood the log. */
+    /**
+     * One log line per distinct callsite; a per-tick teleport would otherwise flood the log.
+     */
     private static final Set<String> DEFERRED_REPORTED = ConcurrentHashMap.newKeySet();
 
     /**
@@ -106,36 +110,38 @@ public final class LophinyaTeleportCompat {
                 return;
             }
             LOGGER.info("""
-                [Lophinya] Entity#teleport deferred to the owning region
-                  plugin   : {}
-                  callsite : {}
-                  entity   : {} in {}
-                  target   : {} at {}, {}, {}
-                  why      : the destination is in another region or world, its chunks are not
-                             loaded, or a previous teleport is still handing this entity over
-                             (see LophinyaTeleportHandover), so Folia cannot move the entity on
-                             this thread. The teleport
-                             was accepted via the platform's async path and completes on the owning
-                             region's thread; teleport() returned true before the entity moved.
-                             Paper would have moved it before returning.""",
-                plugin == null ? "<unknown>" : plugin.getName() + " v" + version(plugin),
-                callsite,
-                entity.getType(), entity.getWorld().getName(),
-                location.getWorld() == null ? "<null world>" : location.getWorld().getName(),
-                location.getBlockX(), location.getBlockY(), location.getBlockZ());
+                            [Lophinya] Entity#teleport deferred to the owning region
+                              plugin   : {}
+                              callsite : {}
+                              entity   : {} in {}
+                              target   : {} at {}, {}, {}
+                              why      : the destination is in another region or world, its chunks are not
+                                         loaded, or a previous teleport is still handing this entity over
+                                         (see LophinyaTeleportHandover), so Folia cannot move the entity on
+                                         this thread. The teleport
+                                         was accepted via the platform's async path and completes on the owning
+                                         region's thread; teleport() returned true before the entity moved.
+                                         Paper would have moved it before returning.""",
+                    plugin == null ? "<unknown>" : plugin.getName() + " v" + version(plugin),
+                    callsite,
+                    entity.getType(), entity.getWorld().getName(),
+                    location.getWorld() == null ? "<null world>" : location.getWorld().getName(),
+                    location.getBlockX(), location.getBlockY(), location.getBlockZ());
         } catch (final Throwable t) {
             LOGGER.warn("[Lophinya] teleport diagnostics failed (harmless)", t);
         }
     }
 
-    /** Innermost frame that is neither this class nor the CraftBukkit entity plumbing. */
+    /**
+     * Innermost frame that is neither this class nor the CraftBukkit entity plumbing.
+     */
     private static String callsite() {
         return StackWalker.getInstance().walk(frames -> frames
-            .filter(f -> !f.getClassName().startsWith("fun.bm.lophinya.compat."))
-            .filter(f -> !f.getClassName().startsWith("org.bukkit.craftbukkit.entity."))
-            .findFirst()
-            .map(f -> f.getClassName() + '.' + f.getMethodName() + '(' + f.getFileName() + ':' + f.getLineNumber() + ')')
-            .orElse("<unknown>"));
+                .filter(f -> !f.getClassName().startsWith("fun.bm.lophinya.compat."))
+                .filter(f -> !f.getClassName().startsWith("org.bukkit.craftbukkit.entity."))
+                .findFirst()
+                .map(f -> f.getClassName() + '.' + f.getMethodName() + '(' + f.getFileName() + ':' + f.getLineNumber() + ')')
+                .orElse("<unknown>"));
     }
 
     private static String version(final Plugin plugin) {

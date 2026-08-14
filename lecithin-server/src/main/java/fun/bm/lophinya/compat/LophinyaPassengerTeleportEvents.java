@@ -45,7 +45,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  *       ⇒ rider still arrives, still mounted;</li>
  *   <li>player, {@code PlayerTeleportEvent} cancelled ⇒ player still arrives, still mounted.</li>
  * </ul>
- *
+ * <p>
  * So this ignores cancellation and {@code setTo}, exactly like Paper. That is not a shortcut: the
  * tree moves as one unit, so honouring a single passenger's veto could only produce a half-moved
  * tree - a passenger left behind while its vehicle leaves - which is both a divergence from Paper
@@ -109,9 +109,9 @@ public final class LophinyaPassengerTeleportEvents {
 
         final Location from = vehicle.getBukkitEntity().getLocation();
         final Location to = new Location(
-            destination.getWorld(), pos.x, pos.y, pos.z,
-            yaw == null ? from.getYaw() : yaw.floatValue(),
-            pitch == null ? from.getPitch() : pitch.floatValue());
+                destination.getWorld(), pos.x, pos.y, pos.z,
+                yaw == null ? from.getYaw() : yaw.floatValue(),
+                pitch == null ? from.getPitch() : pitch.floatValue());
         // Paper reports the vehicle's from/to on same-world teleports and each passenger's own
         // offset position on cross-world ones. See CROSS_WORLD_OFFSET.
         final boolean perPassenger = EventConfig.passengerTeleportCrossWorldOffset && destination != vehicle.level();
@@ -134,9 +134,9 @@ public final class LophinyaPassengerTeleportEvents {
                 final Vec3 offset = ridingOffset(vehicle, handle);
                 eventFrom = from.clone().add(offset.x, offset.y, offset.z);
                 eventTo = new Location(
-                    destination.getWorld(), pos.x + offset.x, pos.y + offset.y, pos.z + offset.z,
-                    yaw == null ? from.getYaw() : yaw.floatValue(),
-                    pitch == null ? from.getPitch() : pitch.floatValue());
+                        destination.getWorld(), pos.x + offset.x, pos.y + offset.y, pos.z + offset.z,
+                        yaw == null ? from.getYaw() : yaw.floatValue(),
+                        pitch == null ? from.getPitch() : pitch.floatValue());
             } else {
                 eventFrom = from.clone();
                 eventTo = to.clone();
