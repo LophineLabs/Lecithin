@@ -99,7 +99,7 @@ jobs:
           fi
 
       - name: Publish To Repo
-        if: ( github.event_name != 'pull_request' && !( env.unexpect == 'true' ) && env.flag_push_repo == 'true' && !( inputs.force-push == 'false' )) || inputs.force-push == 'true'
+        if: false && (( github.event_name != 'pull_request' && !( env.unexpect == 'true' ) && env.flag_push_repo == 'true' && !( inputs.force-push == 'false' )) || inputs.force-push == 'true')
         continue-on-error: true
         run: ./gradlew --refresh-dependencies generateDevelopmentBundle publish -PpublishDevBundle=true
         env:
