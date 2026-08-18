@@ -77,32 +77,32 @@ Research and measurements: project-docs evidence 20260729d-t01-essentialsx-calls
 and 20260730b-essentialsx-economy-serialization.md.
 
 diff --git a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
-index 5c52b1563d20d7e977a5bb958c18b19dec5c365a..eedaa4bf1f63c59e1cd88141806703d56c96f1ed 100644
+index 5c52b1563d20d7e977a5bb958c18b19dec5c365a..28fbdf2da69a1f97721a050980dc16160d566fa1 100644
 --- a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
 +++ b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
 @@ -80,6 +80,20 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
              String[] args = org.apache.commons.lang3.StringUtils.split(content, ' '); // fix adjacent spaces (from console/plugins) causing empty array elements
  
              // Note: we don't return the result of target.execute as thats success / failure, we return handled (true) or not handled (false)
-+            // Lophinya start - economy serialization: this is the single choke point through which
++            // Lecithin start - economy serialization: this is the single choke point through which
 +            // every legacy (plugin.yml) Bukkit command is executed, so it is where the core can put
 +            // a guarded plugin's own economy commands under the same lock as its Vault provider.
-+            // See fun.bm.lophinya.compat.LophinyaEconomySerialization; no-op when the switch is off.
-+            if (fun.bm.lophinya.compat.LophinyaEconomySerialization.isGuardedCommand(this.command)) {
-+                fun.bm.lophinya.compat.LophinyaEconomySerialization.beginExclusive();
++            // See fun.bm.lecithin.compat.LecithinEconomySerialization; no-op when the switch is off.
++            if (fun.bm.lecithin.compat.LecithinEconomySerialization.isGuardedCommand(this.command)) {
++                fun.bm.lecithin.compat.LecithinEconomySerialization.beginExclusive();
 +                try {
 +                    this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
 +                } finally {
-+                    fun.bm.lophinya.compat.LophinyaEconomySerialization.endExclusive();
++                    fun.bm.lecithin.compat.LecithinEconomySerialization.endExclusive();
 +                }
 +                return 1;
 +            }
-+            // Lophinya end - economy serialization
++            // Lecithin end - economy serialization
              this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
  
              // return true as command was handled
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index e8359235c5fa0681c2d0d12cf66d6abbc0fe4d97..88d03cecae2861c263dfe9334af338d08db98b1c 100644
+index e8359235c5fa0681c2d0d12cf66d6abbc0fe4d97..0b6859440bfcc2b58dcfe8fc2192865f27b25593 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -266,7 +266,7 @@ public final class CraftServer implements Server {
@@ -110,7 +110,7 @@ index e8359235c5fa0681c2d0d12cf66d6abbc0fe4d97..88d03cecae2861c263dfe9334af338d0
      private final String bukkitVersion = Versioning.getBukkitVersion();
      private final Logger logger = Logger.getLogger("Minecraft");
 -    private final ServicesManager servicesManager = new SimpleServicesManager();
-+    private final ServicesManager servicesManager = new fun.bm.lophinya.compat.LophinyaServicesManager(); // Lophinya - economy serialization: wrap version-locked economy providers on register (subclass is a no-op when the kill switch is off)
++    private final ServicesManager servicesManager = new fun.bm.lecithin.compat.LecithinServicesManager(); // Lecithin - economy serialization: wrap version-locked economy providers on register (subclass is a no-op when the kill switch is off)
      private final CraftScheduler scheduler = new CraftScheduler();
      private final CraftCommandMap commandMap; // Paper - Move down
      private final SimpleHelpMap helpMap = new SimpleHelpMap(this);

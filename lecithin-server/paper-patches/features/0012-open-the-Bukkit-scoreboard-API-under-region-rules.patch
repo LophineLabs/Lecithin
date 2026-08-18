@@ -24,7 +24,7 @@ the hot path. The player's board override becomes volatile for the same
 cross-thread readers.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 866da5bfe278653e68fafaff89dbfb348a0d521c..2ebb52822cb691c237a1a3ebb81a6e7f15c73ae5 100644
+index cae2422c607344dafa2b43ccb97b0db936517391..e0f667b680aeba37d83cc225ec624ca4fd168038 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -246,7 +246,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
@@ -32,12 +32,12 @@ index 866da5bfe278653e68fafaff89dbfb348a0d521c..2ebb52822cb691c237a1a3ebb81a6e7f
      private BorderChangeListener clientWorldBorderListener = this.createWorldBorderListener();
      private long lastSaveTime; // Paper - getLastPlayed replacement API
 -    private @Nullable CraftScoreboard scoreboardOverride;
-+    private volatile @Nullable CraftScoreboard scoreboardOverride; // Lophinya - scoreboard support - written on the player's region, read by broadcastAll from any region
++    private volatile @Nullable CraftScoreboard scoreboardOverride; // Lecithin - scoreboard support - written on the player's region, read by broadcastAll from any region
      public final net.minecraft.network.PacketProcessor packetProcessor = new net.minecraft.network.PacketProcessor(null); // Folia
  
      // Folia start - region threading
 diff --git a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java
-index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..640aa8d31bd472da93858f01e01f5166e672625f 100644
+index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..353729b7fcf42fa863d4ddb48e325a4f68270b10 100644
 --- a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java
 +++ b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboard.java
 @@ -32,7 +32,13 @@ public final class CraftScoreboard implements org.bukkit.scoreboard.Scoreboard {
@@ -45,13 +45,13 @@ index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..640aa8d31bd472da93858f01e01f5166
      @Override
      public Objective registerNewObjective(String name, Criteria criteria, net.kyori.adventure.text.Component displayName, RenderType renderType) throws IllegalArgumentException {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        // Lophinya start - scoreboard support - plugin boards broadcast through thread-safe paths;
++        // Lecithin start - scoreboard support - plugin boards broadcast through thread-safe paths;
 +        // the main board is persisted global state and follows the /scoreboard command's thread rule
 +        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        if (fun.bm.lophinya.compat.LophinyaScoreboardSupport.isMainBoard(this.board)) {
-+            fun.bm.lophinya.compat.LophinyaScoreboardSupport.ensureMainBoardStructuralChange("registerNewObjective");
++        if (fun.bm.lecithin.compat.LecithinScoreboardSupport.isMainBoard(this.board)) {
++            fun.bm.lecithin.compat.LecithinScoreboardSupport.ensureMainBoardStructuralChange("registerNewObjective");
 +        }
-+        // Lophinya end - scoreboard support
++        // Lecithin end - scoreboard support
          if (displayName == null) {
              displayName = net.kyori.adventure.text.Component.empty();
          }
@@ -60,12 +60,12 @@ index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..640aa8d31bd472da93858f01e01f5166
      @Override
      public Team registerNewTeam(String name) {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        // Lophinya start - scoreboard support
++        // Lecithin start - scoreboard support
 +        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        if (fun.bm.lophinya.compat.LophinyaScoreboardSupport.isMainBoard(this.board)) {
-+            fun.bm.lophinya.compat.LophinyaScoreboardSupport.ensureMainBoardStructuralChange("registerNewTeam");
++        if (fun.bm.lecithin.compat.LecithinScoreboardSupport.isMainBoard(this.board)) {
++            fun.bm.lecithin.compat.LecithinScoreboardSupport.ensureMainBoardStructuralChange("registerNewTeam");
 +        }
-+        // Lophinya end - scoreboard support
++        // Lecithin end - scoreboard support
          Preconditions.checkArgument(name != null, "Team name cannot be null");
          Preconditions.checkArgument(name.length() <= Short.MAX_VALUE, "Team name '%s' is longer than the limit of 32767 characters (%s)", name, name.length());
          Preconditions.checkArgument(this.getHandle().getPlayerTeam(name) == null, "Team name '%s' is already in use", name);
@@ -74,17 +74,17 @@ index b959fe4311fc6cbae3dcc052ef4710f8c8aefec6..640aa8d31bd472da93858f01e01f5166
      @Override
      public void clearSlot(DisplaySlot slot) {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        // Lophinya start - scoreboard support
++        // Lecithin start - scoreboard support
 +        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        if (fun.bm.lophinya.compat.LophinyaScoreboardSupport.isMainBoard(this.board)) {
-+            fun.bm.lophinya.compat.LophinyaScoreboardSupport.ensureMainBoardStructuralChange("clearSlot");
++        if (fun.bm.lecithin.compat.LecithinScoreboardSupport.isMainBoard(this.board)) {
++            fun.bm.lecithin.compat.LecithinScoreboardSupport.ensureMainBoardStructuralChange("clearSlot");
 +        }
-+        // Lophinya end - scoreboard support
++        // Lecithin end - scoreboard support
          Preconditions.checkArgument(slot != null, "Slot cannot be null");
          this.getHandle().setDisplayObjective(CraftScoreboardTranslations.fromBukkitSlot(slot), null);
      }
 diff --git a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java
-index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..f7bde0c3d66392b1ea1ba546a282647462e2c85e 100644
+index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..528f831660633600ac10af3d92f446ad94551e55 100644
 --- a/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java
 +++ b/src/main/java/org/bukkit/craftbukkit/scoreboard/CraftScoreboardManager.java
 @@ -22,7 +22,12 @@ import org.bukkit.scoreboard.ScoreboardManager;
@@ -92,12 +92,12 @@ index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..f7bde0c3d66392b1ea1ba546a2826474
      private final CraftScoreboard mainScoreboard;
      private final MinecraftServer server;
 -    private final Collection<CraftScoreboard> scoreboards = new WeakCollection<>();
-+    // Lophinya start - scoreboard support - iterated lock-free from every region's stat/death hot
++    // Lecithin start - scoreboard support - iterated lock-free from every region's stat/death hot
 +    // path (forAllObjectives) while boards are created on other tick threads; WeakCollection is a
 +    // bare ArrayList whose iterator also prunes cleared refs, so even reads mutate it
 +    private final java.util.Set<CraftScoreboard> scoreboards =
 +        java.util.Collections.newSetFromMap(new com.google.common.collect.MapMaker().weakKeys().<CraftScoreboard, Boolean>makeMap());
-+    // Lophinya end - scoreboard support
++    // Lecithin end - scoreboard support
  
      public CraftScoreboardManager(MinecraftServer server, net.minecraft.world.scores.Scoreboard scoreboard) {
          this.mainScoreboard = new CraftScoreboard(scoreboard);
@@ -106,7 +106,7 @@ index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..f7bde0c3d66392b1ea1ba546a2826474
      @Override
      public CraftScoreboard getNewScoreboard() {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet // Lophinya - scoreboard support
++        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet // Lecithin - scoreboard support
          org.spigotmc.AsyncCatcher.catchOp("scoreboard creation"); // Spigot
          CraftScoreboard scoreboard = new CraftScoreboard(new ServerScoreboard(this.server));
          if (io.papermc.paper.configuration.GlobalConfiguration.get().scoreboards.trackPluginScoreboards) {
@@ -115,15 +115,15 @@ index ab76c7f9bb0a4980a07a4d08c0d3ecadbca9668b..f7bde0c3d66392b1ea1ba546a2826474
  
      public void setPlayerBoard(CraftPlayer player, CraftScoreboard scoreboard) {
 -        if (true) throw new UnsupportedOperationException(); // Folia - not supported yet
-+        // Lophinya start - scoreboard support - per-player display state: owning region only.
++        // Lecithin start - scoreboard support - per-player display state: owning region only.
 +        // The thread is verified, never inferred; a wrong thread fails loudly with attribution.
 +        if (!fun.bm.lecithin.config.modules.CompatConfig.scoreboardApi) throw new UnsupportedOperationException(); // Folia - not supported yet
 +        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(player.getHandle())) {
 +            throw new IllegalStateException(
-+                "Lophinya: Player#setScoreboard for " + player.getName() + " requires the region thread that owns the player"
++                "Lecithin: Player#setScoreboard for " + player.getName() + " requires the region thread that owns the player"
 +                    + " (current thread: " + Thread.currentThread().getName() + "). Use the player's EntityScheduler.");
 +        }
-+        // Lophinya end - scoreboard support
++        // Lecithin end - scoreboard support
          net.minecraft.world.scores.Scoreboard oldBoard = this.getPlayerBoard(player).getHandle();
          net.minecraft.world.scores.Scoreboard newBoard = scoreboard.getHandle();
          if (oldBoard == newBoard) {

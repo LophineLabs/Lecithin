@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import com.mojang.logging.LogUtils;
 import io.papermc.paper.entity.TeleportFlag;
@@ -13,7 +13,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Lophinya: restores {@code Entity#teleport(Location, ...)} at the Bukkit API boundary.
+ * Lecithin: restores {@code Entity#teleport(Location, ...)} at the Bukkit API boundary.
  *
  * <h2>The gap</h2>
  * On Paper, {@code Entity#teleport(Location)} moves the entity there and then, on the calling
@@ -64,10 +64,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * pre-existing property of the platform's async teleport, not something introduced here; relative
  * teleport flags are therefore not honoured on this path.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.teleportSemantics=false} restores the stock Folia
+ * <p>Kill switch: {@code -Dlecithin.compat.teleportSemantics=false} restores the stock Folia
  * behaviour, an unconditional throw from both {@code CraftEntity} and {@code CraftPlayer}.
  */
-public final class LophinyaTeleportCompat {
+public final class LecithinTeleportCompat {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
@@ -110,14 +110,14 @@ public final class LophinyaTeleportCompat {
                 return;
             }
             LOGGER.info("""
-                            [Lophinya] Entity#teleport deferred to the owning region
+                            [Lecithin] Entity#teleport deferred to the owning region
                               plugin   : {}
                               callsite : {}
                               entity   : {} in {}
                               target   : {} at {}, {}, {}
                               why      : the destination is in another region or world, its chunks are not
                                          loaded, or a previous teleport is still handing this entity over
-                                         (see LophinyaTeleportHandover), so Folia cannot move the entity on
+                                         (see LecithinTeleportHandover), so Folia cannot move the entity on
                                          this thread. The teleport
                                          was accepted via the platform's async path and completes on the owning
                                          region's thread; teleport() returned true before the entity moved.
@@ -128,7 +128,7 @@ public final class LophinyaTeleportCompat {
                     location.getWorld() == null ? "<null world>" : location.getWorld().getName(),
                     location.getBlockX(), location.getBlockY(), location.getBlockZ());
         } catch (final Throwable t) {
-            LOGGER.warn("[Lophinya] teleport diagnostics failed (harmless)", t);
+            LOGGER.warn("[Lecithin] teleport diagnostics failed (harmless)", t);
         }
     }
 
@@ -137,7 +137,7 @@ public final class LophinyaTeleportCompat {
      */
     private static String callsite() {
         return StackWalker.getInstance().walk(frames -> frames
-                .filter(f -> !f.getClassName().startsWith("fun.bm.lophinya.compat."))
+                .filter(f -> !f.getClassName().startsWith("fun.bm.lecithin.compat."))
                 .filter(f -> !f.getClassName().startsWith("org.bukkit.craftbukkit.entity."))
                 .findFirst()
                 .map(f -> f.getClassName() + '.' + f.getMethodName() + '(' + f.getFileName() + ':' + f.getLineNumber() + ')')

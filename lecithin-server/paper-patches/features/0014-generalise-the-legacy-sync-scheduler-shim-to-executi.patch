@@ -1,0 +1,192 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Tue, 18 Aug 2026 12:23:40 +0800
+Subject: [PATCH] generalise the legacy sync scheduler shim to execution
+ provenance
+
+Replaces the SHA-256-keyed per-plugin rule table with one question asked of the
+platform: on whose behalf is this thread running. LophinyaExecutionProvenance is
+the single model of that answer - region, global region, or one entity - with
+capture, inheritance, lifetime and clearing defined in one place instead of
+spread across the dispatchers.
+
+The rule table could only ever work for the exact jar it was written against. The
+production server proved it: the table held EssentialsX 2.22.1-dev+12-776f709, the
+server runs dev+17-382de4f, so every rule missed and User.updateActivityOnChat
+went back to throwing UnsupportedOperationException out of AsyncPlayerChatEvent -
+which aborts EssentialsX's chat handler entirely. Keying compatibility on a file
+hash means an unmodified plugin loses support the moment it is updated. It is
+deleted rather than extended.
+
+What replaces it for that case is not a rule but a missing owner type. Paper
+dispatches AsyncPlayerChatEvent on "Async Chat Thread - #N", a pooled thread that
+owns nothing, so a legacy scheduleSyncDelayedTask from a listener had nowhere to
+go. But the platform knows whose work it is: a PlayerEvent names exactly one
+player, and Folia's EntityScheduler is the documented API for scheduling that
+player's work "from any thread context", surviving the player moving between
+regions and worlds and reporting failure rather than running once the player is
+gone. PaperEventManager establishes that owner for the duration of the dispatch
+and removes it in a finally, so a pooled chat thread cannot carry one player's
+owner into the next player's message.
+
+Nothing is inferred from the plugin's runnable, and everything that was rejected
+for lack of an owner still is: a bare async thread, an async event with no single
+player (AsyncPlayerConnectionConfigureEvent has no Player at all), and a second
+async hop, since inheritance is deliberately bounded at one. A redispatched task
+that reaches into another region still fails at the access, not at the schedule.
+
+Also fixes cancellation, which the redispatch path had quietly broken:
+CraftScheduler.cancelTask(int) looks the id up in maps a redispatched task was
+never in, so BukkitTask.cancel() was a no-op and a repeating task ran until its
+plugin was disabled. LophinyaDispatchedTasks supplies the missing lookup, and the
+task body re-checks the cancelled flag that CraftScheduler's own queue used to
+check for it.
+
+Successful redispatch is a working compatibility path, so it now logs INFO once
+per distinct callsite and DEBUG thereafter, instead of WARN on every single
+dispatch - which is what was flooding the production console.
+
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+index 0fce6dc8bffc341da2e7242422b4153b2743aa44..8316921c05f4bc791f5249df0e72dbb09f0cf5c4 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+@@ -62,6 +62,29 @@ class PaperEventManager {
+         }
+         // Leaves end - skip bot
+ 
++        // Lecithin start - execution provenance for an async event that names one player
++        // An asynchronous event is dispatched on a thread that owns nothing, so a legacy
++        // scheduleSyncDelayedTask from inside one of these listeners has nowhere to go and is
++        // rejected - taking the rest of the listener down with it (measured: EssentialsX's
++        // cancel-afk-on-chat aborted chat formatting and delivery entirely). But the platform is not
++        // in the dark about whose work it is: a PlayerEvent names exactly one player, and Folia's
++        // EntityScheduler is the documented API for scheduling that player's work from any thread.
++        // Establishing that owner for the duration of the dispatch is what lets the legacy call
++        // reach it. Nothing is inferred from the plugin's runnable, the scope is removed in a
++        // finally so a pooled chat thread never carries one player's owner into the next player's
++        // message, and every event with no single player owner still fails closed.
++        final fun.bm.lecithin.compat.LecithinExecutionProvenance.Owner lecithin$owner =
++            fun.bm.lecithin.compat.LecithinExecutionProvenance.ownerOfAsyncEvent(event);
++        if (lecithin$owner != null) {
++            final RegisteredListener[] lecithin$listeners = listeners;
++            fun.bm.lecithin.compat.LecithinExecutionProvenance.runWithScope(lecithin$owner, () -> this.dispatch(lecithin$listeners, event));
++            return;
++        }
++        this.dispatch(listeners, event);
++    }
++
++    private void dispatch(RegisteredListener[] listeners, @NotNull Event event) {
++        // Lecithin end - execution provenance for an async event that names one player
+         for (RegisteredListener registration : listeners) {
+             if (!registration.getPlugin().isEnabled()) {
+                 continue;
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+index f7552dcbaa1c9060254bd6490324a022c8d25937..2c5792223d2f78ce0bfa991182f2be378ca9e90c 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+@@ -278,6 +278,15 @@ class PaperPluginInstanceManager {
+         }
+         // Lecithin end - restored async scheduler: cancel Bukkit tasks on disable, like Paper does
+ 
++        // Lecithin start - cancel any legacy sync tasks this plugin had redispatched onto Folia
++        // schedulers. Same reasoning as the block above: those tasks are in none of Bukkit's queues,
++        // so without this a disabled plugin's redispatched repeating task would keep running forever.
++        try {
++            fun.bm.lecithin.compat.LecithinDispatchedTasks.cancelAll(plugin);
++        } catch (Throwable ignored) {
++        }
++        // Lecithin end - cancel redispatched legacy sync tasks
++
+         // Paper start - Folia schedulers
+         try {
+             this.server.getGlobalRegionScheduler().cancelTasks(plugin);
+diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
+index a5931d31a04bf59bec516d8b29f0082483e9ee8e..9cfed92eaee7811271708c0615c5f092caa9d866 100644
+--- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
++++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
+@@ -11,11 +11,12 @@ class CraftAsyncTask extends CraftTask {
+ 
+     private final LinkedList<BukkitWorker> workers = new LinkedList<BukkitWorker>();
+     private final Map<Integer, CraftTask> runners;
+-    // Lecithin start - carry the scheduling thread's context into this async task
+-    // Captured here, not in run(): the constructor still runs on the thread that asked for the task,
+-    // which is the only moment the context is a fact rather than a guess.
+-    private final fun.bm.lecithin.compat.LecithinCallerContextDispatch.CapturedContext lecithin$schedulingContext =
+-        fun.bm.lecithin.compat.LecithinCallerContextDispatch.captureCallerContext();
++    // Lecithin start - carry the scheduling thread's execution provenance into this async task
++    // Captured here, not in run(): the field initialiser still runs on the thread that asked for the
++    // task, which is the only moment the owner is a fact rather than a guess. See
++    // LecithinExecutionProvenance for why this crosses exactly one async hop and no further.
++    private final fun.bm.lecithin.compat.LecithinExecutionProvenance.Owner lecithin$schedulingOwner =
++        fun.bm.lecithin.compat.LecithinExecutionProvenance.captureForAsyncHandoff();
+     // Lecithin end
+ 
+     CraftAsyncTask(final Map<Integer, CraftTask> runners, final Plugin plugin, final Object task, final int id, final long delay) {
+@@ -60,8 +61,8 @@ class CraftAsyncTask extends CraftTask {
+         }
+         Throwable thrown = null;
+         try {
+-            // Lecithin start - make the scheduling thread's context visible for this body only
+-            fun.bm.lecithin.compat.LecithinCallerContextDispatch.runInherited(this.lecithin$schedulingContext, super::run);
++            // Lecithin start - make the scheduling thread's owner visible for this body only
++            fun.bm.lecithin.compat.LecithinExecutionProvenance.runWithScope(this.lecithin$schedulingOwner, super::run);
+             // Lecithin end
+         } catch (final Throwable t) {
+             thrown = t;
+diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+index f1518ce64edaa2d40f9c9038bb489fa2439ed826..954ab2b7e6812d5043bfccc801306bbcbf31688d 100644
+--- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
++++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+@@ -273,6 +273,16 @@ public class CraftScheduler implements BukkitScheduler {
+         if (task != null) {
+             task.cancel0();
+         }
++        // Lecithin start - a redispatched task is cancellable through the API the plugin used
++        // A legacy sync task that LecithinCallerContextDispatch redispatched onto a Folia scheduler
++        // is in none of the maps above, so this cancel used to be a silent no-op and a repeating task
++        // ran until its plugin was disabled. The registry supplies the missing lookup; cancel0() has
++        // to happen here because it is package-private to this package.
++        final CraftTask redispatched = fun.bm.lecithin.compat.LecithinDispatchedTasks.cancelById(taskId);
++        if (redispatched != null) {
++            redispatched.cancel0();
++        }
++        // Lecithin end - a redispatched task is cancellable through the API the plugin used
+         // Lecithin start - restored async scheduler: cancellation must not die on sync-side bookkeeping
+         // The guard task below goes through handle(), which regionised threading rejects - the caller
+         // would get an UnsupportedOperationException *after* the async-side cancel already succeeded.
+@@ -334,6 +344,10 @@ public class CraftScheduler implements BukkitScheduler {
+                     runner.cancel0();
+                 }
+             }
++            // Lecithin - redispatched tasks are in no runners map; see cancelTask(int)
++            for (final CraftTask redispatched : fun.bm.lecithin.compat.LecithinDispatchedTasks.cancelAll(plugin)) {
++                redispatched.cancel0();
++            }
+             return;
+         }
+         // Lecithin end - restored async scheduler: same reasoning as cancelTask(int)
+@@ -550,16 +564,20 @@ public class CraftScheduler implements BukkitScheduler {
+             this.addTask(task);
+             return task;
+         }
+-        // Lecithin start - redispatch a rejected sync task to the caller's own execution context
+-        // (see LecithinCallerContextDispatch). Only reached for sync tasks on the main (non-async)
+-        // scheduler - exactly the case stock Folia has no home for.
++        // Lecithin start - general legacy sync scheduler dispatch
++        // Only reached for sync tasks on the main (non-async) scheduler - exactly the case stock
++        // Folia has no home for. There is no plugin list, no jar hash and no class name involved:
++        // LecithinCallerContextDispatch asks LecithinExecutionProvenance whose work this thread is
++        // doing and dispatches to the Folia scheduler that owns the answer. It returns null, and so
++        // still falls through to the throw below, whenever nothing is known - which is the fail-closed
++        // case and stays that way.
+         if (!this.isAsyncScheduler && task.isSync()) {
+             final CraftTask redispatched = fun.bm.lecithin.compat.LecithinCallerContextDispatch.tryDispatch(task, delay, task.getPeriod());
+             if (redispatched != null) {
+                 return redispatched;
+             }
+         }
+-        // Lecithin end - redispatch to the caller's own execution context
++        // Lecithin end - general legacy sync scheduler dispatch
+         throw new UnsupportedOperationException(fun.bm.lecithin.compat.LecithinSchedulerDiagnostics.reportRejected(
+             task.getOwner(), delay, task.getPeriod(), !task.isSync()));
+         // Lecithin end - restore Bukkit async scheduler semantics + diagnostic guard

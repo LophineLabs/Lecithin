@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 30 Jul 2026 20:21:08 +0800
+Subject: [PATCH] redispatch rejected sync scheduler tasks to the caller's own
+ context
+
+Generalises the per-plugin dispatch rule table. Paper's scheduleSyncDelayedTask means 'the thread you are on, later'; on Folia the nearest true statement is 'the region you are on, later'. Which thread asked is observable, so this is not DEC-19 B1's inference from a contextless Runnable: region tick thread goes to that region, global region goes to the global region, and anything else is still rejected exactly as on stock Folia. Distinct from the DEC-05/N13 sync-to-global shim, which moved region-scoped tasks onto a thread that owns nothing. Fixes GriefPrevention's claim visualization, whose one-tick revert task took PlayerInteractEvent down with it.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+index d85a99ea9e9895cd45ca550ab2f58c8443f412df..f1518ce64edaa2d40f9c9038bb489fa2439ed826 100644
+--- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
++++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+@@ -550,6 +550,16 @@ public class CraftScheduler implements BukkitScheduler {
+             this.addTask(task);
+             return task;
+         }
++        // Lecithin start - redispatch a rejected sync task to the caller's own execution context
++        // (see LecithinCallerContextDispatch). Only reached for sync tasks on the main (non-async)
++        // scheduler - exactly the case stock Folia has no home for.
++        if (!this.isAsyncScheduler && task.isSync()) {
++            final CraftTask redispatched = fun.bm.lecithin.compat.LecithinCallerContextDispatch.tryDispatch(task, delay, task.getPeriod());
++            if (redispatched != null) {
++                return redispatched;
++            }
++        }
++        // Lecithin end - redispatch to the caller's own execution context
+         throw new UnsupportedOperationException(fun.bm.lecithin.compat.LecithinSchedulerDiagnostics.reportRejected(
+             task.getOwner(), delay, task.getPeriod(), !task.isSync()));
+         // Lecithin end - restore Bukkit async scheduler semantics + diagnostic guard

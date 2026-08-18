@@ -5,22 +5,22 @@ Subject: [PATCH] answer a cross-region block read from a residen chunk
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-index b5dd9e16d11488318ef09b3d1adb614b45332d0c..1624de34871940f408d779b107ab4bda05f39eed 100644
+index b5dd9e16d11488318ef09b3d1adb614b45332d0c..64e2bebf4383b9b7c21102fc15f59f1b3676d3d7 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 @@ -82,6 +82,15 @@ public class CraftBlock implements Block {
      public net.minecraft.world.level.block.state.BlockState getBlockState() {
          // Folia start - region threading
          if (this.level instanceof ServerLevel serverWorld) {
-+            // Lophinya start - serve a read-only lookup from a resident chunk instead of refusing it
++            // Lecithin start - serve a read-only lookup from a resident chunk instead of refusing it
 +            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverWorld, this.position)) {
 +                final net.minecraft.world.level.block.state.BlockState resident =
-+                    fun.bm.lophinya.compat.LophinyaCrossRegionBlockRead.readIfResident(serverWorld, this.position);
++                    fun.bm.lecithin.compat.LecithinCrossRegionBlockRead.readIfResident(serverWorld, this.position);
 +                if (resident != null) {
 +                    return resident;
 +                }
 +            }
-+            // Lophinya end
++            // Lecithin end
              ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
          }
          // Folia end - region threading

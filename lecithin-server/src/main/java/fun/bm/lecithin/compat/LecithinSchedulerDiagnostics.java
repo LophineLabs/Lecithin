@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import com.mojang.logging.LogUtils;
 import fun.bm.lecithin.config.modules.CompatConfig;
@@ -15,7 +15,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Lophinya: purely diagnostic reporting for Bukkit scheduler calls that Folia rejects.
+ * Lecithin: purely diagnostic reporting for Bukkit scheduler calls that Folia rejects.
  *
  * <p>Folia's {@code CraftScheduler.handle} throws a bare {@link UnsupportedOperationException}
  * with no message. The stack trace names the plugin class, but not the plugin version, the jar
@@ -25,9 +25,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>This class changes <b>nothing</b> about scheduling behaviour. It only turns one opaque
  * exception into one attributable log record. The caller still throws exactly as before.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.diagnostics=false}.
+ * <p>Kill switch: {@code -Dlecithin.compat.diagnostics=false}.
  */
-public final class LophinyaSchedulerDiagnostics {
+public final class LecithinSchedulerDiagnostics {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
@@ -48,7 +48,7 @@ public final class LophinyaSchedulerDiagnostics {
             "org.bukkit.craftbukkit.scheduler.",
             "org.bukkit.scheduler.",
             "io.papermc.paper.threadedregions.",
-            "fun.bm.lophinya.compat.",
+            "fun.bm.lecithin.compat.",
     };
 
     /**
@@ -80,7 +80,7 @@ public final class LophinyaSchedulerDiagnostics {
             }
 
             LOGGER.warn("""
-                            [Lophinya] Rejected Bukkit scheduler call
+                            [Lecithin] Rejected Bukkit scheduler call
                               plugin    : {} v{}
                               jar       : {}
                               jar sha256: {}
@@ -95,7 +95,7 @@ public final class LophinyaSchedulerDiagnostics {
 
             return reason;
         } catch (final Throwable t) {
-            LOGGER.warn("[Lophinya] scheduler diagnostics failed (harmless)", t);
+            LOGGER.warn("[Lecithin] scheduler diagnostics failed (harmless)", t);
             return "unsupported Bukkit scheduler call";
         }
     }

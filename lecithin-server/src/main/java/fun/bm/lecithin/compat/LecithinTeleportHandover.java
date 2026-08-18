@@ -1,10 +1,10 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import fun.bm.lecithin.config.modules.CompatConfig;
 import org.bukkit.craftbukkit.entity.CraftEntity;
 
 /**
- * Lophinya: makes a teleport wait for the entity's previous teleport to finish handing it over
+ * Lecithin: makes a teleport wait for the entity's previous teleport to finish handing it over
  * (D-40), instead of being silently refused.
  *
  * <h2>The gap, as measured</h2>
@@ -49,9 +49,9 @@ import org.bukkit.craftbukkit.entity.CraftEntity;
  * Bukkit API hands out such an entity - {@code World#spawnEntity} adds before it returns - so this
  * is a note, not a case that is defended against.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.teleportHandover=false} restores the plain refusal.
+ * <p>Kill switch: {@code -Dlecithin.compat.teleportHandover=false} restores the plain refusal.
  */
-public final class LophinyaTeleportHandover {
+public final class LecithinTeleportHandover {
 
     /**
      * Whether a previous teleport is still handing this entity over to another region.

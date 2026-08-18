@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.ServicePriority;
@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Lophinya: the one hook point for {@link LophinyaEconomySerialization}'s service boundary.
+ * Lecithin: the one hook point for {@link LecithinEconomySerialization}'s service boundary.
  *
  * <p>Every provider a plugin registers passes through {@link #register}, so wrapping here reaches
  * all of them without a per-plugin hook and without touching plugin code. The only behaviour change
@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * disable goes through {@code unregisterAll(Plugin)}, which is keyed by plugin and needs no
  * translation.
  */
-public class LophinyaServicesManager extends SimpleServicesManager {
+public class LecithinServicesManager extends SimpleServicesManager {
 
     /**
      * original provider -> wrapper actually registered. Identity, because providers may not implement equals.
@@ -33,7 +33,7 @@ public class LophinyaServicesManager extends SimpleServicesManager {
     @SuppressWarnings("unchecked")
     public <T> void register(@NotNull final Class<T> service, @NotNull final T provider,
                              @NotNull final Plugin plugin, @NotNull final ServicePriority priority) {
-        final Object wrapped = LophinyaEconomySerialization.wrapServiceProvider(service, provider, plugin);
+        final Object wrapped = LecithinEconomySerialization.wrapServiceProvider(service, provider, plugin);
         if (wrapped != provider) {
             this.wrappers.put(provider, wrapped);
         }

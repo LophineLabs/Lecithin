@@ -25,15 +25,15 @@ index d196515f14dc2e4a7318be0bd1426d19da4f4ad5..f929dff28331882ea18b1daa99e180b9
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -4598,6 +4598,14 @@ public abstract class Entity
          }
-         // Lophinya end
+         // Lecithin end
  
-+        // Lophinya start - the same events for the passengers this teleport carries along.
++        // Lecithin start - the same events for the passengers this teleport carries along.
 +        // The tree is still attached here and the vehicle has not moved, so the vehicle's own
 +        // from/to is what every node is about to be moved to. Before the unload lock, so a handler
-+        // that throws cannot leak it. See LophinyaPassengerTeleportEvents for the measured Paper
++        // that throws cannot leak it. See LecithinPassengerTeleportEvents for the measured Paper
 +        // baseline, including why a passenger's cancel is ignored.
-+        fun.bm.lophinya.compat.LophinyaPassengerTeleportEvents.callForPassengers(this, destination, pos, yaw, pitch, cause);
-+        // Lophinya end
++        fun.bm.lecithin.compat.LecithinPassengerTeleportEvents.callForPassengers(this, destination, pos, yaw, pitch, cause);
++        // Lecithin end
 +
          // Luminol start - Level hot unload apis
          if (!destination.levelUnloadStateLock.acquireRead()) {

@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import fun.bm.lecithin.config.modules.CompatConfig;
 import net.minecraft.server.MinecraftServer;
@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Lophinya: during startup the server bootstrap thread <em>is</em> the owner of global server state,
+ * Lecithin: during startup the server bootstrap thread <em>is</em> the owner of global server state,
  * so {@code RegionizedServer.ensureGlobalTickThread} must not reject it.
  *
  * <p>Why this is not "bypassing an ownership check": that check exists to serialise writes to global
@@ -36,18 +36,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * configuring server state from {@code onEnable} - a very common Bukkit idiom - is covered, and any
  * call made after startup still fails exactly as before.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.startupGlobalContext=false} restores the stock rejection.
+ * <p>Kill switch: {@code -Dlecithin.compat.startupGlobalContext=false} restores the stock rejection.
  */
-public final class LophinyaStartupGlobalContext {
+public final class LecithinStartupGlobalContext {
 
-    private static final Logger LOGGER = LogManager.getLogger(LophinyaStartupGlobalContext.class);
+    private static final Logger LOGGER = LogManager.getLogger(LecithinStartupGlobalContext.class);
 
     /**
      * One diagnostic line per distinct reason, so the behaviour is observable without flooding.
      */
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
 
-    private LophinyaStartupGlobalContext() {
+    private LecithinStartupGlobalContext() {
     }
 
     /**
@@ -72,13 +72,13 @@ public final class LophinyaStartupGlobalContext {
         }
         if (REPORTED.add(reason)) {
             LOGGER.info("""
-                            [Lophinya] Allowed a global-state call on the startup thread: {}
+                            [Lecithin] Allowed a global-state call on the startup thread: {}
                               context : thread={}, startup (region ticking has not begun - RegionizedServer.init() \
                             runs after initServer(), which is where plugin onEnable happens)
                               why     : during startup the bootstrap thread is the sole owner of this state, which \
                             is what Paper's main thread is at the same point. Bukkit.isPrimaryThread() already \
                             reports true on this thread. Calls made after startup are rejected exactly as before.
-                              disable : -Dlophinya.compat.startupGlobalContext=false""",
+                              disable : -Dlecithin.compat.startupGlobalContext=false""",
                     reason, Thread.currentThread().getName());
         }
         return true;

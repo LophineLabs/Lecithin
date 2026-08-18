@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import fun.bm.lecithin.config.modules.EventConfig;
 import net.minecraft.server.level.ServerLevel;
@@ -10,11 +10,11 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 /**
- * Lophinya: fires the Bukkit teleport events for passengers carried along by a teleported vehicle.
+ * Lecithin: fires the Bukkit teleport events for passengers carried along by a teleported vehicle.
  *
  * <h2>The gap</h2>
  * Teleporting a vehicle moves its whole passenger tree - here and on Paper alike. But the events
- * only follow on Paper. {@link LophinyaTeleportEvents} restores the event for the entity actually
+ * only follow on Paper. {@link LecithinTeleportEvents} restores the event for the entity actually
  * passed to {@code teleportAsync}; the passengers it drags along get nothing, because the platform
  * moves them through {@code teleportSyncSameRegion} / {@code placeInAsync} rather than through
  * another {@code teleportAsync} call.
@@ -78,11 +78,11 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  * Grouped by API symbol, not by plugin: the gap is {@code Entity#teleport} /
  * {@code Entity#teleportAsync} on a vehicle, and nothing here knows what plugins exist.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.passengerTeleportEvents=false} restores stock behaviour,
+ * <p>Kill switch: {@code -Dlecithin.compat.passengerTeleportEvents=false} restores stock behaviour,
  * which is that carried passengers produce no event. Independent of
- * {@code lophinya.compat.teleportEvents}, which governs the root entity's event.
+ * {@code lecithin.compat.teleportEvents}, which governs the root entity's event.
  */
-public final class LophinyaPassengerTeleportEvents {
+public final class LecithinPassengerTeleportEvents {
 
     /**
      * Fires one teleport event per entity carried by {@code vehicle}, in tree order.
@@ -98,7 +98,7 @@ public final class LophinyaPassengerTeleportEvents {
                                          final Vec3 pos, final Float yaw, final Float pitch,
                                          final TeleportCause cause) {
         // UNKNOWN is the platform's own internal repositioning and must not look like a teleport to
-        // plugins - same rule, and the same reasons, as LophinyaTeleportEvents.
+        // plugins - same rule, and the same reasons, as LecithinTeleportEvents.
         if (!EventConfig.passengerTeleportEvents || cause == null || cause == TeleportCause.UNKNOWN) {
             return;
         }

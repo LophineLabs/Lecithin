@@ -41,11 +41,11 @@ index ca92bb3a8b739c0da3f48a2dd16c5fb4fa7e8453..6cff4927ff5c9634ea8178624ccb1697
      @Override
      @Nullable
      public final BlockState getBlockStateIfLoaded(BlockPos pos) {
-+        // Lophinya start - attribute the off-region read instead of letting it NPE on a field name
++        // Lecithin start - attribute the off-region read instead of letting it NPE on a field name
 +        if (fun.bm.lecithin.config.modules.CompatConfig.regionReadDiagnostics && this.getCurrentWorldData() == null) {
 +            TickThread.ensureTickThread(this, pos, "Cannot read block state off-region");
 +        }
-+        // Lophinya end
++        // Lecithin end
          // CraftBukkit start - tree generation
          if (this.getCurrentWorldData().captureTreeGeneration) { // Folia - region threading
              CraftBlockState previous = this.getCurrentWorldData().capturedBlockStates.get(pos); // Folia - region threading

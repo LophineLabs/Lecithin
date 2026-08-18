@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import com.mojang.logging.LogUtils;
 import fun.bm.lecithin.config.modules.CompatConfig;
@@ -24,7 +24,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**
- * Lophinya: give an embedded PaperLib copy a platform environment that matches this server.
+ * Lecithin: give an embedded PaperLib copy a platform environment that matches this server.
  *
  * <h2>The gap</h2>
  * PaperLib picks its async-chunk and async-teleport implementations once, from a version number it
@@ -75,10 +75,10 @@ import java.util.jar.JarFile;
  * entry names are used only to shortlist candidates - the shape check is what decides, and anything
  * that fails it is left alone.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.paperLibEnvironment=false}, after which every embedded
+ * <p>Kill switch: {@code -Dlecithin.compat.paperLibEnvironment=false}, after which every embedded
  * copy keeps whatever handlers it selected for itself.
  */
-public final class LophinyaPaperLibAdapter {
+public final class LecithinPaperLibAdapter {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
@@ -115,7 +115,7 @@ public final class LophinyaPaperLibAdapter {
         } catch (final Throwable t) {
             // A plugin that ships no PaperLib, or ships one this does not recognise, must enable
             // exactly as it would have without this class.
-            LOGGER.debug("[Lophinya] PaperLib environment scan skipped for {}", plugin.getName(), t);
+            LOGGER.debug("[Lecithin] PaperLib environment scan skipped for {}", plugin.getName(), t);
         }
     }
 
@@ -193,7 +193,7 @@ public final class LophinyaPaperLibAdapter {
             // difference is that it now happens where the result can be corrected.
             environment = paperLib.getMethod("getEnvironment").invoke(null);
         } catch (final Throwable t) {
-            LOGGER.warn("[Lophinya] {}: embedded PaperLib at {} would not hand over its environment", plugin.getName(), binaryName, t);
+            LOGGER.warn("[Lecithin] {}: embedded PaperLib at {} would not hand over its environment", plugin.getName(), binaryName, t);
             return;
         }
         if (environment == null || !environmentType.isInstance(environment)) {
@@ -208,10 +208,10 @@ public final class LophinyaPaperLibAdapter {
             chunksField.set(environment, proxy(chunksField.getType(), new AsyncChunksHandler()));
             teleportField.set(environment, proxy(teleportField.getType(), new AsyncTeleportHandler()));
             LOGGER.info(
-                    "[Lophinya] {}: embedded PaperLib ({}) was using {} / {} - a synchronous pair it picked because"
+                    "[Lecithin] {}: embedded PaperLib ({}) was using {} / {} - a synchronous pair it picked because"
                             + " its version regex cannot read \"{}\". Replaced with the platform's async chunk and teleport"
                             + " API so its callers work across region boundaries. Nothing about the reported version was"
-                            + " changed; disable with -Dlophinya.compat.paperLibEnvironment=false.",
+                            + " changed; disable with -Dlecithin.compat.paperLibEnvironment=false.",
                     plugin.getName(),
                     binaryName,
                     simpleName(previousChunks),
@@ -219,7 +219,7 @@ public final class LophinyaPaperLibAdapter {
                     org.bukkit.Bukkit.getVersion()
             );
         } catch (final Throwable t) {
-            LOGGER.warn("[Lophinya] {}: could not install the platform environment into {}", plugin.getName(), binaryName, t);
+            LOGGER.warn("[Lecithin] {}: could not install the platform environment into {}", plugin.getName(), binaryName, t);
         }
     }
 
@@ -336,7 +336,7 @@ public final class LophinyaPaperLibAdapter {
                 case "hashCode":
                     return System.identityHashCode(proxy);
                 case "toString":
-                    return "Lophinya platform environment handler";
+                    return "Lecithin platform environment handler";
                 default:
                     break;
             }

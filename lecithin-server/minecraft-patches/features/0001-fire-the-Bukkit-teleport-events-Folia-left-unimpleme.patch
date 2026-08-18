@@ -37,16 +37,16 @@ index 2f90ab21fd284dd18992644416b5fbef4719a56d..d196515f14dc2e4a7318be0bd1426d19
                          node.root.postChangeDimension();
                      }
  
-+                    // Lophinya start - PlayerChangedWorldEvent; placeInAsync also runs for same-world
++                    // Lecithin start - PlayerChangedWorldEvent; placeInAsync also runs for same-world
 +                    // cross-region moves, so the world really has to have changed. Fired before
 +                    // teleportComplete because that callback releases the destination's unload read
 +                    // lock, and the handler should still be covered by it.
 +                    if (originWorld != destination && fun.bm.lecithin.config.modules.EventConfig.teleportEvents) {
 +                        for (EntityTreeNode node : fullTree) {
-+                            fun.bm.lophinya.compat.LophinyaTeleportEvents.callChangedWorld(node.root, originWorld);
++                            fun.bm.lecithin.compat.LecithinTeleportEvents.callChangedWorld(node.root, originWorld);
 +                        }
 +                    }
-+                    // Lophinya end
++                    // Lecithin end
 +
                      if (teleportComplete != null) {
                          teleportComplete.accept(Entity.this);
@@ -55,30 +55,30 @@ index 2f90ab21fd284dd18992644416b5fbef4719a56d..d196515f14dc2e4a7318be0bd1426d19
              }
          }
  
-+        // Lophinya start - fire the Bukkit teleport events Folia left as a TODO below
++        // Lecithin start - fire the Bukkit teleport events Folia left as a TODO below
 +        // Deliberately above the unload lock: a cancel here is a plain return, with no lock to
-+        // unwind and nothing mutated yet. See LophinyaTeleportEvents for the full rationale.
++        // unwind and nothing mutated yet. See LecithinTeleportEvents for the full rationale.
 +        if (fun.bm.lecithin.config.modules.EventConfig.teleportEvents) {
-+            final fun.bm.lophinya.compat.LophinyaTeleportEvents.Destination lophinyaDestination =
-+                fun.bm.lophinya.compat.LophinyaTeleportEvents.callTeleportEvent(this, destination, pos, yaw, pitch, cause);
-+            if (lophinyaDestination == null) {
++            final fun.bm.lecithin.compat.LecithinTeleportEvents.Destination lecithinDestination =
++                fun.bm.lecithin.compat.LecithinTeleportEvents.callTeleportEvent(this, destination, pos, yaw, pitch, cause);
++            if (lecithinDestination == null) {
 +                return false;
 +            }
-+            destination = lophinyaDestination.level();
-+            pos = lophinyaDestination.pos();
-+            yaw = lophinyaDestination.yaw();
-+            pitch = lophinyaDestination.pitch();
++            destination = lecithinDestination.level();
++            pos = lecithinDestination.pos();
++            yaw = lecithinDestination.yaw();
++            pitch = lecithinDestination.pitch();
 +        }
-+        // Lophinya end
++        // Lecithin end
 +
          // Luminol start - Level hot unload apis
          if (!destination.levelUnloadStateLock.acquireRead()) {
              return false;
          }
-+        final ServerLevel finalDestination = destination; // Lophinya - the event may have redirected it, and the lambda below needs an effectively final capture
++        final ServerLevel finalDestination = destination; // Lecithin - the event may have redirected it, and the lambda below needs an effectively final capture
          final java.util.function.Consumer<Entity> finalTeleportComplete = entity -> {
 -            destination.levelUnloadStateLock.releaseRead();
-+            finalDestination.levelUnloadStateLock.releaseRead(); // Lophinya - was destination, which is no longer effectively final
++            finalDestination.levelUnloadStateLock.releaseRead(); // Lecithin - was destination, which is no longer effectively final
  
              if (teleportComplete != null) teleportComplete.accept(entity);
          };

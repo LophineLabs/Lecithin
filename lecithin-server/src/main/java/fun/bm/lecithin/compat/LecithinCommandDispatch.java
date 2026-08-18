@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import com.mojang.brigadier.ParseResults;
 import com.mojang.logging.LogUtils;
@@ -14,7 +14,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Lophinya: hand a console-sender {@code Bukkit.dispatchCommand} back to the region that sender
+ * Lecithin: hand a console-sender {@code Bukkit.dispatchCommand} back to the region that sender
  * belongs to, instead of refusing it where it was called.
  *
  * <h2>The gap, in its exact shape</h2>
@@ -67,10 +67,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * outright and the only real branch on it is in a BungeeCord proxy class the server never loads),
  * but the semantics did change and callers relying on them would notice.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.commandDispatchHandover=false} restores stock Folia
+ * <p>Kill switch: {@code -Dlecithin.compat.commandDispatchHandover=false} restores stock Folia
  * refusal for everything this class would have handed off.
  */
-public final class LophinyaCommandDispatch {
+public final class LecithinCommandDispatch {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
@@ -125,7 +125,7 @@ public final class LophinyaCommandDispatch {
                     .getCommands().getDispatcher().parse(command, source);
             return !results.getContext().getNodes().isEmpty();
         } catch (final Throwable t) {
-            LOGGER.warn("[Lophinya] could not pre-parse '{}' off the global region; handing it off "
+            LOGGER.warn("[Lecithin] could not pre-parse '{}' off the global region; handing it off "
                     + "anyway so the real dispatch reports the real error", command, t);
             return true;
         }
@@ -139,7 +139,7 @@ public final class LophinyaCommandDispatch {
         if (!REPORTED.add(root)) {
             return;
         }
-        LOGGER.info("[Lophinya] console-sender dispatch of '{}' was handed to the global region, "
+        LOGGER.info("[Lecithin] console-sender dispatch of '{}' was handed to the global region, "
                 + "which is where stock Folia requires a console sender to execute. The parse still ran "
                 + "here, so an unknown command still returns false synchronously; only the execution is "
                 + "deferred, and an exception thrown by it now surfaces on the global region instead of "

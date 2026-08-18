@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import com.mojang.logging.LogUtils;
 import fun.bm.lecithin.config.modules.CompatConfig;
@@ -14,16 +14,13 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * Lophinya: per-account serialization for plugin economy ledgers that were written for a single
+ * Lecithin: per-account serialization for plugin economy ledgers that were written for a single
  * main thread and have no internal locking of their own.
  *
  * <h2>The problem this exists for</h2>
@@ -41,7 +38,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * It restores the <i>serialization</i> Paper provided implicitly, at the two boundaries the core
  * actually owns - without touching, patching, or instrumenting a single byte of the plugin:
  * <ol>
- *   <li><b>Service boundary.</b> When a version-locked plugin registers an economy service into
+ *   <li><b>Service boundary.</b> When any plugin registers a known economy service interface into
  *       Bukkit's {@code ServicesManager}, the provider is wrapped in a {@link Proxy} that holds a
  *       per-account lock for the duration of each call. Every Vault consumer (shop plugins, reward
  *       plugins, server tweaks) goes through this one object, so one wrapper covers all of them.
@@ -67,64 +64,67 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * (an economy layer bridging back through Vault) downgrades rather than self-deadlocks.
  *
  * <h2>Fail-open by construction</h2>
- * Unlike {@link LophinyaPluginSchedulerDispatch}, which fails <i>closed</i> (an unreadable field
- * means "do not dispatch"), this class fails <i>open</i>: if the rule lookup, the jar hash, or the
+ * Unlike {@link LecithinCallerContextDispatch}, which fails <i>closed</i> (an unknown owner means
+ * "do not dispatch"), this class fails <i>open</i>: if the service lookup or the
  * proxy construction fails, the original provider is returned unwrapped and the server behaves
  * exactly as it does today. The reason for the difference is that this class never grants a plugin
  * new reach - it only narrows concurrency for a plugin that is already running. A failure here can
  * only lose the added protection, never create a new code path.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.economySerialization=false} - defaults to <b>on</b>, see
+ * <p>Kill switch: {@code -Dlecithin.compat.economySerialization=false} - defaults to <b>on</b>, see
  * {@link #ENABLED} for why this one is not default-off.
  */
-public final class LophinyaEconomySerialization {
+public final class LecithinEconomySerialization {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
     /**
-     * One entry per (plugin, exact jar SHA-256), same versioning discipline as
-     * {@link LophinyaPluginSchedulerDispatch#RULES}: a plugin update needs a fresh entry, it never
-     * inherits the previous version's guard.
+     * The economy service interfaces this guard applies to.
      *
-     * @param services fully-qualified interface names whose registered providers get wrapped
-     * @param commands Bukkit command <i>names</i> (not aliases - {@link Command#getName()} already
-     *                 resolves aliases to the primary name) executed under the coarse exclusive lock
+     * <p>Keyed on the <b>API contract</b>, not on whoever implements it. That is the whole point:
+     * {@code net.milkbowl.vault.economy.Economy} is a published interface whose per-account
+     * read-modify-write shape is the same whichever plugin registers it, and it does not change when
+     * that plugin is updated. An earlier version of this class keyed on the exact SHA-256 of one
+     * plugin jar, which meant an unmodified plugin silently lost the protection the moment it was
+     * updated - the same defect that made the scheduler rule table unusable in production.
      */
-    public record Guard(Set<String> services, Set<String> commands) {
-    }
-
-    private static final Map<String, Guard> RULES = Map.of(
-            // EssentialsX 2.22.1-dev+12-776f709 (the exact artifact installed on s01). Research:
-            // evidence/20260729d-t01-essentialsx-callsite-analysis.md (the read-modify-write and the
-            // zero-lock scan), evidence/20260730b-essentialsx-economy-serialization.md (this design,
-            // the full mutation call graph, and the concurrency harness results).
-            //
-            // Every balance mutation in the plugin funnels through User.setMoney(BigDecimal, Cause) and
-            // every read through User.getMoney(); the mutation origins are exactly five, and each is
-            // reachable only via one of the two boundaries guarded here:
-            //   api/Economy.java:253,331 (statics) .......... service boundary (VaultEconomyProvider)
-            //   User.payUser:312-313 ........................ command boundary (/pay)
-            //   Trade.java:239,307,326 ...................... command boundary (/sell, command costs)
-            //   commands/Commandeco.java:58,63,75 ........... command boundary (/eco)
-            //   commands/Commandsell.java:122 ............... command boundary (/sell)
-            // Sign shops are the one other Trade entry point; they are disabled on s01 (config.yml
-            // "enabledSigns:" is empty), which is recorded as a scope limit, not as a fix.
-            //
-            // balancetop is deliberately NOT guarded: it is read-only and already runs off-thread over
-            // the whole userdata set, so putting it under the exclusive lock would stall every region
-            // thread for the length of a full scan to protect a value that is advisory by design.
-            "ED0C4432BB286CE06820BA5A162FFAC91E34E02EBA644CFCF66AEC4FDA86AF42", new Guard(
-                    Set.of("net.milkbowl.vault.economy.Economy"),
-                    Set.of("pay", "eco", "sell", "balance")
-            )
+    private static final Set<String> GUARDED_SERVICES = Set.of(
+            "net.milkbowl.vault.economy.Economy",
+            "net.milkbowl.vault2.economy.Economy"
     );
+
+    /**
+     * Command names run under the coarse exclusive lock, but only for a plugin that actually
+     * registered one of {@link #GUARDED_SERVICES} - see {@link #isGuardedCommand}.
+     *
+     * <h2>Why a name list at all, and why it is not a plugin table</h2>
+     * The service boundary above covers every Vault consumer, but an economy plugin's own commands
+     * do not go through Vault - they call the plugin's internal API directly, which the core cannot
+     * see. There is no API that says "this command moves money", so the only available signal is the
+     * command name, and these are the conventional economy command names, shared across economy
+     * plugins rather than taken from any one of them.
+     *
+     * <p>What keeps this honest is the second condition: a name here only matters for a plugin that
+     * has registered a guarded economy service. A chat plugin owning a command called {@code pay}
+     * is not affected, and no plugin is named, versioned or hashed anywhere.
+     */
+    private static final Set<String> GUARDED_COMMAND_NAMES = Set.of(
+            "pay", "eco", "economy", "balance", "bal", "money",
+            "sell", "worth", "buy", "deposit", "withdraw"
+    );
+
+    /**
+     * Plugins observed registering one of {@link #GUARDED_SERVICES} during this run. Populated by
+     * {@link #wrapServiceProvider}, read by {@link #isGuardedCommand} - which is what ties the
+     * command boundary to a real, observed fact rather than to a name in a table.
+     */
+    private static final Set<String> ECONOMY_PROVIDER_PLUGINS = ConcurrentHashMap.newKeySet();
 
     /**
      * coarse -> account is the only lock order taken anywhere in this class.
      */
     private static final ReentrantReadWriteLock COARSE = new ReentrantReadWriteLock(true);
     private static final Map<String, ReentrantLock> ACCOUNT_LOCKS = new ConcurrentHashMap<>();
-    private static final Map<Path, String> SHA_CACHE = new ConcurrentHashMap<>();
     /**
      * Log the first time each guarded command actually goes through layer B, not every time.
      */
@@ -143,21 +143,21 @@ public final class LophinyaEconomySerialization {
             return provider;
         }
         try {
-            final Guard guard = RULES.get(sha256(plugin));
-            if (guard == null || !guard.services().contains(service.getName())) {
+            if (!GUARDED_SERVICES.contains(service.getName())) {
                 return provider;
             }
+            ECONOMY_PROVIDER_PLUGINS.add(plugin.getName());
             final Object wrapped = Proxy.newProxyInstance(
                     provider.getClass().getClassLoader(),
                     new Class<?>[]{service},
                     new SerializingHandler(provider)
             );
-            LOGGER.warn("[Lophinya] {}: serializing economy service {} per account - version-locked "
-                            + "rule table entry; different accounts still run in parallel",
+            LOGGER.info("[Lecithin] {}: serializing economy service {} per account - keyed on the "
+                            + "service interface, not on the plugin; different accounts still run in parallel",
                     plugin.getName(), service.getName());
             return wrapped;
         } catch (final Throwable t) {
-            LOGGER.warn("[Lophinya] economy service wrap failed (leaving provider unwrapped)", t);
+            LOGGER.warn("[Lecithin] economy service wrap failed (leaving provider unwrapped)", t);
             return provider;
         }
     }
@@ -256,17 +256,17 @@ public final class LophinyaEconomySerialization {
             return false;
         }
         try {
-            final Guard guard = RULES.get(sha256(pc.getPlugin()));
             final String name = command.getName().toLowerCase(Locale.ROOT);
-            if (guard == null || !guard.commands().contains(name)) {
+            if (!GUARDED_COMMAND_NAMES.contains(name)
+                    || !ECONOMY_PROVIDER_PLUGINS.contains(pc.getPlugin().getName())) {
                 return false;
             }
             // Layer B otherwise has no positive signal at all: the only evidence it ran was that
             // the guarded commands did not misbehave, which is indistinguishable from the guard
             // never having matched. One line per command name, once per server lifetime.
             if (COMMANDS_LOGGED.add(name)) {
-                LOGGER.info("[Lophinya] {}: running /{} under the exclusive economy lock - first hit "
-                        + "this run; version-locked rule table entry", pc.getPlugin().getName(), name);
+                LOGGER.info("[Lecithin] {}: running /{} under the exclusive economy lock - first hit "
+                        + "this run; this plugin registered a guarded economy service", pc.getPlugin().getName(), name);
             }
             return true;
         } catch (final Throwable t) {
@@ -287,28 +287,5 @@ public final class LophinyaEconomySerialization {
 
     public static void endExclusive() {
         COARSE.writeLock().unlock();
-    }
-
-    // ---------------------------------------------------------------- shared
-
-    private static String sha256(final Plugin plugin) {
-        if (plugin == null) {
-            return "<unreadable>";
-        }
-        try {
-            final Path jarPath = Path.of(plugin.getClass().getProtectionDomain().getCodeSource().getLocation().toURI());
-            return SHA_CACHE.computeIfAbsent(jarPath, LophinyaEconomySerialization::hash);
-        } catch (final Throwable t) {
-            return "<unreadable>";
-        }
-    }
-
-    private static String hash(final Path jarPath) {
-        try {
-            final MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().withUpperCase().formatHex(md.digest(Files.readAllBytes(jarPath)));
-        } catch (final Throwable t) {
-            return "<unreadable>";
-        }
     }
 }

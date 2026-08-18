@@ -13,11 +13,11 @@ index 0b5654ec1221294b43055fd1445e0c689389ad4b..3b4a0286b5a5d923be636d6a62bebb47
  
      public static void ensureGlobalTickThread(final String reason) {
          if (!isGlobalTickThread()) {
-+            // Lophinya start - the bootstrap thread owns global state during startup, before any region ticks
-+            if (fun.bm.lophinya.compat.LophinyaStartupGlobalContext.allow(reason)) {
++            // Lecithin start - the bootstrap thread owns global state during startup, before any region ticks
++            if (fun.bm.lecithin.compat.LecithinStartupGlobalContext.allow(reason)) {
 +                return;
 +            }
-+            // Lophinya end
++            // Lecithin end
              throw new IllegalStateException(reason);
          }
      }

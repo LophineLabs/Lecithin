@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import io.papermc.paper.threadedregions.RegionizedServer;
 import net.minecraft.server.MinecraftServer;
@@ -23,10 +23,10 @@ import net.minecraft.server.MinecraftServer;
  * attribution when it is the wrong one.
  *
  * <pre>
- *   -Dlophinya.compat.scoreboardApi=false   # revert to Folia stock: the five methods throw again
+ *   -Dlecithin.compat.scoreboardApi=false   # revert to Folia stock: the five methods throw again
  * </pre>
  */
-public final class LophinyaScoreboardSupport {
+public final class LecithinScoreboardSupport {
     /**
      * True when this handle is the persisted main scoreboard shared by every world.
      */
@@ -42,7 +42,7 @@ public final class LophinyaScoreboardSupport {
     public static void ensureMainBoardStructuralChange(final String what) {
         if (!RegionizedServer.isGlobalTickThread()) {
             throw new IllegalStateException(
-                    "Lophinya: " + what + " on the main scoreboard requires the global region thread"
+                    "Lecithin: " + what + " on the main scoreboard requires the global region thread"
                             + " (current thread: " + Thread.currentThread().getName() + ")."
                             + " Schedule it with Bukkit.getGlobalRegionScheduler(), or use a plugin-created"
                             + " scoreboard (ScoreboardManager#getNewScoreboard).");

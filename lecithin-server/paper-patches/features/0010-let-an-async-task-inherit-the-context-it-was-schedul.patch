@@ -28,19 +28,19 @@ with genuinely cross-region access still failing loudly at the access - the same
 bargain DEC-54 accepted for 0029.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
-index e4e2e42d0ca25df7fe9f2dd4275610e45fcb2c84..5f53e298f79eae93a1ca92976f3a6e601d3cfc70 100644
+index e4e2e42d0ca25df7fe9f2dd4275610e45fcb2c84..a5931d31a04bf59bec516d8b29f0082483e9ee8e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
 +++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftAsyncTask.java
 @@ -11,6 +11,12 @@ class CraftAsyncTask extends CraftTask {
  
      private final LinkedList<BukkitWorker> workers = new LinkedList<BukkitWorker>();
      private final Map<Integer, CraftTask> runners;
-+    // Lophinya start - carry the scheduling thread's context into this async task
++    // Lecithin start - carry the scheduling thread's context into this async task
 +    // Captured here, not in run(): the constructor still runs on the thread that asked for the task,
 +    // which is the only moment the context is a fact rather than a guess.
-+    private final fun.bm.lophinya.compat.LophinyaCallerContextDispatch.CapturedContext lophinya$schedulingContext =
-+        fun.bm.lophinya.compat.LophinyaCallerContextDispatch.captureCallerContext();
-+    // Lophinya end
++    private final fun.bm.lecithin.compat.LecithinCallerContextDispatch.CapturedContext lecithin$schedulingContext =
++        fun.bm.lecithin.compat.LecithinCallerContextDispatch.captureCallerContext();
++    // Lecithin end
  
      CraftAsyncTask(final Map<Integer, CraftTask> runners, final Plugin plugin, final Object task, final int id, final long delay) {
          super(plugin, task, id, delay);
@@ -49,9 +49,9 @@ index e4e2e42d0ca25df7fe9f2dd4275610e45fcb2c84..5f53e298f79eae93a1ca92976f3a6e60
          Throwable thrown = null;
          try {
 -            super.run();
-+            // Lophinya start - make the scheduling thread's context visible for this body only
-+            fun.bm.lophinya.compat.LophinyaCallerContextDispatch.runInherited(this.lophinya$schedulingContext, super::run);
-+            // Lophinya end
++            // Lecithin start - make the scheduling thread's context visible for this body only
++            fun.bm.lecithin.compat.LecithinCallerContextDispatch.runInherited(this.lecithin$schedulingContext, super::run);
++            // Lecithin end
          } catch (final Throwable t) {
              thrown = t;
              this.getOwner().getLogger().log(

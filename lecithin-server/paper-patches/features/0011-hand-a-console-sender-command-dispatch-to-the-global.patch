@@ -31,19 +31,19 @@ the return value and the only real branch on it is in a BungeeCord proxy class
 the server never loads.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 88d03cecae2861c263dfe9334af338d08db98b1c..6bd1ef83af4c6e4d28b258a563fe1795511c4b6a 100644
+index 0b6859440bfcc2b58dcfe8fc2192865f27b25593..6597649f8c8afd8c89c67ba28a7fc49b5f73e2c2 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -948,6 +948,12 @@ public final class CraftServer implements Server {
          } else if (rawSender instanceof ConsoleCommandSender || rawSender instanceof net.minecraft.server.rcon.RconConsoleSource
                  || rawSender instanceof org.bukkit.craftbukkit.command.CraftRemoteConsoleCommandSender
                  || rawSender instanceof io.papermc.paper.commands.FeedbackForwardingSender) {
-+            // Lophinya start - hand a console-sender dispatch to the region that sender belongs to
-+            if (fun.bm.lophinya.compat.LophinyaCommandDispatch.shouldHandOff()) {
-+                return fun.bm.lophinya.compat.LophinyaCommandDispatch.handOff(rawSender, commandLine,
++            // Lecithin start - hand a console-sender dispatch to the region that sender belongs to
++            if (fun.bm.lecithin.compat.LecithinCommandDispatch.shouldHandOff()) {
++                return fun.bm.lecithin.compat.LecithinCommandDispatch.handOff(rawSender, commandLine,
 +                    () -> this.dispatchCommand(rawSender, commandLine));
 +            }
-+            // Lophinya end
++            // Lecithin end
              io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Dispatching command async");
          } else {
              // huh?

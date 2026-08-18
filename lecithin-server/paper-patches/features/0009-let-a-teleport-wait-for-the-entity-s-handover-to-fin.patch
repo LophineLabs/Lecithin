@@ -26,7 +26,7 @@ calling thread does not wait. Inline, this window can only produce false, so
 this widens and never narrows.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index c312fa2ea50e247979936da79acbbff03dfb5377..779389fdfc380cdef80c8f07e85442a4be1970cd 100644
+index b10a72af64aff0bb3683854ab6fb841874f786c4..fbdd2b02c9298c21c598d04531a577b8c0b1ec4d 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 @@ -1198,7 +1198,12 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
@@ -34,12 +34,12 @@ index c312fa2ea50e247979936da79acbbff03dfb5377..779389fdfc380cdef80c8f07e85442a4
              }
          };
 -        if (org.bukkit.Bukkit.isOwnedByCurrentRegion(this)) {
-+        // Lophinya start - D-40: a previous teleport may still be handing this entity over. It is
++        // Lecithin start - D-40: a previous teleport may still be handing this entity over. It is
 +        // still owned by this region (it has not moved, only changed hands), so the inline path
 +        // below would claim it and the platform would refuse it for having no level callback yet.
 +        // Take the scheduler path the platform already has for "not ours to move right now".
-+        if (org.bukkit.Bukkit.isOwnedByCurrentRegion(this) && !fun.bm.lophinya.compat.LophinyaTeleportHandover.isMidHandover(this)) {
-+        // Lophinya end
++        if (org.bukkit.Bukkit.isOwnedByCurrentRegion(this) && !fun.bm.lecithin.compat.LecithinTeleportHandover.isMidHandover(this)) {
++        // Lecithin end
              run.accept(this.getHandle());
              return ret;
          }

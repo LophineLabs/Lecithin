@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -13,7 +13,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 /**
- * Lophinya: fires the Bukkit teleport events that Folia left as a TODO.
+ * Lecithin: fires the Bukkit teleport events that Folia left as a TODO.
  *
  * <h2>The gap</h2>
  * On Paper every semantic teleport goes through {@code Entity#teleport(TeleportTransition)} or
@@ -84,10 +84,10 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  * here will fail its own ownership check - that is the platform's existing rule, not a new one, and
  * it is the same failure Paper handlers never see because Paper has one thread.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.teleportEvents=false} restores stock behaviour, which is
+ * <p>Kill switch: {@code -Dlecithin.compat.teleportEvents=false} restores stock behaviour, which is
  * that none of these three events is ever fired.
  */
-public final class LophinyaTeleportEvents {
+public final class LecithinTeleportEvents {
 
     /**
      * Destination after the event handlers have had their say. The nullable rotation fields carry

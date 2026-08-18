@@ -1,10 +1,10 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import fun.bm.lecithin.config.modules.CompatConfig;
 import net.minecraft.world.entity.Entity;
 
 /**
- * Lophinya: diagnostic output for D-40 - the same-tick second teleport the platform refuses.
+ * Lecithin: diagnostic output for D-40 - the same-tick second teleport the platform refuses.
  *
  * <h2>Why this exists at all</h2>
  * A plugin that calls {@code Entity#teleport} twice in one tick gets {@code true} then
@@ -25,9 +25,9 @@ import net.minecraft.world.entity.Entity;
  * <b>disabled by default</b> and prints only on a refusal or on a callback transition, never per
  * tick.
  *
- * <p>Switch: {@code -Dlophinya.compat.teleportRefusalDiagnostics=true}. Default off.
+ * <p>Switch: {@code -Dlecithin.compat.teleportRefusalDiagnostics=true}. Default off.
  */
-public final class LophinyaTeleportRefusalDiagnostics {
+public final class LecithinTeleportRefusalDiagnostics {
 
     private static final org.slf4j.Logger LOGGER =
             com.mojang.logging.LogUtils.getLogger();
@@ -46,7 +46,7 @@ public final class LophinyaTeleportRefusalDiagnostics {
         }
         try {
             final StringBuilder sb = new StringBuilder(512);
-            sb.append("[Lophinya][D-40] teleportAsync refused by canTeleportAsync()")
+            sb.append("[Lecithin][D-40] teleportAsync refused by canTeleportAsync()")
                     .append("\n  entity           : ").append(entity.getType().toShortString())
                     .append(" id=").append(entity.getId()).append(" uuid=").append(entity.getUUID())
                     // The four predicates of canTeleportAsync(), separately.
@@ -75,7 +75,7 @@ public final class LophinyaTeleportRefusalDiagnostics {
             LOGGER.warn(sb.toString());
         } catch (final Throwable t) {
             // A diagnostic that can break the thing it observes is worse than no diagnostic.
-            LOGGER.warn("[Lophinya][D-40] diagnostic itself failed: {}", t.toString());
+            LOGGER.warn("[Lecithin][D-40] diagnostic itself failed: {}", t.toString());
         }
     }
 
@@ -102,12 +102,12 @@ public final class LophinyaTeleportRefusalDiagnostics {
             return;
         }
         try {
-            LOGGER.warn("[Lophinya][D-40] levelCallback {} -> {}  entity={} id={} at={} thread={}{}",
+            LOGGER.warn("[Lecithin][D-40] levelCallback {} -> {}  entity={} id={} at={} thread={}{}",
                     wasNull ? "NULL" : "set", isNull ? "NULL" : "set",
                     entity.getType().toShortString(), entity.getId(), fmt(entity.position()),
                     Thread.currentThread().getName(), stackSample());
         } catch (final Throwable t) {
-            LOGGER.warn("[Lophinya][D-40] diagnostic itself failed: {}", t.toString());
+            LOGGER.warn("[Lecithin][D-40] diagnostic itself failed: {}", t.toString());
         }
     }
 

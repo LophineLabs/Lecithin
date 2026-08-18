@@ -41,14 +41,14 @@ restore made reachable:
    the same kill switch, matching Paper's disable semantics.
 
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-index 455e8c24d98fcd0ae0a349737a0e709a05ed9170..1b54ac91e6a34dbc51fa4ccacd7934fc0c85c1c5 100644
+index 455e8c24d98fcd0ae0a349737a0e709a05ed9170..54e966cb1fb51fc74162748a39bb7172758bd5c0 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 @@ -260,6 +260,19 @@ class PaperPluginInstanceManager {
          }
  
          // Folia - region threading
-+        // Lophinya start - restored async scheduler: cancel Bukkit tasks on disable, like Paper does
++        // Lecithin start - restored async scheduler: cancel Bukkit tasks on disable, like Paper does
 +        // Folia removed this call because CraftScheduler was fully disabled. With the async path
 +        // restored (patch 0024), a disabled plugin's async timers would otherwise keep running its
 +        // code forever - the exact bug this call exists to prevent on Paper.
@@ -60,19 +60,19 @@ index 455e8c24d98fcd0ae0a349737a0e709a05ed9170..1b54ac91e6a34dbc51fa4ccacd7934fc
 +                    + pluginName + " (Is it up to date?)", ex, plugin); // Paper
 +            }
 +        }
-+        // Lophinya end - restored async scheduler: cancel Bukkit tasks on disable, like Paper does
++        // Lecithin end - restored async scheduler: cancel Bukkit tasks on disable, like Paper does
  
          // Paper start - Folia schedulers
          try {
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
-index f20f2735fbb4d1e38d576eafe18a0054a45aa59e..0010c331243d95f1506bc9fed7ddc5644c6e4927 100644
+index f20f2735fbb4d1e38d576eafe18a0054a45aa59e..11c68f3cdeae65eff232ebfbc9ebd7cf600305d1 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 @@ -20,6 +20,19 @@ public class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {
      private final Object stateLockForTaskId = new Object(); // Lophine - add task id
  
      public void tick() {
-+        // Lophinya start - drive the restored Bukkit async scheduler off the global tick
++        // Lecithin start - drive the restored Bukkit async scheduler off the global tick
 +        // Folia commented out MinecraftServer's per-tick mainThreadHeartbeat(), which is what used to
 +        // advance CraftAsyncScheduler's clock. Without this, restored async tasks would be accepted
 +        // and then never fire. Only the async scheduler's counter is advanced here; no plugin code
@@ -80,23 +80,23 @@ index f20f2735fbb4d1e38d576eafe18a0054a45aa59e..0010c331243d95f1506bc9fed7ddc564
 +        if (fun.bm.lecithin.config.modules.CompatConfig.restoreAsyncScheduler) {
 +            final org.bukkit.scheduler.BukkitScheduler bukkitScheduler = org.bukkit.Bukkit.getScheduler();
 +            if (bukkitScheduler instanceof org.bukkit.craftbukkit.scheduler.CraftScheduler craftScheduler) {
-+                craftScheduler.lophinya$asyncHeartbeat();
++                craftScheduler.lecithin$asyncHeartbeat();
 +            }
 +        }
-+        // Lophinya end - drive the restored Bukkit async scheduler off the global tick
++        // Lecithin end - drive the restored Bukkit async scheduler off the global tick
 +
          final List<GlobalScheduledTask> run;
          synchronized (this.stateLock) {
              ++this.tickCount;
 diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
-index c4dcddc4db02ed3641d05fae31ead7c13205f841..f5d23194f7c6d7c9de3b01c396ca8df9816833d8 100644
+index c4dcddc4db02ed3641d05fae31ead7c13205f841..d85a99ea9e9895cd45ca550ab2f58c8443f412df 100644
 --- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
 +++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
 @@ -273,6 +273,15 @@ public class CraftScheduler implements BukkitScheduler {
          if (task != null) {
              task.cancel0();
          }
-+        // Lophinya start - restored async scheduler: cancellation must not die on sync-side bookkeeping
++        // Lecithin start - restored async scheduler: cancellation must not die on sync-side bookkeeping
 +        // The guard task below goes through handle(), which regionised threading rejects - the caller
 +        // would get an UnsupportedOperationException *after* the async-side cancel already succeeded.
 +        // The sync queues can never contain plugin tasks here (sync submission always throws), so the
@@ -104,7 +104,7 @@ index c4dcddc4db02ed3641d05fae31ead7c13205f841..f5d23194f7c6d7c9de3b01c396ca8df9
 +        if (fun.bm.lecithin.config.modules.CompatConfig.restoreAsyncScheduler && !this.isAsyncScheduler) {
 +            return;
 +        }
-+        // Lophinya end - restored async scheduler: cancellation must not die on sync-side bookkeeping
++        // Lecithin end - restored async scheduler: cancellation must not die on sync-side bookkeeping
          task = new CraftTask(
                  new Runnable() {
                      @Override
@@ -112,7 +112,7 @@ index c4dcddc4db02ed3641d05fae31ead7c13205f841..f5d23194f7c6d7c9de3b01c396ca8df9
              this.asyncScheduler.cancelTasks(plugin);
          }
          // Paper end
-+        // Lophinya start - restored async scheduler: same reasoning as cancelTask(int). The async-side
++        // Lecithin start - restored async scheduler: same reasoning as cancelTask(int). The async-side
 +        // cancel above already did the real work; the sync-side guard task below would throw at the
 +        // caller. Keep the runners sweep - it is a plain map walk with no scheduling involved.
 +        if (fun.bm.lecithin.config.modules.CompatConfig.restoreAsyncScheduler && !this.isAsyncScheduler) {
@@ -123,7 +123,7 @@ index c4dcddc4db02ed3641d05fae31ead7c13205f841..f5d23194f7c6d7c9de3b01c396ca8df9
 +            }
 +            return;
 +        }
-+        // Lophinya end - restored async scheduler: same reasoning as cancelTask(int)
++        // Lecithin end - restored async scheduler: same reasoning as cancelTask(int)
          final CraftTask task = new CraftTask(
                  new Runnable() {
                      @Override
@@ -132,7 +132,7 @@ index c4dcddc4db02ed3641d05fae31ead7c13205f841..f5d23194f7c6d7c9de3b01c396ca8df9
  
      protected CraftTask handle(final CraftTask task, final long delay) { // Paper
 -        if (true) throw new UnsupportedOperationException(); // Folia - region threading
-+        // Lophinya start - restore Bukkit async scheduler semantics + diagnostic guard
++        // Lecithin start - restore Bukkit async scheduler semantics + diagnostic guard
 +        // Folia replaced this whole method with an unconditional, message-less throw. That is correct
 +        // for *sync* tasks (there is no main thread to run them on), but it also killed the *async*
 +        // path, which never needed a main thread: Paper already runs those on CraftAsyncScheduler's
@@ -147,9 +147,9 @@ index c4dcddc4db02ed3641d05fae31ead7c13205f841..f5d23194f7c6d7c9de3b01c396ca8df9
 +            this.addTask(task);
 +            return task;
 +        }
-+        throw new UnsupportedOperationException(fun.bm.lophinya.compat.LophinyaSchedulerDiagnostics.reportRejected(
++        throw new UnsupportedOperationException(fun.bm.lecithin.compat.LecithinSchedulerDiagnostics.reportRejected(
 +            task.getOwner(), delay, task.getPeriod(), !task.isSync()));
-+        // Lophinya end - restore Bukkit async scheduler semantics + diagnostic guard
++        // Lecithin end - restore Bukkit async scheduler semantics + diagnostic guard
 +        /* // Folia - region threading
          // Paper start
          if (!this.isAsyncScheduler && !task.isSync()) {
@@ -162,13 +162,13 @@ index c4dcddc4db02ed3641d05fae31ead7c13205f841..f5d23194f7c6d7c9de3b01c396ca8df9
 +    }
 +
 +    /**
-+     * Lophinya: advance only the async scheduler's clock.
++     * Lecithin: advance only the async scheduler's clock.
 +     * <p>{@link CraftAsyncScheduler#mainThreadHeartbeat()} increments a counter and hands the work
 +     * to its own single management thread - no plugin code runs on the caller. That makes it safe
 +     * to drive from Folia's global tick, which is what this exists for. Deliberately <b>not</b>
 +     * {@link #mainThreadHeartbeat()}, which would also drain the sync queue.
 +     */
-+    public void lophinya$asyncHeartbeat() {
++    public void lecithin$asyncHeartbeat() {
 +        if (!this.isAsyncScheduler && this.asyncScheduler != null) {
 +            this.asyncScheduler.mainThreadHeartbeat();
 +        }

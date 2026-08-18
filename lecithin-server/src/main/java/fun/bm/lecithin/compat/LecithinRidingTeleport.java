@@ -1,9 +1,9 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import fun.bm.lecithin.config.modules.CompatConfig;
 
 /**
- * Lophinya: restores Paper's answer to "teleport something that is riding something else".
+ * Lecithin: restores Paper's answer to "teleport something that is riding something else".
  *
  * <h2>The gap</h2>
  * {@code Entity#teleportAsync} refuses outright when the target is a passenger:
@@ -44,7 +44,7 @@ import fun.bm.lecithin.config.modules.CompatConfig;
  * passenger mounted, at the destination, with the tree intact - identical to Paper, including for
  * nested passengers, players, cross region, cross world, {@code teleportAsync}, cancellation and a
  * platform refusal. What genuinely does differ is that the carried passengers get no teleport event;
- * that is {@link LophinyaPassengerTeleportEvents}.
+ * that is {@link LecithinPassengerTeleportEvents}.
  *
  * <p>So Paper's single-target semantic is exactly: <b>dismount that target, then teleport it</b>.
  * The vehicle is left alone; other passengers are left alone.
@@ -71,10 +71,10 @@ import fun.bm.lecithin.config.modules.CompatConfig;
  * restore: all four single-target cases (same region, cross region, {@code teleportAsync},
  * cancelled) match Paper.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.ridingTeleport=false} restores the stock refusal, and was
+ * <p>Kill switch: {@code -Dlecithin.compat.ridingTeleport=false} restores the stock refusal, and was
  * measured to roll all four back to their pre-patch answers exactly.
  */
-public final class LophinyaRidingTeleport {
+public final class LecithinRidingTeleport {
 
     /**
      * Dismounts {@code entity} from whatever it is riding, if anything.

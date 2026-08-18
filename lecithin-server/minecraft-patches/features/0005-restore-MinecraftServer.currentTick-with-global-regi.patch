@@ -19,11 +19,11 @@ index 7577533f82688304f06c445fd5a1c3fa3c4575fc..0b5654ec1221294b43055fd1445e0c68
      private long lastServerStatus;
      private long tickCount;
  
-+    // Lophinya - restore MinecraftServer.currentTick; kill switch freezes it at 0 (the field
++    // Lecithin - restore MinecraftServer.currentTick; kill switch freezes it at 0 (the field
      private void globalTick(final long tickCount) {
          final long tickStartNanos = System.nanoTime(); // Lophine - Carpet features
          ++this.tickCount;
-+        if (fun.bm.lecithin.config.modules.CompatConfig.serverCurrentTick) MinecraftServer.currentTick = (int) this.tickCount; // Lophinya - restore currentTick, single writer is this global tick
++        if (fun.bm.lecithin.config.modules.CompatConfig.serverCurrentTick) MinecraftServer.currentTick = (int) this.tickCount; // Lecithin - restore currentTick, single writer is this global tick
          // Luminol start - Add a config to enable tick command
          if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.commandTick) { // Lophine - redirect
              MinecraftServer.getServer().tickRateManager().tick();
@@ -36,13 +36,13 @@ index b498cecb37cf83d31ad4a02bb1acecf7328e7aa6..7fa440f55c2fec6525b0dec5a9f330ed
      public joptsimple.OptionSet options;
      public org.bukkit.command.ConsoleCommandSender console;
 -    //public static int currentTick; // Paper - improve tick loop // Folia - region threading
-+    // Lophinya start - restore currentTick with global-region semantics
++    // Lecithin start - restore currentTick with global-region semantics
 +    // Paper's counter advanced once per main-thread tick and is part of the de-facto plugin
 +    // surface: FastAsyncWorldEdit reads it reflectively and its NMS adapter dies on
 +    // NoSuchFieldError without it. The global region tick is that loop's successor on this fork
 +    // (see RegionizedServer.globalTick, the single writer). volatile: cross-thread readers.
 +    public static volatile int currentTick; // Paper - improve tick loop // Folia - region threading
-+    // Lophinya end
++    // Lecithin end
      public java.util.Queue<Runnable> processQueue = new java.util.concurrent.ConcurrentLinkedQueue<Runnable>();
      public int autosavePeriod;
      // Paper - don't store the vanilla dispatcher

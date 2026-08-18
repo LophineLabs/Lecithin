@@ -17,10 +17,6 @@ public class CompatConfig implements IConfigModule {
     public static boolean economySerialization = true;
 
     @HotReloadUnsupported
-    @ConfigInfo(name = "plugin-scheduler-dispatch")
-    public static boolean pluginSchedulerDispatch = true;
-
-    @HotReloadUnsupported
     @ConfigInfo(name = "diagnostics")
     public static boolean diagnostics = true;
 
@@ -59,6 +55,26 @@ public class CompatConfig implements IConfigModule {
     @HotReloadUnsupported
     @ConfigInfo(name = "async-context-inheritance")
     public static boolean asyncContextInheritance = true;
+
+    /**
+     * Let an asynchronous Bukkit event that names exactly one player stand as the execution
+     * provenance for legacy sync scheduler calls made from inside its listeners. Turning this off
+     * restores stock Folia rejection for those calls; it does not affect any other dispatch path.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "async-event-provenance")
+    public static boolean asyncEventProvenance = true;
+
+    /**
+     * The weaker half of {@link #asyncEventProvenance}: an asynchronous event the platform defines
+     * but which names no entity at all - the connection phase above all - is treated as server-scope
+     * and its legacy sync calls go to the global region. Separate from the flag above so the strong
+     * claim (an event that names one player belongs to that player) can be kept while the weaker one
+     * is turned off.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "async-platform-event-global-scope")
+    public static boolean asyncPlatformEventGlobalScope = true;
 
     @HotReloadUnsupported
     @ConfigInfo(name = "command-dispatch-handover")

@@ -1,4 +1,4 @@
-package fun.bm.lophinya.compat;
+package fun.bm.lecithin.compat;
 
 import fun.bm.lecithin.config.modules.CompatConfig;
 import net.minecraft.core.BlockPos;
@@ -15,7 +15,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Lophinya: serve a <em>read-only</em> block lookup from an already-loaded chunk when the calling
+ * Lecithin: serve a <em>read-only</em> block lookup from an already-loaded chunk when the calling
  * tick thread does not own that chunk's region, instead of refusing it.
  *
  * <p>Reading another region's - or another world's - block synchronously is a very common Paper
@@ -62,11 +62,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * That one is restricted to the bootstrap thread - see that method for why it cannot be fixed in
  * {@code prepareLevel} and why it does not widen the rule above.
  *
- * <p>Kill switch: {@code -Dlophinya.compat.crossRegionBlockRead=false} restores the stock refusal.
+ * <p>Kill switch: {@code -Dlecithin.compat.crossRegionBlockRead=false} restores the stock refusal.
  */
-public final class LophinyaCrossRegionBlockRead {
+public final class LecithinCrossRegionBlockRead {
 
-    private static final Logger LOGGER = LogManager.getLogger(LophinyaCrossRegionBlockRead.class);
+    private static final Logger LOGGER = LogManager.getLogger(LecithinCrossRegionBlockRead.class);
 
     /**
      * One diagnostic line per distinct world pair, so the behaviour is observable without flooding.
@@ -119,7 +119,7 @@ public final class LophinyaCrossRegionBlockRead {
             // A stale read cannot be silently wrong, only stale: palette entries are append-only
             // within one Data, and a resize publishes a whole new Data, so an old index always still
             // maps to the value it mapped to.
-            LOGGER.warn("[Lophinya] Cross-region block read raced a palette update at {} in {}; "
+            LOGGER.warn("[Lecithin] Cross-region block read raced a palette update at {} in {}; "
                     + "falling through to the stock ownership check", pos, level.getWorld().getName(), race);
             return null;
         }
@@ -225,17 +225,17 @@ public final class LophinyaCrossRegionBlockRead {
         } catch (final Throwable failed) {
             // Falling through is not swallowing it: the caller then hits the stock ownership check
             // and fails exactly as it does today, naming the world and position.
-            LOGGER.warn("[Lophinya] Startup chunk load for a block read at {} in {} did not complete; "
+            LOGGER.warn("[Lecithin] Startup chunk load for a block read at {} in {} did not complete; "
                     + "falling through to the stock ownership check", pos, level.getWorld().getName(), failed);
             return null;
         }
     }
 
     private static void reportStartupLoad(final ServerLevel level) {
-        final String where = LophinyaStartupGlobalContext.isStartupThread() ? "startup thread" : "global region thread";
+        final String where = LecithinStartupGlobalContext.isStartupThread() ? "startup thread" : "global region thread";
         if (REPORTED.add("no-region-load " + where + " -> " + level.getWorld().getName())) {
             LOGGER.info("""
-                            [Lophinya] Loaded a chunk on the {} to answer a block read in world '{}'
+                            [Lecithin] Loaded a chunk on the {} to answer a block read in world '{}'
                               why     : Paper's prepareLevel blocks until the world's ticketed chunks are in \
                             memory before any plugin is enabled; Folia drops that wait. A plugin reading the \
                             world spawn - in onEnable, or right after creating a world - therefore finds no \
@@ -246,7 +246,7 @@ public final class LophinyaCrossRegionBlockRead {
                               scope   : threads that tick no region at all - the bootstrap thread and the global \
                             region thread. A thread ticking a region still refuses, so this does not become a \
                             general off-region chunk load.
-                              disable : -Dlophinya.compat.crossRegionBlockRead=false""",
+                              disable : -Dlecithin.compat.crossRegionBlockRead=false""",
                     where, level.getWorld().getName());
         }
     }
@@ -256,14 +256,14 @@ public final class LophinyaCrossRegionBlockRead {
         final String key = (global ? "global region" : "a region thread") + " -> " + level.getWorld().getName();
         if (REPORTED.add(key)) {
             LOGGER.info("""
-                    [Lophinya] Served a cross-region block read from a resident chunk: {}
+                    [Lecithin] Served a cross-region block read from a resident chunk: {}
                       why     : every world has its own regioniser, so a tick thread can never own another \
                     world's chunks - this read has no legal thread and would otherwise be impossible, not \
                     merely misplaced.
                       safety  : resident chunks only (an absent chunk still throws, so nothing loads here), \
                     reads only (writes are unchanged), and PalettedContainer is already concurrent-read \
                     safe upstream. Worst case is a one-tick-stale block state.
-                      disable : -Dlophinya.compat.crossRegionBlockRead=false""", key);
+                      disable : -Dlecithin.compat.crossRegionBlockRead=false""", key);
         }
     }
 }

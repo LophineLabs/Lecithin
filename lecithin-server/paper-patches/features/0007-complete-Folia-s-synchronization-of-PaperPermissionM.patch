@@ -23,14 +23,14 @@ removePermission is fixed alongside it with no crash of its own on record: a
 class synchronized everywhere except one writer is not synchronized.
 
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java
-index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..02ff79e68da162649461dd5ec4eb3106fc0d3502 100644
+index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..4ebf520126ad9a9e96ce394e91660751c2fbc8d3 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPermissionManager.java
 @@ -77,7 +77,21 @@ abstract class PaperPermissionManager implements PermissionManager {
      @Override
      @NotNull
      public Set<Permission> getDefaultPermissions(boolean op) {
-+        // Lophinya start - Folia synchronized the writers of defaultPerms() but not this reader.
++        // Lecithin start - Folia synchronized the writers of defaultPerms() but not this reader.
 +        // ImmutableSet.copyOf sizes the array first and then fills it, so a concurrent add from
 +        // another thread's addPermission/recalculatePermissionDefaults aborts the copy with
 +        // ArrayIndexOutOfBoundsException. That is not hypothetical: Luminol loads its config on a
@@ -44,7 +44,7 @@ index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..02ff79e68da162649461dd5ec4eb3106
 +        synchronized (this) {
          return ImmutableSet.copyOf(this.defaultPerms().get(op));
 +        }
-+        // Lophinya end
++        // Lecithin end
      }
  
  
@@ -52,7 +52,7 @@ index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..02ff79e68da162649461dd5ec4eb3106
  
      @Override
      public void removePermission(@NotNull String name) {
-+        // Lophinya start - the second method Folia's synchronization sweep missed. Every other
++        // Lecithin start - the second method Folia's synchronization sweep missed. Every other
 +        // mutation of permissions() holds the monitor; this one races getPermissions()'s copy the
 +        // same way getDefaultPermissions raced above. No crash observed from it yet - it is fixed
 +        // because a class that is synchronized everywhere except one writer is not synchronized.
@@ -63,7 +63,7 @@ index 9ddbb2d72e11c6abbbdb866f3010f276efceda41..02ff79e68da162649461dd5ec4eb3106
 +        synchronized (this) {
          this.permissions().remove(name.toLowerCase(java.util.Locale.ENGLISH));
 +        }
-+        // Lophinya end
++        // Lecithin end
      }
  
      @Override

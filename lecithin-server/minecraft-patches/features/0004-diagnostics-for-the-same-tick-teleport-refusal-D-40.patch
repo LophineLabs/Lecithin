@@ -35,13 +35,13 @@ index f929dff28331882ea18b1daa99e180b9dd3795a2..6498932d3bf6efa5df43665679d1d351
          }
  
          if (!this.canTeleportAsync()) {
-+            // Lophinya - D-40 diagnostics: this return is the silent second teleport. Print which of
++            // Lecithin - D-40 diagnostics: this return is the silent second teleport. Print which of
 +            // canTeleportAsync()'s four predicates said no, rather than guessing from outside again.
 +            // Off by default; cannot affect the refusal, which has already been decided.
 +            if (fun.bm.lecithin.config.modules.CompatConfig.teleportRefusalDiagnostics) {
-+                fun.bm.lophinya.compat.LophinyaTeleportRefusalDiagnostics.reportRefusal(this, destination, pos);
++                fun.bm.lecithin.compat.LecithinTeleportRefusalDiagnostics.reportRefusal(this, destination, pos);
 +            }
-+            // Lophinya end
++            // Lecithin end
              return false;
          }
          this.getBukkitEntity(); // force bukkit entity to be created before TPing
@@ -49,13 +49,13 @@ index f929dff28331882ea18b1daa99e180b9dd3795a2..6498932d3bf6efa5df43665679d1d351
  
      @Override
      public void setLevelCallback(final EntityInLevelCallback levelCallback) {
-+        // Lophinya - D-40 diagnostics: record when the entity leaves and rejoins the level lookup.
++        // Lecithin - D-40 diagnostics: record when the entity leaves and rejoins the level lookup.
 +        // Off by default, prints only on a NULL <-> set transition, and cannot alter the assignment
-+        // below. See LophinyaTeleportRefusalDiagnostics.
++        // below. See LecithinTeleportRefusalDiagnostics.
 +        if (fun.bm.lecithin.config.modules.CompatConfig.teleportRefusalDiagnostics) {
-+            fun.bm.lophinya.compat.LophinyaTeleportRefusalDiagnostics.reportCallbackTransition(this, this.levelCallback, levelCallback);
++            fun.bm.lecithin.compat.LecithinTeleportRefusalDiagnostics.reportCallbackTransition(this, this.levelCallback, levelCallback);
 +        }
-+        // Lophinya end
++        // Lecithin end
          this.levelCallback = levelCallback;
      }
  

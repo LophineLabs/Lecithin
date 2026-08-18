@@ -5,14 +5,14 @@ Subject: [PATCH] implement remakeConnections instead of throwing
 
 
 diff --git a/src/main/java/me/earthme/luminol/utils/FoliaServerWaypointManager.java b/src/main/java/me/earthme/luminol/utils/FoliaServerWaypointManager.java
-index 019266803f1452cb1e76350da8edae10a77020ac..26b3f29c7ee73dcfef10d55105500720d54c3f97 100644
+index 019266803f1452cb1e76350da8edae10a77020ac..1a8f7881d6030ca910687fe225d9df90ca19f831 100644
 --- a/src/main/java/me/earthme/luminol/utils/FoliaServerWaypointManager.java
 +++ b/src/main/java/me/earthme/luminol/utils/FoliaServerWaypointManager.java
 @@ -38,10 +38,25 @@ public class FoliaServerWaypointManager extends ServerWaypointManager {
          }
      }
  
-+    // Lophinya start - implement remakeConnections instead of throwing
++    // Lecithin start - implement remakeConnections instead of throwing
 +    // "Unused" was wrong: ServerScoreboard.updatePlayerWaypoint/updateTeamWaypoints call this for
 +    // every team-membership or team-color change of an online player (locator bar waypoints are
 +    // team-colored), so the vanilla /team command and any plugin team change crashed the caller
@@ -31,7 +31,7 @@ index 019266803f1452cb1e76350da8edae10a77020ac..26b3f29c7ee73dcfef10d55105500720
 +            this.createConnection(player, waypoint);
 +        }
      }
-+    // Lophinya end - implement remakeConnections instead of throwing
++    // Lecithin end - implement remakeConnections instead of throwing
  
      @Override
      public Set<WaypointTransmitter> transmitters() {
