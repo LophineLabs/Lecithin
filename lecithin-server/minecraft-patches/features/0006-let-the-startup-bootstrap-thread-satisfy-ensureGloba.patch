@@ -6,7 +6,7 @@ Subject: [PATCH] let the startup bootstrap thread satisfy
 
 
 diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
-index 0b5654ec1221294b43055fd1445e0c689389ad4b..3b4a0286b5a5d923be636d6a62bebb47255de8ce 100644
+index 342f4764724ba0860d7def1b826ddd9f8f161994..b4e13bced1813ae36db955c7a37542a54fbcdb18 100644
 --- a/io/papermc/paper/threadedregions/RegionizedServer.java
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
 @@ -145,6 +145,11 @@ public final class RegionizedServer {

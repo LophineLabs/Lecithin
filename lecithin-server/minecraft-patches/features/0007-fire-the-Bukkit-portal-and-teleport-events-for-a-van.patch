@@ -1,0 +1,261 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 19 Aug 2026 17:16:58 +0800
+Subject: [PATCH] fire the Bukkit portal and teleport events for a vanilla
+ portal
+
+Folia rewrote Entity#handlePortal to call portalProcess.portalAsync instead of
+getPortalDestination() + teleport(transition). That reroute drops every Bukkit
+event a portal used to fire, because both of the places they were fired from are
+now dead code:
+
+  - Portal#getPortalDestination, where CraftEventFactory.handlePortalEvents
+    fires PlayerPortalEvent and EntityPortalEvent, has no live caller left. Both
+    events are dead API on this fork.
+  - ServerPlayer#teleport(TeleportTransition), where PlayerTeleportEvent is
+    fired, is an unconditional throw, and portalToAsync reaches placeInAsync
+    without ever going through teleportAsync - so it never reaches the hook that
+    restores that event either.
+
+Measured, not argued, with the same probe and the same Multiverse-Core 5.7.2 on
+both platforms, world.enforce-access true, a player without
+multiverse.access.world_nether walking into a nether portal:
+
+  Paper     portal-LOWEST NETHER_PORTAL cancelled=false
+            Multiverse: Failure{reason=NO_WORLD_ACCESS}
+            portal-MONITOR cancelled=true          -> player stays in world
+  this fork no portal event, no teleport event      -> player is in world_nether
+
+Every other teleport path already matched Paper in the same run - the plugin API,
+the sync API, /mv tp from the player and from the console all fired the event and
+all honoured the cancel on both platforms. The portal is the only hole, and it is
+the way players actually change world.
+
+Fired from portalToAsync, after canPortalAsync and Luminol's PreEntityPortalEvent
+and before the unload lock, the passenger detach and the transform: the same four
+properties the teleportAsync hook relies on. teleportAsync opens with
+ensureTickThread, so the handler runs on the region that owns the entity; nothing
+is mutated yet, so a cancel is a plain return false, the answer portalToAsync
+already gives for its own refusals; it is above the nether/end split; and no lock
+is held, so a cancel cannot leak one.
+
+Cancellation, setTo, setSearchRadius, setCreationRadius and setCanCreatePortal
+are all honoured - the last three are passed into the platform's own asynchronous
+portal search. PlayerPortalEvent's to is the approximate scaled exit, which is
+exactly what Paper passes it, so that event is at parity. PlayerTeleportEvent's
+to is that same approximate exit rather than the resolved portal exit, because
+the search completes on another region after the entity has been detached and
+transformed, where a cancel could not be honoured without unwinding a half
+finished handover. World, cause and cancellation are exact; the position can be
+off by up to the portal search radius.
+
+Kill switch: event-config.portal-events=false.
+
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+index e62becda8ddc413b0a374e4df639ebe3f78b2ed7..6a2eaad0fdf62b075194f5698b0615e563cf790c 100644
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -4763,13 +4763,14 @@ public abstract class Entity
+     // If we have to worry about whether the entity may not teleport,
+     // we need to first search, then report back, ...
+     protected void findOrCreatePortalAsync(ServerLevel origin, BlockPos originPortal, ServerLevel destination, PortalType type,
+-                                           ca.spottedleaf.concurrentutil.completable.CallbackCompletable<TeleportTransition> portalInfoCompletable) {
++                                           ca.spottedleaf.concurrentutil.completable.CallbackCompletable<TeleportTransition> portalInfoCompletable,
++                                           fun.bm.lecithin.compat.LecithinPortalEvents.@Nullable Outcome lecithinPortal) { // Lecithin - the portal event may have moved the search
+         switch (type) {
+             // end portal logic is quite simple, the spawn in the end is fixed and when returning to the overworld
+             // we just select the spawn position
+             case END: {
+                 if (destination.getTypeKey() == net.minecraft.world.level.dimension.LevelStem.END) {
+-                    BlockPos targetPos = ServerLevel.END_SPAWN_POINT;
++                    BlockPos targetPos = lecithinPortal == null ? ServerLevel.END_SPAWN_POINT : BlockPos.containing(lecithinPortal.position()); // Lecithin - honour PlayerPortalEvent#setTo
+                     // Luminol start - Add missing teleportation apis
+                     final org.bukkit.Location orginalPortalLocation = io.papermc.paper.util.MCUtil.toLocation(origin, originPortal);
+                     final org.bukkit.Location targetPortalLocation = io.papermc.paper.util.MCUtil.toLocation(destination, targetPos);
+@@ -4807,7 +4808,7 @@ public abstract class Entity
+                         }
+                     );
+                 } else {
+-                    BlockPos spawnPos = destination.getRespawnData().pos();
++                    BlockPos spawnPos = lecithinPortal == null ? destination.getRespawnData().pos() : BlockPos.containing(lecithinPortal.position()); // Lecithin - honour PlayerPortalEvent#setTo
+                     // Luminol start - Add missing teleportation apis
+                     final org.bukkit.Location orginalPortalLocation = io.papermc.paper.util.MCUtil.toLocation(origin, originPortal);
+                     final org.bukkit.Location targetPortalLocation = io.papermc.paper.util.MCUtil.toLocation(destination, spawnPos);
+@@ -4868,14 +4869,21 @@ public abstract class Entity
+ 
+                 boolean destinationIsNether = destination.getTypeKey() == net.minecraft.world.level.dimension.LevelStem.NETHER;
+ 
+-                int portalSearchRadius = origin.paperConfig().environment.portalSearchVanillaDimensionScaling && destinationIsNether ?
++                // Lecithin - PlayerPortalEvent carries a search radius, a creation radius and a
++                // may-create flag. They are folded into the declarations rather than assigned
++                // afterwards because the lambdas below capture both and need them effectively final.
++                int portalSearchRadius = lecithinPortal != null ? lecithinPortal.searchRadius() : // Lecithin - honour PlayerPortalEvent#setSearchRadius
++                    origin.paperConfig().environment.portalSearchVanillaDimensionScaling && destinationIsNether ?
+                     (int)(destination.paperConfig().environment.portalSearchRadius / destination.dimensionType().coordinateScale()) :
+                     destination.paperConfig().environment.portalSearchRadius;
+-                int portalCreateRadius = destination.paperConfig().environment.portalCreateRadius;
++                int portalCreateRadius = lecithinPortal != null ? lecithinPortal.createRadius() : destination.paperConfig().environment.portalCreateRadius; // Lecithin - honour PlayerPortalEvent#setCreationRadius
++                final boolean lecithinCanCreatePortal = lecithinPortal == null || lecithinPortal.canCreatePortal(); // Lecithin - honour PlayerPortalEvent#setCanCreatePortal
+ 
+                 WorldBorder destinationBorder = destination.getWorldBorder();
+                 double dimensionScale = net.minecraft.world.level.dimension.DimensionType.getTeleportationScale(origin.dimensionType(), destination.dimensionType());
+-                BlockPos targetPos = destination.getWorldBorder().clampToBounds(this.getX() * dimensionScale, this.getY(), this.getZ() * dimensionScale);
++                BlockPos targetPos = lecithinPortal == null // Lecithin - honour PlayerPortalEvent#setTo
++                    ? destination.getWorldBorder().clampToBounds(this.getX() * dimensionScale, this.getY(), this.getZ() * dimensionScale)
++                    : destination.getWorldBorder().clampToBounds(lecithinPortal.position());
+                 // Luminol start - Add missing teleportation apis
+                 final org.bukkit.Location orginalPortalLocation = io.papermc.paper.util.MCUtil.toLocation(origin, originPortal);
+                 final org.bukkit.Location targetPortalLocation = io.papermc.paper.util.MCUtil.toLocation(destination, targetPos);
+@@ -4940,6 +4948,11 @@ public abstract class Entity
+                             );
+                         }
+ 
++                        // Lecithin - PlayerPortalEvent#setCanCreatePortal(false): search only, never build
++                        if (!lecithinCanCreatePortal) {
++                            portalFound.complete(null);
++                            return;
++                        }
+                         // no portal found - create one
+                         destination.moonrise$loadChunksAsync(
+                             targetPos, portalCreateRadius + 32,
+@@ -5017,6 +5030,54 @@ public abstract class Entity
+ 
+     }
+ 
++    // Lecithin start - the three values Paper hands PlayerPortalEvent, computed the way Paper
++    // computes them, so the event this fork restores says the same thing Paper's does. They live
++    // next to portalToAsync rather than in the compat class because they read the platform's own
++    // portal configuration, and they deliberately mirror what findOrCreatePortalAsync below
++    // computes for itself - if those two ever disagree, the event is lying about the destination.
++    private Vec3 lecithinApproximatePortalExit(final ServerLevel destination, final PortalType type) {
++        if (type == PortalType.END) {
++            // Fixed on both sides: the end spawn going in, the destination's stored respawn
++            // position coming out. A player lands one block lower, as the platform's own end
++            // branch does.
++            final BlockPos target = destination.getTypeKey() == net.minecraft.world.level.dimension.LevelStem.END
++                ? ServerLevel.END_SPAWN_POINT
++                : destination.getRespawnData().pos();
++            return Vec3.atBottomCenterOf(this instanceof net.minecraft.world.entity.player.Player ? target.below() : target);
++        }
++        // Nether: the entity's position scaled by the dimension ratio and clamped to the
++        // destination's border. Paper reports this as a block position, so this does too.
++        final double scale = net.minecraft.world.level.dimension.DimensionType.getTeleportationScale(
++            this.level().dimensionType(), destination.dimensionType());
++        return Vec3.atLowerCornerOf(destination.getWorldBorder().clampToBounds(
++            this.getX() * scale, this.getY(), this.getZ() * scale));
++    }
++
++    private int lecithinPortalSearchRadius(final ServerLevel destination, final PortalType type) {
++        if (type != PortalType.NETHER) {
++            return 0; // Paper passes 0 for an end portal: there is nothing to search for.
++        }
++        final boolean destinationIsNether = destination.getTypeKey() == net.minecraft.world.level.dimension.LevelStem.NETHER;
++        return this.level().paperConfig().environment.portalSearchVanillaDimensionScaling && destinationIsNether
++            ? (int) (destination.paperConfig().environment.portalSearchRadius / destination.dimensionType().coordinateScale())
++            : destination.paperConfig().environment.portalSearchRadius;
++    }
++
++    private int lecithinPortalCreateRadius(final ServerLevel destination, final PortalType type) {
++        return type == PortalType.NETHER ? destination.paperConfig().environment.portalCreateRadius : 0;
++    }
++
++    private static org.bukkit.PortalType lecithinBukkitPortalType(final PortalType type) {
++        return type == PortalType.NETHER ? org.bukkit.PortalType.NETHER : org.bukkit.PortalType.ENDER;
++    }
++
++    private static org.bukkit.event.player.PlayerTeleportEvent.TeleportCause lecithinPortalCause(final PortalType type) {
++        return type == PortalType.NETHER
++            ? org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.NETHER_PORTAL
++            : org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_PORTAL;
++    }
++    // Lecithin end
++
+     protected boolean portalToAsync(ServerLevel destination, BlockPos portalPos, boolean takePassengers,
+                                     PortalType type, java.util.function.Consumer<Entity> teleportComplete) {
+         ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
+@@ -5033,9 +5094,32 @@ public abstract class Entity
+         }
+         // Luminol end
+ 
++        // Lecithin start - fire the Bukkit portal and teleport events this path routes around.
++        // A portal never reaches Entity#teleportAsync and never reaches Portal#getPortalDestination,
++        // so on stock it fires neither PlayerTeleportEvent nor PlayerPortalEvent while the entity
++        // still crosses worlds. Deliberately here: after canPortalAsync and the Luminol portal
++        // event, before the unload lock and before anything is detached or transformed, so a cancel
++        // is a plain return false with no lock to unwind. See LecithinPortalEvents.
++        final fun.bm.lecithin.compat.LecithinPortalEvents.Outcome lecithinPortal;
++        if (fun.bm.lecithin.config.modules.EventConfig.portalEvents) {
++            lecithinPortal = fun.bm.lecithin.compat.LecithinPortalEvents.callPortalEvents(
++                this, destination, this.lecithinApproximatePortalExit(destination, type),
++                lecithinBukkitPortalType(type), lecithinPortalCause(type),
++                this.lecithinPortalSearchRadius(destination, type), this.lecithinPortalCreateRadius(destination, type)
++            );
++            if (lecithinPortal == null) {
++                return false;
++            }
++        } else {
++            lecithinPortal = null;
++        }
++        // A handler may have redirected the destination world; everything below portals into this.
++        final ServerLevel lecithinDestination = lecithinPortal == null ? destination : lecithinPortal.destination();
++        // Lecithin end
++
+         // Kaiiju start - sync end platform spawning & entity teleportation
+-        final java.util.function.Consumer<Entity> tpComplete = type == PortalType.END && destination.getTypeKey() == net.minecraft.world.level.dimension.LevelStem.END ?
+-                e -> {net.minecraft.world.level.levelgen.feature.EndPlatformFeature.createEndPlatform(destination, ServerLevel.END_SPAWN_POINT.below(), true, null); if (teleportComplete != null) {teleportComplete.accept(e);}} : teleportComplete;
++        final java.util.function.Consumer<Entity> tpComplete = type == PortalType.END && lecithinDestination.getTypeKey() == net.minecraft.world.level.dimension.LevelStem.END ? // Lecithin - honour a redirected destination
++                e -> {net.minecraft.world.level.levelgen.feature.EndPlatformFeature.createEndPlatform(lecithinDestination, ServerLevel.END_SPAWN_POINT.below(), true, null); if (teleportComplete != null) {teleportComplete.accept(e);}} : teleportComplete; // Lecithin - honour a redirected destination
+         // Kaiiju end
+         Vec3 initialPosition = this.position();
+         ChunkPos initialPositionChunk = new ChunkPos(
+@@ -5044,7 +5128,7 @@ public abstract class Entity
+         );
+         // Luminol start - Level hot load/unload apis
+         // let's acquire read reference first
+-        if (!destination.levelUnloadStateLock.acquireRead()) {
++        if (!lecithinDestination.levelUnloadStateLock.acquireRead()) {
+             // failed, destination is under unloading process
+             return false;
+         }
+@@ -5057,12 +5141,12 @@ public abstract class Entity
+ 
+         for (EntityTreeNode node : fullPassengerTree) {
+             node.root.preChangeDimension();
+-            node.root.prePortalLogic(originWorld, destination, type);
++            node.root.prePortalLogic(originWorld, lecithinDestination, type);
+         }
+ 
+         for (EntityTreeNode node : fullPassengerTree) {
+             // we will update pos/rot/speed later
+-            node.root = node.root.transformForAsyncTeleport(destination, null, null, null, null);
++            node.root = node.root.transformForAsyncTeleport(lecithinDestination, null, null, null, null);
+             // set portal cooldown
+             node.root.setPortalCooldown();
+         }
+@@ -5100,7 +5184,7 @@ public abstract class Entity
+ 
+             // place
+             passengerTree.root.placeInAsync(
+-                originWorld, destination, Entity.TELEPORT_FLAG_LOAD_CHUNK | (takePassengers ? Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS : 0L),
++                originWorld, lecithinDestination, Entity.TELEPORT_FLAG_LOAD_CHUNK | (takePassengers ? Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS : 0L),
+                 passengerTree,
+                 (Entity teleported) -> {
+                     if (info.postTeleportTransition() != null) {
+@@ -5108,7 +5192,7 @@ public abstract class Entity
+                     }
+                     // Luminol start - Level hot load/unload apis
+                     // all done, release the read reference
+-                    destination.levelUnloadStateLock.releaseRead();
++                    lecithinDestination.levelUnloadStateLock.releaseRead();
+                     // Luminol end
+ 
+                     // Kaiiju start - vanilla end teleportation
+@@ -5124,7 +5208,7 @@ public abstract class Entity
+         });
+ 
+ 
+-        passengerTree.root.findOrCreatePortalAsync(originWorld, portalPos, destination, type, portalInfoCompletable);
++        passengerTree.root.findOrCreatePortalAsync(originWorld, portalPos, lecithinDestination, type, portalInfoCompletable, lecithinPortal); // Lecithin - let the portal event redirect the search
+ 
+         return true;
+     }

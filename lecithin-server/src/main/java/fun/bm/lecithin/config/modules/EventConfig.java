@@ -19,4 +19,14 @@ public class EventConfig implements IConfigModule {
     @HotReloadUnsupported
     @ConfigInfo(name = "passenger-teleport-cross-world-offset")
     public static boolean passengerTeleportCrossWorldOffset = true;
-}
+
+    /**
+     * Fire the Bukkit portal and teleport events for a vanilla portal. The platform routes a portal
+     * around {@code Entity#teleportAsync} and around {@code Portal#getPortalDestination}, so it
+     * reaches neither the teleport hook nor {@code CraftEventFactory.handlePortalEvents}, and a
+     * player crosses worlds through a portal with no Bukkit event at all. See {@link
+     * fun.bm.lecithin.compat.LecithinPortalEvents}.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "portal-events")
+    public static boolean portalEvents = true;}

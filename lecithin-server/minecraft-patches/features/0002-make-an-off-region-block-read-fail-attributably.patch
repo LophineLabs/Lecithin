@@ -27,7 +27,7 @@ one path with measured evidence; other getCurrentWorldData() dereferences have
 the same shape but no observed occurrence.
 
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index ca92bb3a8b739c0da3f48a2dd16c5fb4fa7e8453..6cff4927ff5c9634ea8178624ccb169741e3f83a 100644
+index ca92bb3a8b739c0da3f48a2dd16c5fb4fa7e8453..94945e083fd22472985bd95e4e84f3a004259149 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -1,5 +1,6 @@

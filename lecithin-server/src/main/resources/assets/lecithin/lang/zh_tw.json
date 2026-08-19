@@ -23,6 +23,7 @@
   "lecithin.event-config.comment": "恢復部分 Folia 執行路徑中未觸發或行為不同的 Bukkit 事件。",
   "lecithin.event-config.passenger-teleport-cross-world-offset.comment": "跨世界傳送時，讓乘客的傳送事件使用乘客自己的相對位置，不直接沿用載具位置。\n需要 passenger-teleport-events。",
   "lecithin.event-config.passenger-teleport-events.comment": "載具傳送時，為一同移動的乘客觸發傳送事件。\n和 Paper 一樣，乘客事件的取消與 setTo 不會單獨改變乘客的移動結果。",
+  "lecithin.event-config.portal-events.comment": "恢復原版傳送門相關的 Bukkit portal 與 teleport 事件，讓插件能監聽、取消或修改傳送門傳送。\n事件中的目的地使用傳送門搜尋前的概略位置。",
   "lecithin.event-config.teleport-events.comment": "恢復 PlayerTeleportEvent、EntityTeleportEvent 與 PlayerChangedWorldEvent，讓插件能監聽、取消或修改傳送。\n平台內部使用 UNKNOWN 原因的位置修正不會觸發這些事件。",
   "lecithin.waypoint.comment": "定位列路徑點相關相容性調整。",
   "lecithin.waypoint.remake_connections.comment": "實作路徑點管理器的 remakeConnections，使隊伍成員或顏色變更時能正常更新定位列路徑點。"
