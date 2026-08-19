@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lecithin <noreply@lophinelabs.invalid>
+Date: Wed, 19 Aug 2026 14:40:15 +0800
+Subject: [PATCH] register the Lecithin diagnostic command root
+
+/lecithin worlds and /lecithin context report identities the platform maintains
+but exposes through no Bukkit API: which ServerLevel a world really is, which
+ThreadedRegionizer owns it, which region the calling thread is ticking, and what
+level and position the CommandSourceStack in hand carries. Read-only.
+
+diff --git a/src/main/java/me/earthme/luminol/commands/CommandRegister.java b/src/main/java/me/earthme/luminol/commands/CommandRegister.java
+index a4821ce79cfcf8ebe5926f8ed382dad50b260532..5809844142f741544ad3bafce3f7b7ec4b27bd2b 100644
+--- a/src/main/java/me/earthme/luminol/commands/CommandRegister.java
++++ b/src/main/java/me/earthme/luminol/commands/CommandRegister.java
+@@ -10,5 +10,6 @@ public class CommandRegister {
+      */
+     public static void register() {
+         new BarCommand().register();
++        new fun.bm.lecithin.command.LecithinCommand().register(); // Lecithin - diagnostic command root
+     }
+ }
