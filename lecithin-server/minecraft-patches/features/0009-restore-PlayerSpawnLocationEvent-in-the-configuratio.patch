@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 19 Aug 2026 18:29:41 +0800
+Subject: [PATCH] restore PlayerSpawnLocationEvent in the configuration phase
+
+org.spigotmc.event.player.PlayerSpawnLocationEvent is dead API on this fork:
+PrepareSpawnTask.Preparing#tick is the only place that ever constructs it, and
+Folia short-circuited that block with a literal `false`. A plugin cannot move a
+player's spawn before they join, which is the entire point of the event.
+
+The block is disabled, not unsupported. Everything it needs is still present and
+still used by the platform itself - Ready#createPlayer reads back the very
+Connection#savedPlayerForLegacyEvents instance this block creates, and constructs
+a ServerPlayer on the same thread a moment later if it does not find one.
+
+That thread is the global region thread: RegionizedServer#tick calls
+tickConnections, which ticks the configuration listener, which ticks this task.
+It is a tick thread, so CraftServer#isPrimaryThread - TickThread.isTickThread on
+this platform - is true here exactly as it is on Paper's main thread.
+
+Paper's newer AsyncPlayerSpawnLocationEvent is untouched: its block still runs
+afterwards and still starts from this one's result, which is Paper's ordering.
+
+Kill switch: event-config.spawn-location-event=false.
+
+diff --git a/net/minecraft/server/network/config/PrepareSpawnTask.java b/net/minecraft/server/network/config/PrepareSpawnTask.java
+index 854f8954ccfd8c34c9f9c91fd1805260f9b429b5..e78fe44bb1befb4e84a7064cbba5f4b0f813a2a1 100644
+--- a/net/minecraft/server/network/config/PrepareSpawnTask.java
++++ b/net/minecraft/server/network/config/PrepareSpawnTask.java
+@@ -240,7 +240,22 @@ public class PrepareSpawnTask implements ConfigurationTask {
+             Vec3 spawnPosition = this.spawnPosition.join();
+             if (this.chunkLoadFuture == null) {
+                 // Paper start - PlayerSpawnLocationEvent
+-                if (false && this.eventFuture == null && org.spigotmc.event.player.PlayerSpawnLocationEvent.getHandlerList().getRegisteredListeners().length != 0) { // Folia - region threading
++                // Lecithin start - restore PlayerSpawnLocationEvent
++                // Folia short-circuited this block with a literal `false`, which makes
++                // org.spigotmc.event.player.PlayerSpawnLocationEvent dead API on this fork: the only
++                // site that ever constructs it is here. The plumbing it needs is all still present and
++                // still used - Ready#createPlayer reads back the very
++                // Connection#savedPlayerForLegacyEvents instance this block creates - so the block is
++                // disabled, not unsupported.
++                //
++                // It is fired from PrepareSpawnTask#tick, which RegionizedServer#tickConnections drives
++                // on the global region thread. That is a tick thread, so CraftServer#isPrimaryThread is
++                // true here exactly as it is on Paper's main thread, and constructing a ServerPlayer on
++                // it is what the platform's own createPlayer already does a moment later on the same
++                // thread. The AsyncPlayerSpawnLocationEvent block below still runs afterwards and still
++                // sees this block's result, which is Paper's ordering.
++                if (fun.bm.lecithin.config.modules.EventConfig.spawnLocationEvent && this.eventFuture == null && org.spigotmc.event.player.PlayerSpawnLocationEvent.getHandlerList().getRegisteredListeners().length != 0) { // Folia - region threading // Lecithin - restore PlayerSpawnLocationEvent
++                // Lecithin end - restore PlayerSpawnLocationEvent
+                     ServerPlayer player;
+                     if (PrepareSpawnTask.this.listener.connection.savedPlayerForLegacyEvents != null) {
+                         player = PrepareSpawnTask.this.listener.connection.savedPlayerForLegacyEvents;

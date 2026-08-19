@@ -41,4 +41,14 @@ public class EventConfig implements IConfigModule {
      */
     @HotReloadUnsupported
     @ConfigInfo(name = "respawn-event")
-    public static boolean respawnEvent = true;}
+    public static boolean respawnEvent = true;
+
+    /**
+     * Fire the legacy {@code PlayerSpawnLocationEvent} during the configuration phase. The platform
+     * short-circuits the only block that constructs it, which makes it dead API even though the
+     * plumbing it needs is still present and still used. Paper's newer
+     * {@code AsyncPlayerSpawnLocationEvent} is unaffected either way.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "spawn-location-event")
+    public static boolean spawnLocationEvent = true;}
