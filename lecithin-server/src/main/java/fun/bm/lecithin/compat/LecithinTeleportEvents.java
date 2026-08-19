@@ -84,7 +84,16 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  * here will fail its own ownership check - that is the platform's existing rule, not a new one, and
  * it is the same failure Paper handlers never see because Paper has one thread.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.teleportEvents=false} restores stock behaviour, which is
+ * <h2>End gateway</h2>
+ * Paper reports a gateway teleport as {@code PlayerTeleportEndGatewayEvent} /
+ * {@code EntityTeleportEndGatewayEvent} - subclasses that carry the gateway block itself - rather
+ * than as the plain event. Those two subclasses declare no {@code HandlerList} of their own, so they
+ * share the parent's; a listener declared on the parent sees them either way, but a listener
+ * declared on the subclass (the only way to reach {@code getGateway()}) sees nothing unless the
+ * instance really is the subclass. {@link #callTeleportEvent} therefore reproduces Paper's own
+ * detection - see {@code lecithinGatewayAt} - instead of always constructing the parent type.
+ *
+ * <p>Kill switch: {@code event-config.teleport-events=false} restores stock behaviour, which is
  * that none of these three events is ever fired.
  */
 public final class LecithinTeleportEvents {
@@ -117,15 +126,27 @@ public final class LecithinTeleportEvents {
                 yaw == null ? from.getYaw() : yaw.floatValue(),
                 pitch == null ? from.getPitch() : pitch.floatValue());
 
+        // Paper reports a gateway teleport through a dedicated subclass; null for everything else.
+        final net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity gateway =
+                cause == TeleportCause.END_GATEWAY ? gatewayAt(entity) : null;
+
         final Location redirected;
         if (bukkitEntity instanceof org.bukkit.entity.Player player) {
-            final PlayerTeleportEvent event = new PlayerTeleportEvent(player, from, to.clone(), cause);
+            final PlayerTeleportEvent event = gateway == null
+                    ? new PlayerTeleportEvent(player, from, to.clone(), cause)
+                    : new com.destroystokyo.paper.event.player.PlayerTeleportEndGatewayEvent(
+                            player, from, to.clone(),
+                            new org.bukkit.craftbukkit.block.CraftEndGateway(entity.level().getWorld(), gateway));
             if (!event.callEvent()) {
                 return null;
             }
             redirected = event.getTo();
         } else {
-            final EntityTeleportEvent event = new EntityTeleportEvent(bukkitEntity, from, to.clone());
+            final EntityTeleportEvent event = gateway == null
+                    ? new EntityTeleportEvent(bukkitEntity, from, to.clone())
+                    : new com.destroystokyo.paper.event.entity.EntityTeleportEndGatewayEvent(
+                            bukkitEntity, from, to.clone(),
+                            new org.bukkit.craftbukkit.block.CraftEndGateway(entity.level().getWorld(), gateway));
             if (!event.callEvent()) {
                 return null;
             }
@@ -147,6 +168,38 @@ public final class LecithinTeleportEvents {
                 ((CraftWorld) world).getHandle(),
                 new Vec3(redirected.getX(), redirected.getY(), redirected.getZ()),
                 Float.valueOf(redirected.getYaw()), Float.valueOf(redirected.getPitch()));
+    }
+
+    /**
+     * The gateway an entity is currently being moved by, or {@code null}.
+     *
+     * <p>The first three terms are Paper's own condition, taken verbatim from
+     * {@code ServerPlayer#teleport(TeleportTransition)}: the entity is in a portal process, that
+     * process belongs to the end-gateway block, and the block entity it entered is still a gateway.
+     * The caller adds the fourth term Paper does not need - the cause really is
+     * {@code END_GATEWAY}. On Paper the enclosing method is only reachable from a vanilla transition,
+     * so the cause is never anything else; here the same hook also covers plugin teleports, and a
+     * plugin teleporting a player who merely happens to be standing in a gateway must not be reported
+     * as a gateway teleport.
+     *
+     * <p>The ownership check is this platform's, not Paper's: the entry position is where the entity
+     * entered the portal, which its own region owns in every path that reaches here, but a block-entity
+     * read that turned out not to be owned would throw out of an event hook rather than fail the
+     * teleport. Falling back to the plain event is the safe answer to a question we could not ask.
+     */
+    private static net.minecraft.world.level.block.entity.@org.jspecify.annotations.Nullable TheEndGatewayBlockEntity gatewayAt(final Entity entity) {
+        final net.minecraft.world.entity.PortalProcessor process = entity.portalProcess;
+        if (process == null
+                || !process.isSamePortal((net.minecraft.world.level.block.EndGatewayBlock) net.minecraft.world.level.block.Blocks.END_GATEWAY)) {
+            return null;
+        }
+        final net.minecraft.core.BlockPos entry = process.getEntryPosition();
+        if (!(entity.level() instanceof ServerLevel level)
+                || !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(level, entry)) {
+            return null;
+        }
+        return level.getBlockEntity(entry) instanceof net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity gateway
+                ? gateway : null;
     }
 
     /**

@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 19 Aug 2026 18:29:42 +0800
+Subject: [PATCH] do not let a gateway exit adjustment overwrite a redirected
+ teleport
+
+TheEndGatewayBlockEntity#teleportRegionThreading has two branches. The exact one
+teleports blind. The inexact one teleports to the raw exit portal position first
+and then, in the placement callback, moves the entity again to
+findExitPosition(...) - because on this platform the exit chunk cannot be read
+before the teleport.
+
+That second move is unconditional, and it runs after the teleport event this fork
+restores. So in the inexact branch a handler's setTo is silently undone, while in
+the exact branch it is honoured: the two branches disagree. On Paper there is no
+disagreement, because getPortalDestination resolves the exit before the event and
+the handler always has the last word.
+
+Adjust only when the entity is where this teleport asked it to be. The check is
+exact rather than approximate: the transition carries an absolute position and
+the callback runs at placement, before anything can have moved it. It also stops
+the adjustment from reading the gateway world's blocks from whatever region a
+redirect landed in, which would be an ownership violation rather than a
+behavioural difference.
+
+diff --git a/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
+index fdf220424f7693a7ea3ae385ddd771720825b0f7..d05a86e3ced1b64d87371744b5abbe3687cf5e3b 100644
+--- a/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
+@@ -224,9 +224,27 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+             // should be teleported, something something else...
+             // however, we know the target location cannot differ by one region section: so we can
+             // just teleport and adjust the position after
++            final Vec3 requestedExit = teleport.position(); // Lecithin - see below
+             return toTeleport.teleportAsync(
+                 teleport, net.minecraft.world.entity.Entity.TELEPORT_FLAG_LOAD_CHUNK | net.minecraft.world.entity.Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS,
+                 (net.minecraft.world.entity.Entity teleportedEntity) -> {
++                    // Lecithin start - do not overwrite a destination a teleport event redirected.
++                    // On Paper the exit position is resolved inside getPortalDestination, so the
++                    // teleport event already carries the adjusted position and a handler's setTo is
++                    // the last word. Here the platform teleports to the raw exit first and adjusts
++                    // afterwards, so an unconditional adjust would silently undo setTo - and would
++                    // read portalWorld's blocks from whatever region the redirect landed in. Both
++                    // are avoided by adjusting only when the entity is where this teleport asked it
++                    // to be, which is exact: the transition carries an absolute position and this
++                    // callback runs at placement, before anything can have moved it.
++                    if (teleportedEntity.level() != portalWorld
++                        || teleportedEntity.position().distanceToSqr(requestedExit) > 1.0E-6) {
++                        if (post != null) {
++                            post.onTransition(teleportedEntity);
++                        }
++                        return;
++                    }
++                    // Lecithin end
+                     // adjust to the final exit position
+                     Vec3 adjusted = Vec3.atCenterOf(TheEndGatewayBlockEntity.findExitPosition(portalWorld, teleportPos));
+                     // teleportTo will adjust rider positions
