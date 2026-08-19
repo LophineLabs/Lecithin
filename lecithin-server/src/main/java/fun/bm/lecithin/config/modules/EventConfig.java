@@ -29,4 +29,16 @@ public class EventConfig implements IConfigModule {
      */
     @HotReloadUnsupported
     @ConfigInfo(name = "portal-events")
-    public static boolean portalEvents = true;}
+    public static boolean portalEvents = true;
+
+    /**
+     * Fire {@code PlayerRespawnEvent}. The platform rewrote {@code ServerPlayer#respawn} and no
+     * longer routes it through the Paper method that fires the event, so on stock the event is never
+     * constructed at all and a respawn-placing plugin is never called. Turning this off also restores
+     * the platform's behaviour of never consuming a respawn anchor's charge, because Paper's rule for
+     * that is defined in terms of this event. See {@link
+     * fun.bm.lecithin.compat.LecithinRespawnEvents}.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "respawn-event")
+    public static boolean respawnEvent = true;}

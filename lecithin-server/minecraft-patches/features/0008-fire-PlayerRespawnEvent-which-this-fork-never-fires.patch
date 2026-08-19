@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 19 Aug 2026 18:29:41 +0800
+Subject: [PATCH] fire PlayerRespawnEvent, which this fork never fires
+
+PlayerRespawnEvent is dead API here. Paper fires it from
+ServerPlayer#findRespawnPositionAndUseSpawnBlock0, the single place that turns a
+player's stored respawn data into the position they are about to be placed at.
+Folia's ServerPlayer#respawn is a rewrite that resolves the position itself -
+findRespawnAndUseSpawnBlock for a bed or anchor, fudgeSpawnLocation otherwise -
+and hands it to placeInAsync, so that Paper method survives only as the
+EndPortalBlock helper and the event is never constructed at all. Every plugin
+that places a player after death is simply not called.
+
+Fired at the head of the waiter Folia attaches to its spawnPosComplete, which is
+the instant the position is final and before anything is applied. Not adopted
+because it was the obvious spot - checked, because three separate properties had
+to hold there:
+
+  - Both resolution paths end at that one completion, so a single hook covers
+    bed, respawn anchor, missing respawn block and plain world spawn.
+  - CallbackCompletable runs its waiters on the completing thread, and both paths
+    complete out of a chunk-load callback. ChunkTaskScheduler#scheduleChunkLoad
+    re-dispatches to the region that owns the chunk when the caller does not own
+    it, so the completing thread always owns the respawn position. That is a
+    tick thread, and it is the one the anchor write below needs.
+  - The waiter already reads its destination world back out of the location it is
+    given and hands it to placeInAsync, which queues onto the destination
+    region's own task queue - so a handler moving the player to another world
+    needs no extra plumbing.
+
+isBedSpawn and isAnchorSpawn are taken from the RespawnPosAngle the platform just
+resolved rather than from a second block read, so the event reports what the
+respawn actually used. isMissingRespawnBlock is set on the branch where a stored
+respawn config resolved to no spawn position, which is the branch Paper reports
+through TeleportTransition.missingRespawnBlock.
+
+Respawn anchors: Paper consumes the charge after the event and only when a
+handler did not move the player (SPIGOT-5989). Folia builds the same
+consumeAnchorCharge runnable inside findRespawnAndUseSpawnBlock and never runs
+it, so on stock an anchor is never depleted even though the depletion sound
+plays. Restoring the event restores the rule that governs it, on the thread that
+owns the anchor.
+
+One bounded difference, stated rather than hidden: Paper aborts the respawn if
+the player disconnected while handlers ran. It can, because at that point they
+have not been removed from the world. Here they have - respawn calls
+removePlayerImmediately before the position is resolved - so refusing to place
+them would strand the entity outside every world. The placement always
+completes and a player who left is cleaned up by the normal disconnect path.
+
+Kill switch: event-config.respawn-event=false.
+
+diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
+index 28ce624e9952e9d45930d4550ef80d1e788f5916..db7e811d5b133557025f117ff9fabf0e9c670ad2 100644
+--- a/net/minecraft/server/level/ServerPlayer.java
++++ b/net/minecraft/server/level/ServerPlayer.java
+@@ -1810,9 +1810,28 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+         ca.spottedleaf.concurrentutil.completable.CallbackCompletable<org.bukkit.Location> spawnPosComplete =
+             new ca.spottedleaf.concurrentutil.completable.CallbackCompletable<>();
+         boolean[] usedRespawnAnchor = new boolean[1];
++        // Lecithin start - fire PlayerRespawnEvent
++        // The three flags Paper hands the event, filled in by whichever resolution path runs:
++        // [0] bed spawn, [1] respawn-anchor spawn, [2] the respawn block is gone. All false is the
++        // plain world-spawn case, which is what Paper's TeleportTransition.createDefault reports.
++        final boolean[] lecithinRespawnFlags = new boolean[3];
++        // Paper's own charge-consumption runnable, run only if the event leaves the location alone.
++        final Runnable[] lecithinConsumeAnchorCharge = new Runnable[1];
++        // Lecithin end
+ 
+         // set up post spawn location logic
+         spawnPosComplete.addWaiter((spawnLoc, throwable) -> {
++            // Lecithin start - fire PlayerRespawnEvent, which this platform never fires at all.
++            // Here because this is the instant the position is final and nothing has been applied
++            // yet, and because CallbackCompletable runs its waiters on the completing thread - a
++            // chunk-load callback on the region that owns the respawn position. See
++            // LecithinRespawnEvents for why that thread is the one the anchor write needs.
++            spawnLoc = fun.bm.lecithin.compat.LecithinRespawnEvents.callRespawnEvent(
++                ServerPlayer.this, spawnLoc, reason,
++                lecithinRespawnFlags[0], lecithinRespawnFlags[1], lecithinRespawnFlags[2],
++                lecithinConsumeAnchorCharge[0]
++            );
++            // Lecithin end
+             // update pos and velocity
+             ServerPlayer.this.setPosRaw(spawnLoc.getX(), spawnLoc.getY(), spawnLoc.getZ());
+             ServerPlayer.this.setYRot(spawnLoc.getYaw());
+@@ -1869,6 +1888,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+                     ).orElse(null);
+                     if (spawnPos == null) {
+                         // no spawn
++                        lecithinRespawnFlags[2] = true; // Lecithin - PlayerRespawnEvent#isMissingRespawnBlock
+                         ServerPlayer.this.connection.send(
+                             new ClientboundGameEventPacket(ClientboundGameEventPacket.NO_RESPAWN_BLOCK_AVAILABLE, 0.0F)
+                         );
+@@ -1883,6 +1903,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+                     boolean isRespawnAnchor = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.world.level.block.Blocks.RESPAWN_ANCHOR);
+                     boolean isBed = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.tags.BlockTags.BEDS);
+                     usedRespawnAnchor[0] = !alive && isRespawnAnchor;
++                    // Lecithin start - PlayerRespawnEvent#isBedSpawn/#isAnchorSpawn and SPIGOT-5989.
++                    // Taken from the RespawnPosAngle the platform just resolved rather than from a
++                    // second block read, so the event reports what the respawn actually used. The
++                    // charge runnable is the platform's own; stock builds it here and never runs it.
++                    lecithinRespawnFlags[0] = spawnPos.isBedSpawn();
++                    lecithinRespawnFlags[1] = spawnPos.isAnchorSpawn();
++                    lecithinConsumeAnchorCharge[0] = spawnPos.consumeAnchorCharge();
++                    // Lecithin end
+ 
+                     // finished now, pass the location on
+                     spawnPosComplete.complete(
