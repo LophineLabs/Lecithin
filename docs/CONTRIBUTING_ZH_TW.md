@@ -1,7 +1,7 @@
 為 Lecithin 貢獻程式碼
 ===============
 
-[English](./CONTRIBUTING_EN.md) | [中文（簡體）](./CONTRIBUTING.md) | **中文（繁體）**
+[English](./CONTRIBUTING_EN.md) | [中文（简体）](./CONTRIBUTING.md) | **中文（繁體）**
 
 很高興你願意為這個專案貢獻！一般來說，我們對 PR 的審核標準相當寬鬆；
 如果你可以照著下面的規則來，我們就能更快完成審核。

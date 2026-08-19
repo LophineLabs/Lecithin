@@ -4,7 +4,7 @@
   
 # Lecithin
   
-  *Lecithin 是一個基於 Lophine的 fork，具備許多好用的最佳化與可設定的原版特性，目標是在 Lophine 上修復原有的 paper/spigot/bukkit API*
+  *Lecithin 是一個基於 Lophine 的分支，目標是在保留 Folia 區域化多執行緒架構的前提下，補足與既有 Paper／Spigot／Bukkit 生態之間的相容性落差，讓更多既有插件能以較低的適配成本運行。*
   
   ![Created At](https://img.shields.io/github/created-at/LophineLabs/Lecithin?style=for-the-badge&color=blue)
   [![License](https://img.shields.io/github/license/LophineLabs/Lecithin?style=for-the-badge&color=green)](LICENSE.md)
@@ -16,26 +16,36 @@
   
   ![Repo contributors](https://img.shields.io/github/contributors/LophineLabs/Lecithin?style=for-the-badge&color=brightgreen)
   
-  [English](./README_EN.md) | [中文（簡體）](./README.md) | **中文（繁體）**
+  [English](./README_EN.md) | [中文（简体）](./README.md) | **中文（繁體）**
 </div>
 
 ---
 
 ## ✨ 核心特性
 
-- 🔧 **可設定的原版特性** - 彈性調整遊戲機制，以符合不同伺服器的需求
+### Lecithin
+
+- 🧩 **插件相容性改善** - 改善部分 Paper／Spigot／Bukkit API 與插件在 Folia 架構下的相容性
+- 🔀 **排程器相容處理** - 為部分原本依賴 Bukkit Scheduler 的使用方式提供符合 Folia 執行模型的處理
+- 📣 **事件行為修復** - 修正部分 API 執行路徑下事件缺失或行為與 Paper 不一致的問題
+- 🔍 **相容性診斷** - 提供更多與插件呼叫來源、執行緒及區域相關的診斷資訊
+
+### Lophine
+
+Lecithin 基於 Lophine，因此同時包含其提供的功能與修復：
+
+- 🔧 **可設定的原版特性** - 彈性調整遊戲機制以符合不同伺服器需求
 - 📊 **Tpsbar 支援** - 即時顯示伺服器 TPS 狀態
-- 🐛 **Folia Bug 修復** - 針對 Folia 已知問題的專項修復
-- 💾 **多種存檔格式支援** - 支援 b_linear（linear 重新實作）存檔格式
-- 🔬 **生電功能強化** - 在 Folia 上實現更多生電內容（完整生電請使用 Fabric）
-- 🛠️ **更多實用功能** - 持續新增有用的伺服器功能
+- 🐛 **Folia Bug 修復** - 針對 Folia 已知問題的修復
+- 💾 **多種存檔格式支援** - 支援 b_linear 等存檔格式
+- 🔬 **生電功能強化** - 在 Folia 上支援更多生電相關行為
 
 ### 額外啟動參數
 
 - morninggloryclip.useMojangSource 強制伺服器端使用 Mojang 官方來源下載檔案
 - morninggloryclip.enable.mixin 為伺服器插件啟用 mixin 支援
 
-## 📥 下载
+## 📥 下載
 
 ### 穩定版本
 
@@ -48,7 +58,7 @@
 ### 建置步驟
 
 ```bash
-# 克隆项目
+# 複製專案
 git clone https://github.com/LophineLabs/Lecithin.git
 cd Lecithin
 
@@ -127,9 +137,9 @@ java {
 
 我們歡迎社群貢獻！詳細的貢獻指南請參考：
 
-- 📖 [貢獻指南（中文繁體）](./docs/CONTRIBUTING_ZH_TW.md)
-- 📖 [貢獻指南（中文簡體）](./docs/CONTRIBUTING.md)
-- 📖 [Contributing Guide (English)](./docs/CONTRIBUTING_EN.md)
+- 📖 [貢獻指南 - 中文（繁體）](./docs/CONTRIBUTING_ZH_TW.md)
+- 📖 [贡献指南 - 中文（简体）](./docs/CONTRIBUTING.md)
+- 📖 [Contributing Guide - English](./docs/CONTRIBUTING_EN.md)
 
 ## 📊 專案統計
 

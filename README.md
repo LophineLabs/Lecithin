@@ -16,7 +16,7 @@
   
   ![Repo contributors](https://img.shields.io/github/contributors/LophineLabs/Lecithin?style=for-the-badge&color=brightgreen)
   
-  [English](./README_EN.md) | **中文（简体）** | [中文（繁体）](./README_ZH_TW.md)
+  [English](./README_EN.md) | **中文（简体）** | [中文（繁體）](./README_ZH_TW.md)
 </div>
 
 ---
@@ -125,9 +125,9 @@ java {
 
 我们欢迎社区贡献！详细的贡献指南请查看：
 
-- 📖 [贡献指南 (中文简体)](./docs/CONTRIBUTING.md)
-- 📖 [贡献指南 (中文繁体)](./docs/CONTRIBUTING_ZH_TW.md)
-- 📖 [Contributing Guide (English)](./docs/CONTRIBUTING_EN.md)
+- 📖 [贡献指南 - 中文（简体）](./docs/CONTRIBUTING.md)
+- 📖 [貢獻指南 - 中文（繁體）](./docs/CONTRIBUTING_ZH_TW.md)
+- 📖 [Contributing Guide - English](./docs/CONTRIBUTING_EN.md)
 
 ## 📊 项目统计
 
