@@ -51,4 +51,15 @@ public class EventConfig implements IConfigModule {
      */
     @HotReloadUnsupported
     @ConfigInfo(name = "spawn-location-event")
-    public static boolean spawnLocationEvent = true;}
+    public static boolean spawnLocationEvent = true;
+
+    /**
+     * Put a player back with a position correction, not a teleport, after a cancelled
+     * {@code PlayerMoveEvent} - which is what Paper does. Turning this off restores the platform's
+     * rollback, which fires a {@code PLUGIN} {@code PlayerTeleportEvent} that another plugin can
+     * cancel to defeat the rollback. See {@link fun.bm.lecithin.compat.LecithinMoveRollback}.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "move-rollback-without-teleport")
+    public static boolean moveRollbackWithoutTeleport = true;
+}

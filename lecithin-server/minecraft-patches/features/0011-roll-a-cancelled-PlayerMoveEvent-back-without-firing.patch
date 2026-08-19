@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 19 Aug 2026 18:29:42 +0800
+Subject: [PATCH] roll a cancelled PlayerMoveEvent back without firing a
+ teleport
+
+Paper's rollback for a cancelled PlayerMoveEvent is internalTeleport: a position
+correction and a position packet, no Bukkit event. Read out of the Paper 26.2
+server jar rather than from memory - in both movement handlers the
+PlayerMoveEvent.isCancelled branch calls internalTeleport(Location), and only the
+neighbouring "a handler changed the destination" branch calls
+CraftPlayer.teleport(Location, PLUGIN).
+
+Folia replaced the cancel branch with teleportAsync(from, PLUGIN), a real
+teleport. Two observable consequences:
+
+  - every cancelled move now reports a PLUGIN teleport Paper never reported, once
+    per rejected movement packet;
+  - that teleport is itself cancellable, so a second plugin cancelling PLUGIN
+    teleports - an ordinary anti-abuse rule - defeats the rollback and the player
+    keeps the movement the first plugin refused. On Paper there is no event to
+    cancel.
+
+internalTeleport ends in Entity#teleportSetPosition, which writes position and
+rotation and re-derives the chunk section but performs no region handover, so it
+is correct exactly when the destination belongs to the region already ticking
+this player. For a rollback to the player's own previous position that is the
+normal case, but it is not guaranteed - a region can split - so this asks
+TickThread.isTickThreadFor instead of assuming, and falls back to the stock
+teleportAsync path on a no. Both movement handlers are covered; the vehicle one
+has the same Paper ground truth and the same shape.
+
+Kill switch: event-config.move-rollback-without-teleport=false.
+
+diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index e489da1acbb77c003951b608856ea706570cbed6..117f2ef2cc02f7a183f6773acfb6015e346d6174 100644
+--- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -739,7 +739,14 @@ public class ServerGamePacketListenerImpl
+ 
+                     // If the event is cancelled we move the player back to their old location.
+                     if (event.isCancelled()) {
++                        // Lecithin start - roll back without firing a teleport, as Paper does.
++                        // Folia turned this correction into a real PLUGIN teleport, which both reports a
++                        // teleport Paper never reports and lets a second plugin cancel the rollback and keep
++                        // the movement the first one refused. See LecithinMoveRollback.
++                        if (!fun.bm.lecithin.compat.LecithinMoveRollback.rollback(this, this.player, from)) {
+                         this.player.getBukkitEntity().teleportAsync(from, PlayerTeleportEvent.TeleportCause.PLUGIN); // Folia - region threading
++                        }
++                        // Lecithin end
+                         return;
+                     }
+ 
+@@ -1753,7 +1760,14 @@ public class ServerGamePacketListenerImpl
+ 
+                                         // If the event is cancelled we move the player back to their old location.
+                                         if (event.isCancelled()) {
++                                            // Lecithin start - roll back without firing a teleport, as Paper does.
++                                            // Folia turned this correction into a real PLUGIN teleport, which both reports a
++                                            // teleport Paper never reports and lets a second plugin cancel the rollback and keep
++                                            // the movement the first one refused. See LecithinMoveRollback.
++                                            if (!fun.bm.lecithin.compat.LecithinMoveRollback.rollback(this, this.player, from)) {
+                                             this.player.getBukkitEntity().teleportAsync(from, PlayerTeleportEvent.TeleportCause.PLUGIN); // Folia - region threading
++                                            }
++                                            // Lecithin end
+                                             return;
+                                         }
+ 
