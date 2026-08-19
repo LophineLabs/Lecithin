@@ -1,0 +1,115 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lecithin <noreply@lophinelabs.invalid>
+Date: Wed, 19 Aug 2026 14:40:44 +0800
+Subject: [PATCH] answer getRespawnLocation from any tick thread
+
+CraftPlayer#getRespawnLocation(true) resolves the RESPAWN world from the
+player's persisted respawn data and then validates the spawn block in it:
+
+  ServerLevel world = server.getLevel(respawnData.dimension());
+  ServerPlayer.findRespawnAndUseSpawnBlock(world, respawnConfig, false)
+    -> world.getBlockState(pos)
+    -> Level#getCurrentWorldData()
+
+getCurrentWorldData() resolves world data from whatever region this thread is
+currently ticking and then asserts identity with the level being read. The
+respawn world comes from stored data and is unrelated to either end of whatever
+the caller is doing, so the assertion fails whenever a player's bed is in a
+different world from the one whose region is ticking - and it throws
+IllegalStateException out of the plugin, not a diagnostic.
+CraftOfflinePlayer#getRespawnLocation(true) does the same thing from the same
+stored data, so it is guarded here too.
+
+That is the common case, not an exotic one. A cross-world move fires
+PlayerChangedWorldEvent on the destination region, and reading a player's bed
+spawn from that handler is a standard Paper idiom - directly, or through
+PaperLib.getBedSpawnLocationAsync, whose handler on this version is
+BedSpawnLocationSync and calls straight through on the calling thread (PaperLib's
+version regex takes a single digit for the major version, so on 26.2 it parses 0
+and every isVersion check is false - an upstream defect that misfires the same
+way on stock Paper).
+
+Ask first whether this thread may read the respawn world there, using the
+platform's own TickThread.isTickThreadFor, and validate only when it may. When
+it may not, return the stored location - which is exactly what the sibling
+overload getRespawnLocation(false) already returns. So on a thread that owns a
+region no ownership check is disabled, bypassed or swallowed; nothing is loaded,
+nothing is dispatched to another region or to the global scheduler, and the
+calling thread never waits.
+
+Tick threads only, deliberately. A thread that is not a tick thread at all - a
+plugin's own async pool - keeps upstream's hard failure, because there the
+exception is the async catcher doing its job rather than a regionisation
+artefact; answering it would delete a real diagnostic. This is the same line
+LecithinCrossRegionBlockRead draws.
+
+The shutdown thread is checked directly rather than through isTickThreadFor,
+which is not usable there: with no current region it returns isShutdownThread(),
+i.e. true for every chunk in every world, which would send the validating read
+through to throw World mismatch anyway - or to dereference a null
+RegionizedWorldData, since RegionShutdownThread exposes none while its
+shuttingDown region is unset, and that is precisely the window in which
+PlayerQuitEvent and plugin onDisable run. The read is allowed there only when a
+region of this same level is the one shutting down, and only for positions it
+covers.
+
+The bounded difference, stated rather than hidden: on the fallback path the
+answer is not validated, so a bed broken since the player last slept in it is
+reported instead of null. That is strictly better than throwing, which aborts
+the caller entirely. It is NOT strictly better than null: the fallback returns
+the raw stored block coordinate - the integer corner of the bed or anchor block,
+with no centring, no safety scan and no chunk load - so a plugin doing
+player.teleport(player.getRespawnLocation()) can put the player inside a block,
+where null would have sent them to world spawn. The trade is an unvalidated and
+possibly unsafe location in exchange for a call that completes at all. It cannot
+be improved on synchronously, because validating would mean blocking a region
+tick on another region's chunk.
+
+And the fallback is the common path, not an edge case: a bed in another world
+can never be validated from a region of this one, and neither can a bed in a
+region of this world that this thread does not own or whose chunks are not
+loaded. Every cross-world respawn lookup - the case this exists for - takes it.
+
+Grouped by API symbol, not by plugin: the gap is Player#getRespawnLocation and
+OfflinePlayer#getRespawnLocation, and no plugin name, jar hash or library name
+appears anywhere. Kill switch: compat-config.respawn-location-lookup=false.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftOfflinePlayer.java b/src/main/java/org/bukkit/craftbukkit/CraftOfflinePlayer.java
+index 1aa8f1e0a3093a8b9e77213c56f987cd6ca7df86..9afdae1115f7c2bbb9a644f62c2cead783817565 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftOfflinePlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftOfflinePlayer.java
+@@ -375,7 +375,14 @@ public class CraftOfflinePlayer implements OfflinePlayer, ConfigurationSerializa
+         final ServerLevel level = this.server.console.getLevel(respawnConfig.respawnData().dimension());
+         if (level == null) return null;
+ 
+-        if (!loadLocationAndValidate) {
++        // Lecithin start - validating reads the respawn world's blocks, which the caller may not own.
++        // The respawn world comes from stored data and is unrelated to the region this thread is
++        // ticking, so on any other region getCurrentWorldData() throws World mismatch out of the
++        // caller - Bukkit.getOfflinePlayer(uuid).getRespawnLocation(true) is reachable from every
++        // region thread and from the shutdown thread. Fall back to the stored location, which is
++        // what the sibling getRespawnLocation(false) already returns.
++        if (!loadLocationAndValidate || !fun.bm.lecithin.compat.LecithinRespawnLocationLookup.canValidate(level, respawnConfig.respawnData().pos())) {
++        // Lecithin end
+             return CraftLocation.toBukkit(respawnConfig.respawnData().pos(), level, respawnConfig.respawnData().yaw(), respawnConfig.respawnData().pitch());
+         }
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index e0f667b680aeba37d83cc225ec624ca4fd168038..1844205bd7f46b0d64bfeec7593e3d8e466544b2 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -1418,7 +1418,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+         final ServerLevel world = this.server.getServer().getLevel(respawnData.dimension());
+         if (world == null) return null;
+ 
+-        if (!loadLocationAndValidate) {
++        // Lecithin start - validating reads the respawn world's blocks, which the caller may not own.
++        // The respawn world comes from stored data and is unrelated to the region this thread is
++        // ticking, so on any other region getCurrentWorldData() throws World mismatch out of the
++        // caller - notably out of a PlayerChangedWorldEvent handler asking for a player's bed spawn.
++        // Fall back to the stored location, which is what getRespawnLocation(false) already returns.
++        if (!loadLocationAndValidate || !fun.bm.lecithin.compat.LecithinRespawnLocationLookup.canValidate(world, respawnData.pos())) {
++        // Lecithin end
+             return CraftLocation.toBukkit(respawnData.pos(), world, respawnData.yaw(), respawnData.pitch());
+         }
+ 

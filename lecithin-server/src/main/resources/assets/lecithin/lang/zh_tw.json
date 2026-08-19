@@ -11,6 +11,7 @@
   "lecithin.compat-config.paper-lib-environment.comment": "修正部分插件內嵌 PaperLib 在新版伺服器版本上的平台判斷，讓它選用適合目前環境的非同步區塊與傳送處理。\n不會修改 Bukkit.getVersion() 或插件內的 PaperLib 程式碼。",
   "lecithin.compat-config.permission-locking.comment": "補上 PaperPermissionManager 部分操作缺少的同步處理，避免啟動或權限註冊時的並行競爭。",
   "lecithin.compat-config.region-read-diagnostics.comment": "改善跨區域方塊讀取失敗時的錯誤資訊，顯示實際的執行緒脈絡、世界與座標。\n只改變診斷資訊，不放寬讀取限制。",
+  "lecithin.compat-config.respawn-location-lookup.comment": "當目前執行緒無法安全讀取玩家的重生世界時，改用玩家已儲存的重生位置，避免跨世界查詢直接失敗。\n這個位置未重新驗證，床或重生點已失效時仍可能回傳舊位置。",
   "lecithin.compat-config.restore-async-scheduler.comment": "恢復 Bukkit 非同步排程器，讓既有插件可以繼續建立、取消與清理非同步任務。\n非同步任務仍不得違規存取不屬於自己的世界狀態。",
   "lecithin.compat-config.riding-teleport.comment": "允許透過 Bukkit API 傳送正在騎乘其他實體的玩家或實體。\n目標會先離開載具，再只傳送目標本身；如果傳送被取消，會重新回到原本的載具。",
   "lecithin.compat-config.scoreboard-api.comment": "恢復部分 Bukkit Scoreboard API，並依 Folia 的區域所有權規則限制操作位置。\n主計分板的結構變更需在全域區域執行，玩家計分板需由擁有該玩家的執行緒指派。",

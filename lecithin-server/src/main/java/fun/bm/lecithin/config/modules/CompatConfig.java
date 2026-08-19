@@ -44,6 +44,16 @@ public class CompatConfig implements IConfigModule {
     @ConfigInfo(name = "riding-teleport")
     public static boolean ridingTeleport = true;
 
+    /**
+     * Return a player's stored respawn location, instead of throwing {@code World mismatch}, when
+     * the calling thread may not read the respawn world to validate the spawn block. Turning this
+     * off restores the unconditional validating read. See {@link
+     * fun.bm.lecithin.compat.LecithinRespawnLocationLookup}.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "respawn-location-lookup")
+    public static boolean respawnLocationLookup = true;
+
     @HotReloadUnsupported
     @ConfigInfo(name = "teleport-refusal-diagnostics")
     public static boolean teleportRefusalDiagnostics = false;
