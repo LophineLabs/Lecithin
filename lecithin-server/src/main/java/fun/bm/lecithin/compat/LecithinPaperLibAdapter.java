@@ -75,7 +75,7 @@ import java.util.jar.JarFile;
  * entry names are used only to shortlist candidates - the shape check is what decides, and anything
  * that fails it is left alone.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.paperLibEnvironment=false}, after which every embedded
+ * <p>Kill switch: {@code compat-config.paper-lib-environment=false}, after which every embedded
  * copy keeps whatever handlers it selected for itself.
  */
 public final class LecithinPaperLibAdapter {
@@ -211,7 +211,7 @@ public final class LecithinPaperLibAdapter {
                     "[Lecithin] {}: embedded PaperLib ({}) was using {} / {} - a synchronous pair it picked because"
                             + " its version regex cannot read \"{}\". Replaced with the platform's async chunk and teleport"
                             + " API so its callers work across region boundaries. Nothing about the reported version was"
-                            + " changed; disable with -Dlecithin.compat.paperLibEnvironment=false.",
+                            + " changed; disable with compat-config.paper-lib-environment=false.",
                     plugin.getName(),
                     binaryName,
                     simpleName(previousChunks),

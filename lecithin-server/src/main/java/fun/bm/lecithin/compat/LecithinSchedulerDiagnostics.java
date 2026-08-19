@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>This class changes <b>nothing</b> about scheduling behaviour. It only turns one opaque
  * exception into one attributable log record. The caller still throws exactly as before.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.diagnostics=false}.
+ * <p>Kill switch: {@code compat-config.diagnostics=false}.
  */
 public final class LecithinSchedulerDiagnostics {
 

@@ -67,7 +67,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * outright and the only real branch on it is in a BungeeCord proxy class the server never loads),
  * but the semantics did change and callers relying on them would notice.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.commandDispatchHandover=false} restores stock Folia
+ * <p>Kill switch: {@code compat-config.command-dispatch-handover=false} restores stock Folia
  * refusal for everything this class would have handed off.
  */
 public final class LecithinCommandDispatch {

@@ -23,7 +23,7 @@ import net.minecraft.server.MinecraftServer;
  * attribution when it is the wrong one.
  *
  * <pre>
- *   -Dlecithin.compat.scoreboardApi=false   # revert to Folia stock: the five methods throw again
+ *   compat-config.scoreboard-api=false   # revert to Folia stock: the five methods throw again
  * </pre>
  */
 public final class LecithinScoreboardSupport {

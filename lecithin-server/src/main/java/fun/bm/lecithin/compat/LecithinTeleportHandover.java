@@ -49,7 +49,7 @@ import org.bukkit.craftbukkit.entity.CraftEntity;
  * Bukkit API hands out such an entity - {@code World#spawnEntity} adds before it returns - so this
  * is a note, not a case that is defended against.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.teleportHandover=false} restores the plain refusal.
+ * <p>Kill switch: {@code compat-config.teleport-handover=false} restores the plain refusal.
  */
 public final class LecithinTeleportHandover {
 

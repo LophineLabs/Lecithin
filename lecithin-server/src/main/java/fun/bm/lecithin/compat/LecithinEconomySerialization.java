@@ -71,7 +71,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * new reach - it only narrows concurrency for a plugin that is already running. A failure here can
  * only lose the added protection, never create a new code path.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.economySerialization=false} - defaults to <b>on</b>, see
+ * <p>Kill switch: {@code compat-config.economy-serialization=false} - defaults to <b>on</b>, see
  * {@link #ENABLED} for why this one is not default-off.
  */
 public final class LecithinEconomySerialization {

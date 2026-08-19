@@ -64,7 +64,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * pre-existing property of the platform's async teleport, not something introduced here; relative
  * teleport flags are therefore not honoured on this path.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.teleportSemantics=false} restores the stock Folia
+ * <p>Kill switch: {@code compat-config.teleport-semantics=false} restores the stock Folia
  * behaviour, an unconditional throw from both {@code CraftEntity} and {@code CraftPlayer}.
  */
 public final class LecithinTeleportCompat {

@@ -71,7 +71,7 @@ import fun.bm.lecithin.config.modules.CompatConfig;
  * restore: all four single-target cases (same region, cross region, {@code teleportAsync},
  * cancelled) match Paper.
  *
- * <p>Kill switch: {@code -Dlecithin.compat.ridingTeleport=false} restores the stock refusal, and was
+ * <p>Kill switch: {@code compat-config.riding-teleport=false} restores the stock refusal, and was
  * measured to roll all four back to their pre-patch answers exactly.
  */
 public final class LecithinRidingTeleport {
