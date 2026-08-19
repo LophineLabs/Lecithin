@@ -30,10 +30,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * still real for a read:
  *
  * <ol>
- *   <li><b>Triggering a chunk load off-thread.</b> Real, and kept: this only answers from
- *       {@code getChunkAtIfLoadedImmediately}, and returns {@code null} - so the caller throws
- *       exactly as before - when the chunk is not already resident. Nothing here can load,
- *       generate, or tick a chunk.</li>
+ *   <li><b>Triggering a chunk load off-thread.</b> Real, and the reason this class has two paths.
+ *       A resident chunk is answered directly from {@code getChunkAtIfLoadedImmediately} and
+ *       nothing is loaded at all; that path is open to every tick thread. A chunk that is
+ *       <i>not</i> resident is loaded only from a thread that ticks no region - see
+ *       {@link #readByLoading}, which records why a region thread cannot do it and what happened
+ *       when it was allowed to. Nothing here loads a FULL chunk or ticks anything.</li>
  *   <li><b>Racing a concurrent writer on the block data.</b> Upstream has already made this safe.
  *       {@code PalettedContainer.data} is {@code volatile} and every mutator is {@code synchronized};
  *       a resize publishes a brand new {@code Data} rather than editing the old one; and Paper
@@ -42,10 +44,17 @@ import java.util.concurrent.ConcurrentHashMap;
  *       {@code LevelChunk.getBlockStateFinal} adds only a bounds check and a plain int read.</li>
  * </ol>
  * <p>
- * So the worst outcome of a read served here is a block state that is one tick stale - which is the
- * same thing every check-then-act plugin already races against on single-threaded Paper. It cannot
- * throw, cannot deadlock, cannot corrupt, and cannot observe a torn value: entries never span two
- * longs in {@code SimpleBitStorage}, so a concurrent write is seen either wholly or not at all.
+ * So the worst outcome of a read served from a resident chunk is a block state that is one tick
+ * stale - the same thing every check-then-act plugin already races against on single-threaded
+ * Paper. It cannot corrupt and cannot observe a torn value: entries never span two longs in
+ * {@code SimpleBitStorage}, so a concurrent write is seen either wholly or not at all.
+ *
+ * <p>Two bounds on that "one tick stale" claim, because it is load-bearing in review and it is not
+ * unconditional. A chunk read at a below-FULL status can be read while {@code ChunkFullTask} is
+ * still running post-load processing into the same section arrays, so the answer there can be
+ * pre-upgrade rather than merely old. And {@code readPalette} indexes the palette's live backing
+ * array, so a reader can briefly see an index whose slot is not yet published - that one is caught
+ * and turned back into the platform's own refusal rather than guessed at.
  *
  * <p><b>Writes are untouched.</b> {@code CraftBlock}'s "Cannot modify world asynchronously" check and
  * {@code LevelChunk.setBlockState}'s check are exactly as upstream wrote them.
@@ -57,12 +66,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Nothing here is per-plugin: no plugin name, jar hash or call-site list.
  *
- * <p>During startup there is a second case, handled by {@link #readByLoadingDuringStartup}: the chunk
- * is not resident because nobody has asked for it yet. Paper guarantees it would be; Folia does not.
- * That one is restricted to the bootstrap thread - see that method for why it cannot be fixed in
- * {@code prepareLevel} and why it does not widen the rule above.
- *
- * <p>Kill switch: {@code -Dlecithin.compat.crossRegionBlockRead=false} restores the stock refusal.
+ * <p>Kill switch: {@code compat-config.cross-region-block-read=false} restores the stock refusal.
  */
 public final class LecithinCrossRegionBlockRead {
 
@@ -97,7 +101,7 @@ public final class LecithinCrossRegionBlockRead {
             chunk = level.getChunkSource().getChunkAtIfCachedImmediately(chunkX, chunkZ);
         }
         if (chunk == null) {
-            return readByLoadingDuringStartup(level, pos);
+            return readByLoading(level, pos);
         }
         try {
             final BlockState state = chunk.getBlockState(pos);
@@ -126,129 +130,115 @@ public final class LecithinCrossRegionBlockRead {
     }
 
     /**
-     * Startup only: bring the chunk in and read it, instead of refusing because nobody had asked for
-     * it yet.
+     * The chunk is not resident, so load it - which is what Paper's own block read does. Restricted
+     * to threads that are ticking <b>no region at all</b>.
      *
-     * <h2>The invariant this restores</h2>
-     * <p>
-     * On Paper, {@code MinecraftServer.prepareLevel} activates the world's saved tickets inside
-     * {@code ChunkLoadCounter.track(...)} and then spins on {@code executeModerately()} until
-     * {@code pendingChunks() == 0}. So by the time any plugin is enabled, the chunks the world's
-     * tickets asked for - the spawn area among them - are in memory. Folia deletes both the
-     * {@code track} call and the {@code executeModerately} body, leaving a loop with nothing to wait
-     * for, and the invariant disappears with it.
+     * <h2>Which threads, and the defect that had to be fixed first</h2>
+     * Every tick thread, including a region thread reading another world - but only after
+     * {@link LecithinForeignWorldTicketUpdates}, without which that case is not merely slow but
+     * actively harmful.
      *
-     * <p>Reading the world spawn's block in {@code onEnable} is an ordinary thing for a plugin to do,
-     * and on Paper it is safe precisely because of that invariant. Without it the read has no legal
-     * outcome at all: the chunk is absent, so {@link #readIfResident} cannot answer, and the stock
-     * ownership check then throws - every boot, identically, with no way for the plugin to avoid it.
+     * <p>{@code syncLoadNonFull} calls {@code processTicketUpdates()} on the <b>target</b> world's
+     * holder manager, and on a tick thread that used to end in {@code processPendingFullUpdate()},
+     * which asserts the region's world against the manager's. From a region of another world it threw
+     * {@code World check failed} - after the chunk ticket had been added and before it was removed,
+     * with no {@code finally} to save it, so every such read leaked one permanently pinned chunk. The
+     * leak is what hid it: the chunk stayed resident, so the second read of the same block worked.
      *
-     * <h2>Why the wait is restored here and not in {@code prepareLevel}</h2>
-     * <p>
-     * Because it structurally cannot be restored there. Region tick threads do not exist yet at that
-     * point - {@code RegionizedServer.init()} calls {@code TickRegions.start()} and it runs
-     * <em>after</em> {@code initServer()}, which is where plugin enable happens - so anything that
-     * needs a region thread to complete a callback would wait forever. That is almost certainly why
-     * upstream removed the loop rather than adapting it, and it is why
-     * {@code ChunkTaskScheduler.syncLoadNonFull} refuses {@code FULL} outright, with the comment
-     * "on Folia, it is required that the non-full load can occur completely asynchronously to avoid
-     * deadlock between regions".
+     * <p>Measured on the A/B pair, a player's own region thread reading nether2 at (200000, 200000),
+     * before the guard: first read {@code THREW}, second read {@code AIR}, still resident twenty
+     * seconds later with nothing holding it. After the guard the first read answers and the ticket is
+     * released normally.
      *
-     * <p>So this uses the one primitive the platform does sanction, at the one status it sanctions:
-     * a <b>non-full</b> synchronous load. {@code MinecraftServer.prepareLevel} already calls exactly
-     * this, at exactly this status, on exactly this thread, to find a spawn height - so the pattern
-     * is upstream's own, not an invention. The load is performed by the chunk system's worker
-     * threads, which run independently of region ticking; this thread parks until they publish it.
-     *
-     * <p>A chunk at {@code FULL.getParent()} has its sections populated, which is all a block-state
-     * read needs. It is not ticking and nothing here makes it tick.
-     *
-     * <h2>Which threads, and why exactly those</h2>
-     * <p>
-     * The condition is {@code TickRegionScheduler.getCurrentRegion() == null}: the calling thread is
-     * not ticking any region. On this platform that is a closed set of exactly two threads, and both
-     * of them own no chunks anywhere:
+     * <p>The other two threads this exists for tick no region at all, and were always safe because
+     * {@code getCurrentRegionData()} answers null for them rather than comparing worlds:
      *
      * <ul>
-     *   <li>the <b>bootstrap thread</b> during startup - and it stops running anything at all once
-     *       startup ends;</li>
-     *   <li>the <b>global region thread</b>, which by construction owns no chunks in any world. The
-     *       class doc above already says a read from it "cannot legally read any block anywhere" -
-     *       there is no other thread the caller could have used.</li>
+     *   <li>the <b>bootstrap thread</b> during startup. Paper guarantees the spawn area is in memory
+     *       before any plugin is enabled - {@code prepareLevel} activates the world's tickets and
+     *       spins on {@code executeModerately()} until none are pending - and Folia deletes both, so
+     *       reading the world spawn in {@code onEnable} has no legal outcome without this;</li>
+     *   <li>the <b>global region thread</b>, which by construction owns no chunks in any world, so a
+     *       read from it has no other thread the caller could have used. Creating a world at runtime
+     *       lands in {@code MinecraftServer.setInitialSpawn} there, and upstream's own
+     *       {@code PlayerSpawnFinder.getLevelRespawnPos} calls this same {@code syncLoadNonFull} from
+     *       it - so the platform already pays this cost on this thread.</li>
      * </ul>
-     * <p>
-     * A thread that <em>is</em> ticking a region takes none of this: it returns {@code null} and gets
-     * the stock refusal, so "let any region thread pull in any chunk" stays exactly as closed as it
-     * was. That question is {@code D-52} and this does not answer it.
      *
-     * <p>The global region case is not speculative and the wait is not novel there either: creating a
-     * world at runtime lands in {@code MinecraftServer.setInitialSpawn} on the global region thread,
-     * and upstream's own {@code PlayerSpawnFinder.getLevelRespawnPos} calls this same
-     * {@code syncLoadNonFull} from it. Measured 2026-08-04d: it parks about 5s - long enough for the
-     * watchdog to log "Global region has not responded" - and then completes. So the platform already
-     * pays this cost on this thread; what it does not do is let the plugin's own follow-up read
-     * succeed afterwards.
+     * <h2>What it costs, stated plainly</h2>
+     * The calling thread runs nothing else until the load finishes; on the global region that stalls
+     * the global tick and the watchdog logs "Global region has not responded" past 5s. Paper stalls
+     * every region for the same read, because it has only one.
      *
-     * <h2>The cost, named</h2>
-     * <p>
-     * This blocks the calling thread until the chunk is published. On the bootstrap thread that is
-     * free - nothing else is running. On the global region thread it is not: the region's tick is
-     * stalled for the duration, and the watchdog logs "Global region has not responded" past 5s.
-     * The first read of an area pays it and the rest do not, because the chunk is resident
-     * afterwards and {@link #readIfResident} answers them - so a plugin scanning a spawn area pays
-     * per chunk, not per block.
+     * <p>Follow-up reads are cheaper but not free. A chunk brought in below FULL is never published
+     * into the full-chunk cache, so {@link #readIfResident} still cannot see it and every later read
+     * comes back through here; {@code syncLoadNonFull} then answers from its own first lookup without
+     * waiting, so the cost is a ticket add, a ticket-update pass and an area lock rather than a load.
      *
-     * <p>A plugin that scanned a large area of cold chunks from the global region would stall it
-     * repeatedly, and there is no cap here. That is deliberate rather than overlooked: the only
-     * alternative is the read being impossible, which is where this started. If it ever becomes a
-     * real problem the shape of the fix is a budget per tick, not a plugin list.
+     * <h2>Residual risk, not hidden</h2>
+     * The wait inside {@code syncLoadNonFull} is unbounded by construction and has no failure exit:
+     * it parks until the chunk reaches the status, and it discards the boolean from
+     * {@code beginChunkLoadForNonFullSync}, so a load that was never schedulable is waited on
+     * anyway. Holding the destination's {@code levelUnloadStateLock} covers the runtime
+     * level-unload case, which is the one that has been exercised - reads aimed at a world being
+     * unloaded were all answered and nothing hung.
      *
-     * <p>Nothing here is per-plugin, and it does not widen {@link #readIfResident} for writes or for
-     * non-tick threads. The same kill switch turns it off.
+     * <p>Server shutdown halts chunk systems outside that lock and is NOT covered. An attempt to
+     * close it here was reverted: a thread dump of the observed slow shutdown showed the stall in
+     * {@code MoonriseCommon.haltExecutors()} waiting on the chunk-system worker pool, not in a
+     * reader parked in this method, and the shutdown-aware exit written for it never engaged in any
+     * run because region threads are halted before it could. See the handoff for the measurements.
+     * A timeout is deliberately not used - it would leave the wait in place and stop reporting it.
      *
-     * @return the block state, or {@code null} to let the caller apply the stock ownership check
+     * <p>Kill switch: {@code compat-config.cross-region-block-load=false} narrows
+     * {@link #readIfResident} to chunks that are already resident, on every thread.
      */
-    private static BlockState readByLoadingDuringStartup(final ServerLevel level, final BlockPos pos) {
-        if (io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion() != null) {
+    private static BlockState readByLoading(final ServerLevel level, final BlockPos pos) {
+        if (!CompatConfig.crossRegionBlockLoad) {
             return null;
         }
-        final int chunkX = pos.getX() >> 4;
-        final int chunkZ = pos.getZ() >> 4;
+        // Hold the destination's unload lock for the whole load: Luminol can unload a level at
+        // runtime and its chunk system then stops answering, which would leave this wait with
+        // nothing to wait for. A world that is already unloading answers no here instead of parking.
+        // This does NOT cover server shutdown - see the residual risk note above.
+        if (!level.levelUnloadStateLock.acquireRead()) {
+            return null;
+        }
         try {
+            final int chunkX = pos.getX() >> 4;
+            final int chunkZ = pos.getZ() >> 4;
             final ChunkAccess loaded = level.moonrise$getChunkTaskScheduler()
                     .syncLoadNonFull(chunkX, chunkZ, ChunkStatus.FULL.getParent());
             if (loaded == null) {
                 return null;
             }
-            reportStartupLoad(level);
+            reportLoad(level);
             return loaded.getBlockState(pos);
         } catch (final Throwable failed) {
             // Falling through is not swallowing it: the caller then hits the stock ownership check
             // and fails exactly as it does today, naming the world and position.
-            LOGGER.warn("[Lecithin] Startup chunk load for a block read at {} in {} did not complete; "
+            LOGGER.warn("[Lecithin] Chunk load for a block read at {} in {} did not complete; "
                     + "falling through to the stock ownership check", pos, level.getWorld().getName(), failed);
             return null;
+        } finally {
+            level.levelUnloadStateLock.releaseRead();
         }
     }
 
-    private static void reportStartupLoad(final ServerLevel level) {
-        final String where = LecithinStartupGlobalContext.isStartupThread() ? "startup thread" : "global region thread";
-        if (REPORTED.add("no-region-load " + where + " -> " + level.getWorld().getName())) {
-            LOGGER.info("""
-                            [Lecithin] Loaded a chunk on the {} to answer a block read in world '{}'
-                              why     : Paper's prepareLevel blocks until the world's ticketed chunks are in \
-                            memory before any plugin is enabled; Folia drops that wait. A plugin reading the \
-                            world spawn - in onEnable, or right after creating a world - therefore finds no \
-                            chunk, and neither of these two threads owns a region it could read from instead.
-                              how     : ChunkTaskScheduler.syncLoadNonFull at FULL.getParent(), the same call \
-                            prepareLevel and PlayerSpawnFinder already make from these same threads. Non-full \
-                            and asynchronous, so it cannot deadlock against a region.
-                              scope   : threads that tick no region at all - the bootstrap thread and the global \
-                            region thread. A thread ticking a region still refuses, so this does not become a \
-                            general off-region chunk load.
-                              disable : -Dlecithin.compat.crossRegionBlockRead=false""",
-                    where, level.getWorld().getName());
+    private static void reportLoad(final ServerLevel level) {
+        final String where = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion() != null
+                ? "a region thread"
+                : (LecithinStartupGlobalContext.isStartupThread() ? "the startup thread" : "the global region thread");
+        if (!REPORTED.add("load " + where + " -> " + level.getWorld().getName())) {
+            return;
         }
+        LOGGER.info("""
+                        [Lecithin] Loaded a chunk on {} to answer a block read in world '{}'
+                          why     : Paper answers a block read by loading its chunk synchronously, so a plugin                         inspecting another world - a teleport destination above all - always gets an answer.                         Here that chunk belongs to a region this thread does not own and may not even exist                         yet, so without this the read throws and the plugin's whole operation fails.
+                          how     : ChunkTaskScheduler.syncLoadNonFull at FULL.getParent(). A below-FULL chunk                         is not region-owned, not ticked and not published into any region, and the platform's                         own implementation has a region-threading branch that waits through managedBlock -                         Folia calls it the same way from PlayerSpawnFinder.
+                          cost    : the calling region does not tick anything else until the load finishes.                         Paper stalls every region for the same read, because it has only one.
+                          disable : compat-config.cross-region-block-load=false""",
+                where, level.getWorld().getName());
     }
 
     private static void report(final ServerLevel level) {
@@ -263,7 +253,7 @@ public final class LecithinCrossRegionBlockRead {
                       safety  : resident chunks only (an absent chunk still throws, so nothing loads here), \
                     reads only (writes are unchanged), and PalettedContainer is already concurrent-read \
                     safe upstream. Worst case is a one-tick-stale block state.
-                      disable : -Dlecithin.compat.crossRegionBlockRead=false""", key);
+                      disable : compat-config.cross-region-block-read=false""", key);
         }
     }
 }

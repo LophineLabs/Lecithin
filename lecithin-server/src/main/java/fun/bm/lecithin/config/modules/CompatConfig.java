@@ -102,6 +102,38 @@ public class CompatConfig implements IConfigModule {
     @ConfigInfo(name = "cross-region-block-read")
     public static boolean crossRegionBlockRead = true;
 
+    /**
+     * Load the chunk a read-only block lookup needs, instead of refusing the read because nobody
+     * had asked for that chunk yet. Paper's block read loads its own chunk synchronously; this is
+     * the same answer, through the platform's own below-FULL sync load. It stalls the calling
+     * region until the load finishes - Paper stalls the whole server for the same read. Turning it
+     * off narrows {@link #crossRegionBlockRead} back to resident chunks only. See {@link
+     * fun.bm.lecithin.compat.LecithinCrossRegionBlockRead}.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "cross-region-block-load")
+    public static boolean crossRegionBlockLoad = true;
+
+    /**
+     * Answer {@code Server#getTPS()} and {@code Server#getAverageTickTime()} at server scope - the
+     * worst world region - when the caller is not inside a world region, instead of reporting the
+     * global tick's own figures (a constant 20.00, which is what console and RCON callers get) or
+     * throwing (which is what every other thread gets, the fork's own console GUI included).
+     * Callers that <em>are</em> on a world region thread keep the platform's per-region answer. See
+     * {@link fun.bm.lecithin.compat.LecithinServerTps}.
+     */
+    /**
+     * Do not try to drain another world's pending chunk full-status updates.
+     * {@code ChunkHolderManager#processTicketUpdates} guards that drain with a bare "is this a tick
+     * thread" test where it needs "is this a tick thread of this world", so a cross-world chunk load
+     * throws {@code World check failed} after adding its chunk ticket and before removing it -
+     * leaking that ticket permanently. See {@link
+     * fun.bm.lecithin.compat.LecithinForeignWorldTicketUpdates}.
+     */
+    @HotReloadUnsupported
+    @ConfigInfo(name = "foreign-world-ticket-updates")
+    public static boolean foreignWorldTicketUpdates = true;
+
     @HotReloadUnsupported
     @ConfigInfo(name = "startup-global-context")
     public static boolean startupGlobalContext = true;

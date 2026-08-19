@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 19 Aug 2026 20:00:42 +0800
+Subject: [PATCH] do not drain another world's pending chunk full-status
+ updates
+
+ChunkHolderManager#processTicketUpdates ends with
+
+    if (isTickThread) { ret |= this.processPendingFullUpdate(); }
+
+and processPendingFullUpdate resolves the region this thread is ticking through
+getCurrentRegionData(), which asserts that region's world against this
+manager's and throws "World check failed" when they differ.
+
+isTickThread is the wrong question. The drain needs a tick thread OF THIS
+WORLD, not any tick thread. The line immediately above already asks the right
+one: addChangedStatuses compares
+world.regioniser.getRegionAtUnsynchronised(...) == thisRegion and routes
+everything else through scheduleChunkTaskEventually.
+
+Nothing in the platform reaches this for a foreign world, so upstream never
+trips it. A cross-world chunk load does. ChunkTaskScheduler#syncLoadNonFull
+adds a NON_FULL_CHUNK_LOAD ticket, calls processTicketUpdates on the target
+world and then waits; called from a region thread of another world it threw
+between adding that ticket and removing it, and syncLoadNonFull has no finally.
+NON_FULL_CHUNK_LOAD is registered with no timeout, so the ticket was permanent:
+one pinned chunk holder, and through onChunkHolderCreate one region section in
+the target world, leaked per distinct chunk ever read that way.
+
+The leak is what hid it. The chunk stayed resident, so the second read of the
+same block succeeded - which is why a probe that read a spawn chunk, or read
+twice, reported the feature working.
+
+Measured on the A/B pair, a player's own region thread reading nether2 at
+(200000, 200000):
+
+  before   first read   THREW  + World check failed: expected world:
+                               minecraft:nether2, region world: minecraft:overworld
+           second read  AIR    isChunkLoaded=true
+           20s later    AIR    isChunkLoaded=true      <- never released
+
+Skipping is correct rather than merely quieter. The queue being drained belongs
+to the region this thread is ticking, i.e. to the other world, and applying it
+through this manager is exactly what the assertion exists to prevent. The
+target world's own regions drain their own queues when they tick, so nothing is
+dropped and nothing is deferred that would not have been deferred anyway.
+
+No ownership check is weakened: the assertion still fires for anything that
+genuinely reaches it with mismatched state. What changes is that a caller with
+no business processing that queue no longer walks into it.
+
+Kill switch: compat-config.foreign-world-ticket-updates=false.
+
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+index 8b06d0c893e07c969d35c4d7528927552c27b48b..0742a1cb65499df06ba0f319e4eab18a47814413 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+@@ -1596,7 +1596,14 @@ public final class ChunkHolderManager {
+             }
+         }
+ 
+-        if (isTickThread) {
++        // Lecithin start - a tick thread of THIS world, not any tick thread.
++        // processPendingFullUpdate drains the pending queue of the region this thread is ticking, and
++        // getCurrentRegionData asserts that region's world against this manager's. Reached for a
++        // foreign world - which a cross-world chunk load does - it throws after syncLoadNonFull has
++        // added its ticket and before it removes it, leaking that ticket permanently. The line above
++        // this one already asks the right question; see LecithinForeignWorldTicketUpdates.
++        if (isTickThread && fun.bm.lecithin.compat.LecithinForeignWorldTicketUpdates.mayProcessPendingFullUpdate(this.world)) {
++        // Lecithin end
+             ret |= this.processPendingFullUpdate();
+         }
+ 
