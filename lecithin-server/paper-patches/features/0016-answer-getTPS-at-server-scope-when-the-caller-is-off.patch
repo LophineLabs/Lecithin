@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 19 Aug 2026 19:15:02 +0800
+Subject: [PATCH] answer getTPS at server scope when the caller is off-region
+
+CraftServer#getTPS and #getAverageTickTime resolve the region the calling
+thread is ticking, and fail if they cannot. Both halves of that are wrong here,
+and the half that succeeds is the worse one.
+
+It throws. Paper's contract has no failure mode for either method - they read a
+statistic, touch no world state and need no ownership - so every caller off a
+tick thread dies with UnsupportedOperationException("Not on any region"). That
+is not only plugins: this fork's own console GUI calls getTPS from a Swing timer
+on the AWT event thread, unguarded, in two places (RAMDetails#update and
+StatsComponent#tick), so a server started with a GUI throws twice a second.
+
+It lies. Folia's global tick handle is a RegionScheduleHandle like any other, so
+a caller on the global region thread resolves it and is handed the global tick's
+own TPS. The global tick advances weather, the world border and connections and
+nothing else, so it sits at 20.00 however far behind the worlds are. Console and
+RCON commands run on the global region, which means an operator running any
+plugin's /tps from the console is told the server is healthy while every region
+crawls, and the common "restart when TPS drops below X" timer, scheduled on the
+global scheduler, never fires. A number that is always healthy is worse than an
+exception, because nothing reports it as broken.
+
+Measured on the A/B pair, no players, both cores idle: Paper's /tps prints
+20.0/20.0/20.0 and Folia's region-aware /tps prints 19.87 for the one live
+region - so the platform already knows the honest figure; it is only the Bukkit
+server-scope accessor that does not report it.
+
+Only the off-region answer changes. A caller on a world region thread still gets
+that region's figures, which is Folia's deliberate design and the better answer
+to a player-scoped question. Every other caller - global region thread, shutdown
+thread with no region, GUI thread, a plugin's own pool - gets the worst world
+region, which is the same figure the platform's own /tps prints first as "Lowest
+Region TPS". A mean or a median would hide exactly the region being asked about.
+
+The predicate is getCurrentRegion() == null rather than the platform's
+instanceof test, because that is the precise difference: the global tick handle
+satisfies the instanceof and is what produces the constant 20.00.
+
+A region with no tick report yet is skipped rather than counted as 20.00; with
+no world region at all the configured tick rate is returned, which is honest -
+nothing is behind because nothing is running.
+
+No information is lost by making a server-scope method answer at server scope:
+Server#getRegionTPS(World, int, int) and its Location/Chunk overloads already
+answer the per-region question, from any thread.
+
+Kill switch: compat-config.server-tps-off-region=false.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 6597649f8c8afd8c89c67ba28a7fc49b5f73e2c2..5295369735bbb7b4241fbb723ec5574e2353aaa1 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -2811,6 +2811,13 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public double getAverageTickTime() {
++        // Lecithin start - same gap as getTPS above: the worst region's tick time, rather than the
++        // global tick's or an exception, when the caller is not inside a world region.
++        final Long lecithinServerWide = fun.bm.lecithin.compat.LecithinServerTps.getAverageTickTimeNanos();
++        if (lecithinServerWide != null) {
++            return lecithinServerWide.longValue() / 1.0E6;
++        }
++        // Lecithin end
+         // Folia start - region threading
+         ca.spottedleaf.concurrentutil.scheduler.SchedulableTick task = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentTickingTask();
+         if (task == null) {
+@@ -2884,6 +2891,15 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public double[] getTPS() {
++        // Lecithin start - answer at server scope when the caller is not inside a world region.
++        // Stock resolves the global tick handle on the global region thread, which reports 20.00
++        // whatever the worlds are doing, and throws on every other thread including the fork's own
++        // GUI timer. See LecithinServerTps.
++        final double[] lecithinServerWide = fun.bm.lecithin.compat.LecithinServerTps.getTPS();
++        if (lecithinServerWide != null) {
++            return lecithinServerWide;
++        }
++        // Lecithin end
+         // Folia start - region threading
+         ca.spottedleaf.concurrentutil.scheduler.SchedulableTick task = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentTickingTask();
+         if (task == null) {

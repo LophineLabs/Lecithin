@@ -18,6 +18,7 @@
   "lecithin.compat-config.riding-teleport.comment": "允許透過 Bukkit API 傳送正在騎乘其他實體的玩家或實體。\n目標會先離開載具，再只傳送目標本身；如果傳送被取消，會重新回到原本的載具。",
   "lecithin.compat-config.scoreboard-api.comment": "恢復部分 Bukkit Scoreboard API，並依 Folia 的區域所有權規則限制操作位置。\n主計分板的結構變更需在全域區域執行，玩家計分板需由擁有該玩家的執行緒指派。",
   "lecithin.compat-config.server-current-tick.comment": "恢復 MinecraftServer.currentTick 的更新，供仍讀取此欄位的插件相容使用。",
+  "lecithin.compat-config.server-tps-off-region.comment": "讓 Server.getTPS() 與 Server.getAverageTickTime() 在不屬於任何世界區域的執行緒上也能取得整體伺服器狀態。\n世界區域執行緒仍保留原本的區域統計，其他情況會以已取樣區域中最差的狀態作為結果。",
   "lecithin.compat-config.startup-context-dispatch.comment": "讓插件在啟動階段建立的部分舊版同步排程呼叫交由全域區域執行。\n需要 caller-context-dispatch。",
   "lecithin.compat-config.startup-global-context.comment": "伺服器啟動完成前，讓啟動執行緒能處理需要全域區域所有權的操作。\n啟動完成後不再套用。",
   "lecithin.compat-config.teleport-handover.comment": "當實體前一次跨區域傳送仍在交接時，將後續傳送交給該實體的排程器處理，避免直接被拒絕。\n呼叫端不會等待前一次傳送完成。",

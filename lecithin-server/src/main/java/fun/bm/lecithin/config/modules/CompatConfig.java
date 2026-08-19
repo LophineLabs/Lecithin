@@ -135,6 +135,10 @@ public class CompatConfig implements IConfigModule {
     public static boolean foreignWorldTicketUpdates = true;
 
     @HotReloadUnsupported
+    @ConfigInfo(name = "server-tps-off-region")
+    public static boolean serverTpsOffRegion = true;
+
+    @HotReloadUnsupported
     @ConfigInfo(name = "startup-global-context")
     public static boolean startupGlobalContext = true;
 
