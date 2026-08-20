@@ -20,7 +20,7 @@ See LophinyaPassengerTeleportEvents for the measured Paper baseline.
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 7109dd7b5da23246ab6a5a48a6e8b5de008bcaa3..8e4dc469ec6d7d289991280a5bf2880cee62520f 100644
+index 4a87d7c35f856e4993f23c687c6c32f529047009..c33ab642d8f92d8f077ba77958bd913a6fb6f858 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -4598,6 +4598,14 @@ public abstract class Entity
