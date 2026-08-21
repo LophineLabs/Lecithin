@@ -25,6 +25,11 @@ paperweight {
             outputFile = file("lecithin-api/build.gradle.kts")
             patchFile = file("lecithin-api/build.gradle.kts.patch")
         }
+        patchFile {
+            path = "lophine-checkstyle/build.gradle.kts"
+            outputFile = file("lecithin-checkstyle/build.gradle.kts")
+            patchFile = file("lecithin-checkstyle/build.gradle.kts.patch")
+        }
         patchRepo("paperApi") {
             upstreamPath = "paper-api"
             patchesDir = file("lecithin-api/paper-patches")
@@ -40,6 +45,16 @@ paperweight {
             excludes = listOf("build.gradle.kts", "build.gradle.kts.patch", "paper-patches")
             patchesDir = file("lecithin-api/lophine-patches")
             outputDir = file("lophine-api")
+        }
+        patchRepo("paperCheckstyle") {
+            upstreamPath = "paper-checkstyle"
+            patchesDir = file("lecithin-checkstyle/paper-patches")
+            outputDir = file("paper-checkstyle")
+        }
+        patchRepo("paperCheckstyleConfig") {
+            upstreamPath = ".checkstyle"
+            patchesDir = file("lecithin-checkstyle/config-patches")
+            outputDir = file(".checkstyle")
         }
     }
 }

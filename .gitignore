@@ -8,9 +8,12 @@ build
 
 /lecithin-server/build.gradle.kts
 /lecithin-api/build.gradle.kts
+/lecithin-checkstyle/build.gradle.kts
 /luminol-server/src/minecraft
 /paper-server
 /paper-api
 /paper-api-generator
+/paper-checkstyle
+/.checkstyle
 
 .idea/

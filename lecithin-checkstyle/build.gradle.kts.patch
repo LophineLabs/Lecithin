@@ -1,0 +1,11 @@
+--- a/lophine-checkstyle/build.gradle.kts
++++ b/lophine-checkstyle/build.gradle.kts
+@@ -33,7 +_,7 @@
+     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+     testData.implementationConfigurationName("org.jspecify:jspecify:1.0.0")
+ 
+-    checkstyle(project(":lophine-checkstyle"))
++    checkstyle(project(":lecithin-checkstyle"))
+ }
+ 
+ tasks {

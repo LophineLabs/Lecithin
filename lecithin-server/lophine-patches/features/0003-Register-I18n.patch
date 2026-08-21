@@ -5,7 +5,7 @@ Subject: [PATCH] Register I18n
 
 
 diff --git a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
-index 7c847d46a2fcf710fde9ef8e4b39dea50a6ef321..2e5fdb2def00b5a0f86a2025db98acbd69986d19 100644
+index bd3b7b6ab86af8e0f97bed9db2026d607f1c3a3d..a93b3a9453edbe3b67335f21d7ca62fe294bded6 100644
 --- a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
 +++ b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
 @@ -56,6 +56,7 @@ public class ServerI18nUtil {

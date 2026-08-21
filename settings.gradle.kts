@@ -20,7 +20,7 @@ plugins {
 
 rootProject.name = "lecithin"
 
-for (name in listOf("lecithin-api", "lecithin-server")) {
+for (name in listOf("lecithin-api", "lecithin-server", "lecithin-checkstyle")) {
     include(name)
     file(name).mkdirs()
 }
