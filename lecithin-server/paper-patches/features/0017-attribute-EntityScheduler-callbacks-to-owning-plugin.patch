@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 22 Aug 2026 18:18:02 +0800
+Subject: [PATCH] attribute EntityScheduler callbacks to owning plugin in
+ profiler
+
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+index 811b8efd155540beac19b70afa1885bff570cd3e..8339b79adee43b1018b9f718f708d39b2b32fe83 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+@@ -15,6 +15,25 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+ 
+     private final CraftEntity entity;
+ 
++    private static final java.util.concurrent.ConcurrentHashMap<String, Integer> PLUGIN_TIMER_IDS = new java.util.concurrent.ConcurrentHashMap<>();
++
++    private static int getPluginTimerId(final Plugin plugin) {
++        if (plugin == null) {
++            return -1;
++        }
++        final String name = plugin.getName();
++        if (name == null) {
++            return -1;
++        }
++        final Integer cached = PLUGIN_TIMER_IDS.get(name);
++        if (cached != null) {
++            return cached.intValue();
++        }
++        final int timerId = ca.spottedleaf.leafprofiler.LProfilerRegistry.GLOBAL_REGISTRY.getOrCreateTimer("Plugin: " + name);
++        PLUGIN_TIMER_IDS.put(name, Integer.valueOf(timerId));
++        return timerId;
++    }
++
+     public FoliaEntityScheduler(final CraftEntity entity) {
+         this.entity = entity;
+     }
+@@ -22,16 +41,25 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+     private static Consumer<? extends Entity> wrap(final Plugin plugin, final Runnable runnable) {
+         Objects.requireNonNull(plugin, "Plugin may not be null");
+         Objects.requireNonNull(runnable, "Runnable may not be null");
++        final int timerId = getPluginTimerId(plugin);
+ 
+         return (final Entity nmsEntity) -> {
+             if (!plugin.isEnabled()) {
+                 // don't execute if the plugin is disabled
+                 return;
+             }
++            final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle profiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler();
++            if (timerId >= 0) {
++                profiler.startTimer(timerId);
++            }
+             try {
+                 runnable.run();
+             } catch (final Throwable throwable) {
+                 plugin.getLogger().log(Level.WARNING, "Entity task for " + plugin.getDescription().getFullName() + " generated an exception", throwable);
++            } finally {
++                if (timerId >= 0) {
++                    profiler.stopTimer(timerId);
++                }
+             }
+         };
+     }
+@@ -120,6 +148,7 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+         private static final int STATE_CANCELLED           = 4;
+ 
+         private final Plugin plugin;
++        private final int timerId;
+         private final long repeatDelay; // in ticks
+         private Consumer<ScheduledTask> run;
+         private Runnable retired;
+@@ -129,6 +158,7 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+ 
+         private EntityScheduledTask(final Plugin plugin, final long repeatDelay, final Consumer<ScheduledTask> run, final Runnable retired) {
+             this.plugin = plugin;
++            this.timerId = getPluginTimerId(plugin);
+             this.repeatDelay = repeatDelay;
+             this.run = run;
+             this.retired = retired;
+@@ -161,7 +191,11 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+             }
+ 
+             final boolean retired = entity.isRemoved();
++            final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle profiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler();
+ 
++            if (this.timerId >= 0) {
++                profiler.startTimer(this.timerId);
++            }
+             try {
+                 if (!retired) {
+                     this.run.accept(this);
+@@ -173,6 +207,9 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+             } catch (final Throwable throwable) {
+                 this.plugin.getLogger().log(Level.WARNING, "Entity task for " + this.plugin.getDescription().getFullName() + " generated an exception", throwable);
+             } finally {
++                if (this.timerId >= 0) {
++                    profiler.stopTimer(this.timerId);
++                }
+                 boolean reschedule = false;
+                  if (!repeating && !retired) {
+                     this.setStateVolatile(STATE_FINISHED);
