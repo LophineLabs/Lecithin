@@ -29,8 +29,8 @@ public class WorldsCommand extends LiteralNode {
 
     @Override
     protected boolean execute(@NotNull CommandContext context) {
-        for (final String line : LecithinContextReport.worlds()) {
-            context.getSender().sendMessage(Component.text(line, NamedTextColor.GRAY));
+        for (final Component line : LecithinContextReport.worlds()) {
+            context.getSender().sendMessage(line);
         }
         return true;
     }

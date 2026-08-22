@@ -1,16 +1,23 @@
 package fun.bm.lecithin.command;
 
 import com.mojang.brigadier.StringReader;
+import io.papermc.paper.threadedregions.RegionizedServer;
 import io.papermc.paper.threadedregions.RegionizedWorldData;
 import io.papermc.paper.threadedregions.ThreadedRegionizer;
 import io.papermc.paper.threadedregions.TickRegionScheduler;
 import io.papermc.paper.threadedregions.TickRegions;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.selector.EntitySelector;
 import net.minecraft.commands.arguments.selector.EntitySelectorParser;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -20,36 +27,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Lecithin: builds the text of the {@code /lecithin} diagnostic reports.
+ * Lecithin: builds rich Adventure Component diagnostic reports for {@code /lecithin context} and {@code /lecithin worlds}.
  *
- * <h2>What this exists to settle</h2>
- * Two separate claims are regularly made about extra worlds created or imported at runtime: that
- * their region work is somehow charged to the main world, and that vanilla selectors resolve
- * against the wrong world. Neither can be argued from outside, because the identities involved -
- * a {@code ServerLevel}, its {@link ThreadedRegionizer}, the region a thread is currently ticking,
- * and the world a {@code CommandSourceStack} carries - have no Bukkit API at all.
- *
- * <p>This prints them. Every line is a read of a field the platform already maintains; nothing is
- * derived, inferred or cached, and no state is written. Run the same command from a player, from a
- * command block and from the console and the three answers can be compared directly.
- *
- * <h2>Reading the output</h2>
- * <ul>
- *   <li>Every world's {@code level} and {@code regioniser} identity hash differ from every other
- *       world's, and each regioniser's {@code world} back-reference points at its own level. That
- *       is what "each world has its own regioniser" means, and it is checked on every
- *       {@code Level#getCurrentWorldData()} call at runtime anyway - a shared regioniser would
- *       make the server throw {@code World mismatch} constantly rather than mis-attribute
- *       anything.</li>
- *   <li>A command source's {@code level} and {@code position} are what a selector measures from.
- *       For a player they are that player's; for the console they are the primary world's respawn
- *       dimension and spawn point, which is vanilla behaviour and not a property of this fork.</li>
- *   <li>{@code @p} is not world-limited unless the selector says so, so it searches every world by
- *       raw coordinate distance from that position. The report shows both the source position and
- *       the world of the player it picked, which is what makes the two facts add up.</li>
- * </ul>
+ * <p>Uses the standard Folia/Lecithin hex color palette with structured bullets, status badges,
+ * and explanatory hover tooltips so administrators and developers can clearly understand the multithreaded
+ * execution context, regioniser ownership, and selector resolution semantics.
  */
 public final class LecithinContextReport {
+
+    public static final TextColor HEADER = TextColor.color(79, 164, 240);       // #4FA4F0 (Bright sky blue)
+    public static final TextColor PRIMARY = TextColor.color(48, 145, 237);      // #3091ED (Medium blue)
+    public static final TextColor SECONDARY = TextColor.color(104, 177, 240);   // #68B1F0 (Light blue)
+    public static final TextColor INFORMATION = TextColor.color(180, 220, 255); // #B4DCFF (Soft pale blue)
+    public static final TextColor LIST = TextColor.color(33, 97, 188);          // #2161BC (Royal blue bullet)
+    public static final TextColor MUTED = TextColor.color(120, 140, 160);       // #788CA0 (Muted gray-blue for pointers)
+    public static final TextColor SUCCESS = TextColor.color(85, 255, 85);       // #55FF55 (Green)
+    public static final TextColor WARNING = TextColor.color(255, 255, 85);      // #FFFF55 (Yellow)
+    public static final TextColor ERROR = TextColor.color(255, 85, 85);         // #FF5555 (Red)
 
     private LecithinContextReport() {
     }
@@ -66,126 +60,323 @@ public final class LecithinContextReport {
         return level == null ? "null" : level.getWorld().getName();
     }
 
+    private static Component section(final String title, final String tooltip) {
+        final TextComponent.Builder builder = Component.text();
+        builder.append(Component.text("== ", SECONDARY));
+        builder.append(Component.text(title, HEADER, TextDecoration.BOLD));
+        builder.append(Component.text(" ==", SECONDARY));
+        if (tooltip != null && !tooltip.isEmpty()) {
+            builder.hoverEvent(HoverEvent.showText(Component.text(tooltip, SECONDARY)));
+        }
+        return builder.build();
+    }
+
+    private static Component bullet(final String label, final Component value, final String tooltip) {
+        final TextComponent.Builder builder = Component.text();
+        builder.append(Component.text(" - ", LIST, TextDecoration.BOLD));
+        builder.append(Component.text(label + ": ", PRIMARY));
+        builder.append(value);
+        if (tooltip != null && !tooltip.isEmpty()) {
+            builder.hoverEvent(HoverEvent.showText(Component.text(tooltip, SECONDARY)));
+        }
+        return builder.build();
+    }
+
+    private static Component subBullet(final String label, final Component value, final String tooltip) {
+        final TextComponent.Builder builder = Component.text();
+        builder.append(Component.text("   - ", SECONDARY));
+        builder.append(Component.text(label + ": ", PRIMARY));
+        builder.append(value);
+        if (tooltip != null && !tooltip.isEmpty()) {
+            builder.hoverEvent(HoverEvent.showText(Component.text(tooltip, SECONDARY)));
+        }
+        return builder.build();
+    }
+
     /**
-     * The execution context of the calling thread and of the command source it was given.
+     * Builds the diagnostic report for the execution context of the calling thread and command source.
      */
-    public static List<String> context(final CommandSourceStack source) {
-        final List<String> out = new ArrayList<>();
+    public static List<Component> context(final CommandSourceStack source) {
+        final List<Component> out = new ArrayList<>();
         final Thread thread = Thread.currentThread();
+        final boolean isTickThread = ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
+        final boolean isGlobalTick = RegionizedServer.isGlobalTickThread();
 
-        out.add("== thread ==");
-        out.add("  name          : " + thread.getName());
-        out.add("  tick thread   : " + ca.spottedleaf.moonrise.common.util.TickThread.isTickThread());
-        out.add("  global region : " + io.papermc.paper.threadedregions.RegionizedServer.isGlobalTickThread());
+        // 1. Title Header
+        out.add(Component.text()
+                .append(Component.text("Lecithin Context Report", HEADER, TextDecoration.BOLD))
+                .append(Component.text(" (Thread & Execution Diagnostics)", SECONDARY))
+                .build());
 
-        out.add("== current tick region ==");
+        // 2. Section: Thread Environment
+        out.add(section("Thread Environment", "當前執行此指令的 Java 執行緒角色與排程狀態"));
+        out.add(bullet("Thread Name", Component.text(thread.getName(), INFORMATION), "呼叫端所在的 Java Thread 識別名稱"));
+
+        final Component roleBadge;
+        if (isTickThread) {
+            if (isGlobalTick) {
+                roleBadge = Component.text("[Global Region Thread]", WARNING, TextDecoration.BOLD)
+                        .hoverEvent(HoverEvent.showText(Component.text("全域 Tick 執行緒：處理連線封包、天氣、世界邊界、主控台/RCON 指令與全域任務（不包含具體世界區塊）", SECONDARY)));
+            } else {
+                roleBadge = Component.text("[World Region Tick Thread]", SUCCESS, TextDecoration.BOLD)
+                        .hoverEvent(HoverEvent.showText(Component.text("世界區域 Tick 執行緒：正在執行某個世界的具體區域分區（擁有該區域內的區塊與實體）", SECONDARY)));
+            }
+        } else {
+            roleBadge = Component.text("[Off-Region / Async Thread]", MUTED)
+                    .hoverEvent(HoverEvent.showText(Component.text("非同步或非區域執行緒：未持有任何世界的 tick 鎖，無法直接進行同步的區塊/實體操作", SECONDARY)));
+        }
+        out.add(bullet("Thread Role", roleBadge, "此執行緒在 Folia 多執行緒區域化架構中的職責角色"));
+
+        final Component flags = Component.text()
+                .append(Component.text("Tick Thread: ", PRIMARY))
+                .append(isTickThread ? Component.text("[Yes]", SUCCESS) : Component.text("[No]", MUTED))
+                .append(Component.text(" | Global Region: ", SECONDARY))
+                .append(isGlobalTick ? Component.text("[Yes]", WARNING) : Component.text("[No]", MUTED))
+                .build();
+        out.add(bullet("Flags", flags, "TickThread 標記與是否為全域 Region 執行緒"));
+
+        // 3. Section: Current Tick Region
+        out.add(section("Current Tick Region", "此執行緒當前正在 Tick 的世界分區（ThreadedRegion）"));
         final ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region =
                 TickRegionScheduler.getCurrentRegion();
         if (region == null) {
-            out.add("  region        : none (this thread is not ticking a region)");
+            out.add(bullet("Active Region", Component.text("None (This thread is not ticking a region)", MUTED),
+                    "此執行緒目前未綁定任何世界分區（由主控台、RCON 或非同步排程呼叫時為正常現象）"));
         } else {
             final ThreadedRegionizer<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> regioniser = region.regioniser;
-            out.add("  region        : " + id(region));
-            out.add("  regioniser    : " + id(regioniser));
-            out.add("  regioniser.world : " + worldOf(regioniser.world) + " " + id(regioniser.world));
+            final ChunkPos centerChunk = region.getCenterChunk();
+            final String centerCoord = centerChunk == null ? "unknown" : ((centerChunk.x() << 4) | 7) + ", " + ((centerChunk.z() << 4) | 7);
+            final boolean isOwn = regioniser.world == regioniser.world.getWorld().getHandle();
+
+            final Component regionInfo = Component.text()
+                    .append(Component.text(worldOf(regioniser.world) + " (" + centerCoord + ")", INFORMATION))
+                    .append(Component.text(" " + id(region), MUTED))
+                    .build();
+            out.add(bullet("Region Center", regionInfo, "當前分區中心區塊座標與實例 ID"));
+
+            final Component regioniserInfo = Component.text()
+                    .append(Component.text(worldOf(regioniser.world), INFORMATION))
+                    .append(Component.text(" " + id(regioniser), MUTED))
+                    .append(Component.text(" "))
+                    .append(isOwn
+                            ? Component.text("[Dedicated Regioniser]", SUCCESS)
+                                    .hoverEvent(HoverEvent.showText(Component.text("該世界擁有獨立的 ThreadedRegionizer，區域排程完全隔離", SECONDARY)))
+                            : Component.text("[SHARED WITH OTHER WORLD]", ERROR, TextDecoration.BOLD)
+                                    .hoverEvent(HoverEvent.showText(Component.text("錯誤：Regioniser 與其他世界共用！", ERROR))))
+                    .build();
+            out.add(bullet("Regioniser", regioniserInfo, "該世界專屬的 ThreadedRegionizer 排程器實例"));
+
+            final RegionizedWorldData worldData = TickRegionScheduler.getCurrentRegionizedWorldData();
+            if (worldData != null) {
+                final Component worldDataInfo = Component.text()
+                        .append(Component.text(worldOf(worldData.world), INFORMATION))
+                        .append(Component.text(" " + id(worldData), MUTED))
+                        .build();
+                out.add(bullet("Region WorldData", worldDataInfo, "該分區對應的 RegionizedWorldData 視圖"));
+            }
         }
-        final RegionizedWorldData worldData = TickRegionScheduler.getCurrentRegionizedWorldData();
-        out.add("  worldData     : " + id(worldData)
-                + (worldData == null ? "" : " world=" + worldOf(worldData.world) + " " + id(worldData.world)));
 
-        out.add("== command source ==");
-        out.add("  sender        : " + source.getBukkitSender().getName()
-                + " [" + source.getBukkitSender().getClass().getName() + "]");
-        out.add("  displayName   : " + source.getTextName());
-        out.add("  level         : " + worldOf(source.getLevel()) + " " + id(source.getLevel()));
-        out.add("  position      : " + pos(source.getPosition()));
-        out.add("  rotation      : " + source.getRotation());
+        // 4. Section: Command Source
+        out.add(section("Command Source", "執行此指令的來源物件與錨定座標"));
+        final Component senderInfo = Component.text()
+                .append(Component.text(source.getBukkitSender().getName(), INFORMATION))
+                .append(Component.text(" [" + source.getBukkitSender().getClass().getSimpleName() + "]", SECONDARY))
+                .build();
+        out.add(bullet("Sender", senderInfo, "指令發送者實體或主控台介面"));
 
+        final Component sourceWorldInfo = Component.text()
+                .append(Component.text(worldOf(source.getLevel()), INFORMATION))
+                .append(Component.text(" (Dim: " + source.getLevel().dimension().identifier() + ")", SECONDARY))
+                .append(Component.text(" " + id(source.getLevel()), MUTED))
+                .build();
+        out.add(bullet("Source World", sourceWorldInfo, "指令來源綁定的世界（選擇器與相對座標以此世界為基準）"));
+
+        final Component posInfo = Component.text()
+                .append(Component.text(pos(source.getPosition()), INFORMATION))
+                .append(Component.text(" | Rotation: " + String.format("%.1f, %.1f", source.getRotation().x, source.getRotation().y), SECONDARY))
+                .build();
+        out.add(bullet("Source Position", posInfo, "指令來源的執行座標 (X, Y, Z) 與視角朝向"));
+
+        // 5. Section: Source Entity & Ownership
+        out.add(section("Source Entity & Ownership", "指令綁定的實體及其區域執行緒所有權"));
         final Entity entity = source.getEntity();
-        out.add("== source entity ==");
         if (entity == null) {
-            out.add("  entity        : none (this source is not an entity)");
+            out.add(bullet("Entity", Component.text("None (Source is not an entity)", MUTED), "指令來源為非實體（例如控制台、RCON 或函數）"));
         } else {
             final ServerLevel entityLevel = (ServerLevel) entity.level();
-            out.add("  entity        : " + entity.getScoreboardName() + " [" + entity.getType().toShortString() + "] " + id(entity));
-            out.add("  level         : " + worldOf(entityLevel) + " " + id(entityLevel));
-            out.add("  position      : " + pos(entity.position()));
-            out.add("  owned by this thread : "
-                    + ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(entity));
-            out.add("  level == source level : " + (entityLevel == source.getLevel()));
+            final boolean isOwner = ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(entity);
+            final boolean sameWorld = entityLevel == source.getLevel();
+
+            final Component entityInfo = Component.text()
+                    .append(Component.text(entity.getScoreboardName(), INFORMATION))
+                    .append(Component.text(" [" + entity.getType().toShortString() + "]", SECONDARY))
+                    .append(Component.text(" " + id(entity), MUTED))
+                    .build();
+            out.add(bullet("Entity", entityInfo, "指令綁定的實體名稱與類型"));
+
+            final Component entityLoc = Component.text()
+                    .append(Component.text(worldOf(entityLevel), INFORMATION))
+                    .append(Component.text(" (" + pos(entity.position()) + ")", SECONDARY))
+                    .build();
+            out.add(bullet("Entity Position", entityLoc, "實體的實際世界與精確空間座標"));
+
+            final Component ownership = isOwner
+                    ? Component.text("[Owned by Thread (Safe Sync Access)]", SUCCESS, TextDecoration.BOLD)
+                            .hoverEvent(HoverEvent.showText(Component.text("當前執行緒擁有該實體所在區域的所有權，可直接進行同步 Bukkit API 存取", SECONDARY)))
+                    : Component.text("[Cross-Region / Not Owned (Requires Scheduler)]", WARNING, TextDecoration.BOLD)
+                            .hoverEvent(HoverEvent.showText(Component.text("當前執行緒不擁有該實體區域！若要存取此實體，必須透過 entity.getScheduler() 排程轉派", SECONDARY)));
+            out.add(bullet("Thread Ownership", ownership, "當前執行緒是否直接管轄該實體所在的區域"));
+
+            final Component worldAlign = sameWorld
+                    ? Component.text("[Same World as Source]", SUCCESS)
+                    : Component.text("[World Mismatch with Source]", ERROR, TextDecoration.BOLD);
+            out.add(bullet("World Alignment", worldAlign, "實體所在世界是否與指令來源世界一致"));
         }
 
-        out.add("== selectors, resolved from this source ==");
-        out.add("  @p            : " + resolveSingle(source, "@p"));
-        out.add("  @p[distance=..] : " + resolveSingle(source, "@p[distance=..1000000]"));
-        out.add("  @a            : " + resolveAll(source, "@a"));
+        // 6. Section: Target Selector Resolution
+        out.add(section("Target Selector Resolution", "原版選擇器以此來源座標為基準解析出的目標玩家（說明為何跨世界時 @p 可能選中其他世界的玩家）"));
+        out.add(bullet("Selector @p (Nearest)", resolveSingle(source, "@p"), "原版 @p 依三維歐氏幾何距離在全服搜尋最近玩家"));
+        out.add(bullet("Selector @p[distance=..1M]", resolveSingle(source, "@p[distance=..1000000]"), "帶有顯式距離範圍約束的 @p 搜尋結果"));
+        out.add(bullet("Selector @a (All)", resolveAll(source, "@a"), "符合條件的所有在線玩家清單"));
+
         return out;
     }
 
     /**
-     * Level and regioniser identity for every loaded world, so a world created or imported at
-     * runtime can be compared directly against one loaded at startup.
+     * Builds the diagnostic report for level and regioniser identity of every loaded world.
      */
-    public static List<String> worlds() {
-        final List<String> out = new ArrayList<>();
-        out.add("== worlds ==");
-        for (final World bukkitWorld : Bukkit.getWorlds()) {
+    public static List<Component> worlds() {
+        final List<Component> out = new ArrayList<>();
+        final List<World> bukkitWorlds = Bukkit.getWorlds();
+
+        long totalChunks = 0;
+        int totalRegions = 0;
+
+        for (final World bukkitWorld : bukkitWorlds) {
+            final ServerLevel level = ((CraftWorld) bukkitWorld).getHandle();
+            final List<ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData>> regions = new ArrayList<>();
+            level.regioniser.computeForAllRegions(regions::add);
+            totalRegions += regions.size();
+            totalChunks += bukkitWorld.getLoadedChunks().length;
+        }
+
+        // 1. Title Header
+        out.add(Component.text()
+                .append(Component.text("Lecithin Loaded Worlds Report", HEADER, TextDecoration.BOLD))
+                .append(Component.text(" (" + bukkitWorlds.size() + " loaded worlds)", SECONDARY))
+                .build());
+
+        // 2. Summary Row
+        final Component summary = Component.text()
+                .append(Component.text("Total Worlds: ", PRIMARY))
+                .append(Component.text(bukkitWorlds.size(), INFORMATION))
+                .append(Component.text(" | Online Players: ", SECONDARY))
+                .append(Component.text(Bukkit.getOnlinePlayers().size(), INFORMATION))
+                .append(Component.text(" | Active Regions: ", SECONDARY))
+                .append(Component.text(totalRegions, INFORMATION))
+                .append(Component.text(" | Loaded Chunks: ", SECONDARY))
+                .append(Component.text(totalChunks, INFORMATION))
+                .build();
+        out.add(bullet("Summary", summary, "全服載入的世界、在線玩家與區域總覽"));
+
+        // 3. Per-World Breakdown
+        for (final World bukkitWorld : bukkitWorlds) {
             final ServerLevel level = ((CraftWorld) bukkitWorld).getHandle();
             final ThreadedRegionizer<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> regioniser = level.regioniser;
             final List<ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData>> regions = new ArrayList<>();
             regioniser.computeForAllRegions(regions::add);
-            out.add("  " + bukkitWorld.getName());
-            out.add("    level        : " + id(level) + " dimension=" + level.dimension().identifier());
-            out.add("    regioniser   : " + id(regioniser));
-            out.add("    regioniser.world : " + worldOf(regioniser.world) + " " + id(regioniser.world)
-                    + (regioniser.world == level ? " (own)" : " *** NOT ITS OWN LEVEL ***"));
-            out.add("    tickRegions  : " + id(level.tickRegions) + ", live regions=" + regions.size());
-            out.add("    players      : " + bukkitWorld.getPlayers().size()
-                    + ", loaded chunks=" + bukkitWorld.getLoadedChunks().length);
+
+            final boolean isOwn = regioniser.world == level;
+
+            final Component worldHeader = Component.text()
+                    .append(Component.text(" - World: ", LIST, TextDecoration.BOLD))
+                    .append(Component.text(bukkitWorld.getName(), HEADER, TextDecoration.BOLD))
+                    .append(Component.text(" (" + level.dimension().identifier() + ")", SECONDARY))
+                    .append(Component.text(" " + id(level), MUTED))
+                    .build();
+            out.add(worldHeader);
+
+            final Component regioniserInfo = Component.text()
+                    .append(Component.text(id(regioniser), MUTED))
+                    .append(Component.text(" "))
+                    .append(isOwn
+                            ? Component.text("[Dedicated Regioniser]", SUCCESS)
+                                    .hoverEvent(HoverEvent.showText(Component.text("此世界擁有獨立專屬的 ThreadedRegionizer，分區排程完全獨立", SECONDARY)))
+                            : Component.text("[SHARED WITH " + worldOf(regioniser.world) + "]", ERROR, TextDecoration.BOLD)
+                                    .hoverEvent(HoverEvent.showText(Component.text("警告：此世界與其他世界共用 Regioniser！可能導致跨世界執行緒斷言崩潰", ERROR))))
+                    .build();
+            out.add(subBullet("Regioniser", regioniserInfo, "該世界持有的 ThreadedRegionizer 實例與獨立性驗證"));
+
+            final Component regionsInfo = Component.text()
+                    .append(Component.text(regions.size(), INFORMATION))
+                    .append(Component.text(" live regions", PRIMARY))
+                    .append(Component.text(" (ID: " + id(level.tickRegions) + ")", MUTED))
+                    .build();
+            out.add(subBullet("Active Regions", regionsInfo, "當前世界中由玩家或 chunk tickets 活躍 tick 的獨立分區數量"));
+
+            final Component chunksAndPlayers = Component.text()
+                    .append(Component.text("Loaded Chunks: ", PRIMARY))
+                    .append(Component.text(bukkitWorld.getLoadedChunks().length, INFORMATION))
+                    .append(Component.text(" | Players: ", SECONDARY))
+                    .append(Component.text(bukkitWorld.getPlayers().size(), INFORMATION))
+                    .build();
+            out.add(subBullet("Chunks & Players", chunksAndPlayers, "該世界已載入的區塊數量與在線玩家數"));
         }
+
         return out;
     }
 
-    private static String resolveSingle(final CommandSourceStack source, final String selector) {
+    private static Component resolveSingle(final CommandSourceStack source, final String selector) {
         try {
             final EntitySelector parsed = new EntitySelectorParser(new StringReader(selector), true).parse();
             final ServerPlayer player = parsed.findSinglePlayer(source);
             return describe(player, source);
         } catch (final Exception e) {
-            return "<" + e.getClass().getSimpleName() + ": " + e.getMessage() + ">";
+            return Component.text("<" + e.getClass().getSimpleName() + ": " + e.getMessage() + ">", ERROR);
         }
     }
 
-    private static String resolveAll(final CommandSourceStack source, final String selector) {
+    private static Component resolveAll(final CommandSourceStack source, final String selector) {
         try {
             final EntitySelector parsed = new EntitySelectorParser(new StringReader(selector), true).parse();
             final List<ServerPlayer> players = parsed.findPlayers(source);
             if (players.isEmpty()) {
-                return "<none>";
+                return Component.text("<none>", MUTED);
             }
-            final StringBuilder sb = new StringBuilder();
-            for (final ServerPlayer player : players) {
-                if (!sb.isEmpty()) {
-                    sb.append("; ");
+            final TextComponent.Builder builder = Component.text();
+            for (int i = 0; i < players.size(); i++) {
+                if (i > 0) {
+                    builder.append(Component.text("; ", SECONDARY));
                 }
-                sb.append(describe(player, source));
+                builder.append(describe(players.get(i), source));
             }
-            return sb.toString();
+            return builder.build();
         } catch (final Exception e) {
-            return "<" + e.getClass().getSimpleName() + ": " + e.getMessage() + ">";
+            return Component.text("<" + e.getClass().getSimpleName() + ": " + e.getMessage() + ">", ERROR);
         }
     }
 
-    private static String describe(final ServerPlayer player, final CommandSourceStack source) {
+    private static Component describe(final ServerPlayer player, final CommandSourceStack source) {
         if (player == null) {
-            return "<none>";
+            return Component.text("<none>", MUTED);
         }
         final ServerLevel level = player.level();
         final double distance = Math.sqrt(player.position().distanceToSqr(source.getPosition()));
-        return player.getScoreboardName()
-                + " in " + worldOf(level) + " " + id(level)
-                + " at " + pos(player.position())
-                + String.format(", raw distance from source position=%.1f", distance)
-                + ", same world as source=" + (level == source.getLevel());
+        final boolean sameWorld = level == source.getLevel();
+
+        final TextComponent.Builder builder = Component.text();
+        builder.append(Component.text(player.getScoreboardName(), INFORMATION, TextDecoration.BOLD));
+        builder.append(Component.text(" in ", PRIMARY));
+        builder.append(Component.text(worldOf(level), INFORMATION));
+        builder.append(Component.text(" (" + pos(player.position()) + ")", SECONDARY));
+        builder.append(Component.text(" | dist: ", PRIMARY));
+        builder.append(Component.text(String.format("%.1f", distance), INFORMATION));
+        builder.append(Component.text(" | ", SECONDARY));
+        builder.append(sameWorld
+                ? Component.text("[✓ Same World]", SUCCESS)
+                : Component.text("[⚠ Cross-World]", WARNING)
+                        .hoverEvent(HoverEvent.showText(Component.text("注意：此玩家位於不同世界！原版 @p 搜尋是跨世界歐氏幾何距離比較", WARNING))));
+        return builder.build();
     }
 }
+

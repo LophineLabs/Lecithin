@@ -33,8 +33,8 @@ public class ContextCommand extends LiteralNode {
     protected boolean execute(@NotNull CommandContext context) {
         final net.minecraft.commands.CommandSourceStack nms =
                 ((io.papermc.paper.command.brigadier.PaperCommandSourceStack) context.getSource()).getHandle();
-        for (final String line : LecithinContextReport.context(nms)) {
-            context.getSender().sendMessage(Component.text(line, NamedTextColor.GRAY));
+        for (final Component line : LecithinContextReport.context(nms)) {
+            context.getSender().sendMessage(line);
         }
         return true;
     }
