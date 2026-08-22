@@ -31,10 +31,10 @@ net.minecraft.locale.Language calls it by that name; renaming it would add a
 minecraft patch for one line.
 
 diff --git a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
-index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e9937902c35e8f3 100644
+index bd3b7b6ab86af8e0f97bed9db2026d607f1c3a3d..a9cb85e098170826b39693e31892346dfd330890 100644
 --- a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
 +++ b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
-@@ -21,18 +21,27 @@ import org.slf4j.Logger;
+@@ -21,7 +21,9 @@ import org.slf4j.Logger;
  import java.io.IOException;
  import java.io.InputStream;
  import java.io.UnsupportedEncodingException;
@@ -44,16 +44,8 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
  import java.net.http.HttpClient;
  import java.net.http.HttpRequest;
  import java.net.http.HttpResponse;
- import java.nio.file.*;
- import java.time.Duration;
-+import java.util.Enumeration;
- import java.util.HashMap;
-+import java.util.List;
- import java.util.Map;
- import java.util.Objects;
- import java.util.Optional;
-+import java.util.Set;
-+import java.util.TreeSet;
+@@ -30,6 +32,9 @@ import java.time.Duration;
+ import java.util.*;
  import java.util.concurrent.CompletableFuture;
  import java.util.function.BiConsumer;
 +import java.util.jar.JarEntry;
@@ -62,11 +54,12 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
  
  /*
   * authored by: Helvetica Volubi <suisuroru@blue-millennium.fun>
-@@ -43,9 +52,28 @@ public class ServerI18nUtil {
+@@ -40,10 +45,28 @@ public class ServerI18nUtil {
      private static final Logger logger = LogUtils.getClassLogger();
      private static final String VERSION = ServerBuildInfo.buildInfo().minecraftVersionId();
      private static final String BASE_PATH = "cache/lophine/" + VERSION + "/";
--    private static final String defaultLophineLangPath = "/assets/lophine/lang/en_us.json";
+-    private static final Set<String> registeredLanguageBasePath = new HashSet<>();
+-    private static final String defaultLophineLangName = "en_us.json";
      private static final String manifestUrl = "https://launchermeta.mojang.com/mc/game/version_manifest.json";
      private static final String resourceBaseUrl = "https://resources.download.minecraft.net/";
 +    // Lophine start - load every fork's lang namespace, not just this one
@@ -92,23 +85,38 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
      // pre-load
      private static CompletableFuture<Void> preloadTask;
      // paths
-@@ -54,7 +82,6 @@ public class ServerI18nUtil {
+@@ -52,30 +75,13 @@ public class ServerI18nUtil {
      private static String versionPath;
      private static String manifestPath;
      private static String langJsonPath;
--    private static String lophineLangPath;
+-    private static String targetLangFileName;
+-
+-    private static void register() {
+-        register("assets/lophine/lang");
+-    }
+-
+-    private static void register(String base) {
+-        if (!base.startsWith("/")) {
+-            base = "/" + base;
+-        }
+-        if (!base.endsWith("/")) {
+-            base += "/";
+-        }
+-        registeredLanguageBasePath.add(base);
+-    }
  
      public static void init() {
          if (Objects.equals(LanguageConfig.lang, "en_us")) {
-@@ -62,7 +89,6 @@ public class ServerI18nUtil {
+             return;
          }
+-        register();
          langPath = BASE_PATH + "lang/" + LanguageConfig.lang + ".json";
          langJsonPath = "minecraft/lang/" + LanguageConfig.lang + ".json";
--        lophineLangPath = "/assets/lophine/lang/" + LanguageConfig.lang + ".json";
+-        targetLangFileName = LanguageConfig.lang + ".json";
          logger.info("Starting load language: {}", LanguageConfig.lang);
          if (LanguageConfig.full_blocking_load) {
              loadI18n(LanguageConfig.lang, 2);
-@@ -243,7 +269,7 @@ public class ServerI18nUtil {
+@@ -256,7 +262,7 @@ public class ServerI18nUtil {
          DeprecatedTranslationsInfo deprecatedTranslationsInfo = DeprecatedTranslationsInfo.loadFromDefaultResource();
          Map<String, String> map = new HashMap<>();
          parseTranslations(map::put);
@@ -117,15 +125,16 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
          deprecatedTranslationsInfo.applyToMap(map);
          final Map<String, String> map1 = Map.copyOf(map);
          return new Language() {
-@@ -273,19 +299,149 @@ public class ServerI18nUtil {
+@@ -286,24 +292,149 @@ public class ServerI18nUtil {
          };
      }
  
 -    private static void loadLophineI18n(BiConsumer<String, String> bi) {
--        if (Language.class.getResource(lophineLangPath) != null) {
--            Language.parseTranslations(bi, lophineLangPath);
--        } else {
--            loadLophineI18nDefault(bi);
+-        loadLophineI18nDefault(bi);
+-        for (String targetPath : registeredLanguageBasePath) {
+-            String targetFile = targetPath + targetLangFileName;
+-            if (Language.class.getResource(targetFile) != null) {
+-                Language.parseTranslations(bi, targetFile);
 +    // Lophine start - load every fork's lang namespace, not just this one
 +    /**
 +     * Loads {@code assets/&lt;namespace&gt;/lang/&lt;lang&gt;.json} for every non-vanilla namespace present on
@@ -146,10 +155,10 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
 +                Language.parseTranslations(bi, path);
 +            } else {
 +                loadForkI18nDefault(bi, namespace);
-+            }
-+        }
-+    }
-+
+             }
+         }
+     }
+ 
 +    /**
 +     * Loads the {@code en_us} file of every non-vanilla namespace. Called from
 +     * {@code Language.loadDefault()} so that {@code Language.DEFAULT_INSTANCE} - which is what
@@ -159,17 +168,19 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
 +    public static void loadForkI18nDefault(BiConsumer<String, String> bi) {
 +        for (final String namespace : langNamespaces()) {
 +            loadForkI18nDefault(bi, namespace);
-         }
-     }
- 
++        }
++    }
++
 +    /**
 +     * @deprecated retained because {@code net.minecraft.locale.Language} calls it by this name;
 +     * it now loads every fork namespace rather than only Lophine's.
 +     */
 +    @Deprecated
      public static void loadLophineI18nDefault(BiConsumer<String, String> bi) {
--        if (Language.class.getResource(defaultLophineLangPath) != null) {
--            Language.parseTranslations(bi, defaultLophineLangPath);
+-        for (String targetPath : registeredLanguageBasePath) {
+-            String targetFile = targetPath + defaultLophineLangName;
+-            if (Language.class.getResource(targetFile) != null) {
+-                Language.parseTranslations(bi, targetFile);
 +        loadForkI18nDefault(bi);
 +    }
 +
@@ -201,7 +212,7 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
 +                discoverLangNamespaces(found);
 +            } catch (Exception e) {
 +                logger.warn("Failed to enumerate language namespaces, falling back to {}", FALLBACK_NAMESPACES, e);
-+            }
+             }
 +            found.removeAll(VANILLA_NAMESPACES);
 +            cached = found.isEmpty() ? FALLBACK_NAMESPACES : List.copyOf(found);
 +            langNamespaces = cached;
@@ -274,3 +285,10 @@ index ec1a88c1885c20de6077b68c3e2a1295ae714021..0f44da9f21eb826b1fc45eea0e993790
  
      private static void parseTranslations(BiConsumer<String, String> output) throws IOException {
          Path filePath = Path.of(langPath);
+@@ -345,4 +476,4 @@ public class ServerI18nUtil {
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
