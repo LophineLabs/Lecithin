@@ -5,7 +5,7 @@ Subject: [PATCH] Rebrand to Lecithin
 
 
 diff --git a/src/main/java/io/papermc/paper/ServerBuildInfo.java b/src/main/java/io/papermc/paper/ServerBuildInfo.java
-index ed558bea1f939ab902d3c45417573fba83307abc..b96770bab57d56b839a48051b3db30ffa34c2cf1 100644
+index d9127bc6c5801521a5dd1171e4e215f241934034..9f821b5538f191d6b9af36e07f531ee0090784d1 100644
 --- a/src/main/java/io/papermc/paper/ServerBuildInfo.java
 +++ b/src/main/java/io/papermc/paper/ServerBuildInfo.java
 @@ -28,6 +28,13 @@ public interface ServerBuildInfo {

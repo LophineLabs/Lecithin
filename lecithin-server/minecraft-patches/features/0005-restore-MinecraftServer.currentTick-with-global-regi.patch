@@ -28,7 +28,7 @@ index 7577533f82688304f06c445fd5a1c3fa3c4575fc..342f4764724ba0860d7def1b826ddd9f
          if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.commandTick) { // Lophine - redirect
              MinecraftServer.getServer().tickRateManager().tick();
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index b498cecb37cf83d31ad4a02bb1acecf7328e7aa6..3ea33e558142544355765e3e8b8cdb1556e593f5 100644
+index 1bc821edffe81544466cae77c959cf5e02249284..81f1da2ef1113c1c82a497201b93270ef8fd2e86 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -319,7 +319,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa

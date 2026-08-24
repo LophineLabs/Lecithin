@@ -52,7 +52,7 @@ off by up to the portal search radius.
 Kill switch: event-config.portal-events=false.
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 1a35dc2c1f02617c25cac210ce227d7a8cf29a6d..9576ae0dbddc96d49d7fd55b5c5d1df658a79ecc 100644
+index c1ea3d7df094e161c4389692d41924938117ad36..1bf735dea2a892ac710afd1a369d0512e609bc48 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -4763,13 +4763,14 @@ public abstract class Entity
@@ -173,9 +173,9 @@ index 1a35dc2c1f02617c25cac210ce227d7a8cf29a6d..9576ae0dbddc96d49d7fd55b5c5d1df6
      protected boolean portalToAsync(ServerLevel destination, BlockPos portalPos, boolean takePassengers,
                                      PortalType type, java.util.function.Consumer<Entity> teleportComplete) {
          ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
-@@ -5033,9 +5094,32 @@ public abstract class Entity
+@@ -5058,9 +5119,32 @@ public abstract class Entity
          }
-         // Luminol end
+         // Lophine end - destination-driven portal backpressure
  
 +        // Lecithin start - fire the Bukkit portal and teleport events this path routes around.
 +        // A portal never reaches Entity#teleportAsync and never reaches Portal#getPortalDestination,
@@ -208,7 +208,7 @@ index 1a35dc2c1f02617c25cac210ce227d7a8cf29a6d..9576ae0dbddc96d49d7fd55b5c5d1df6
          // Kaiiju end
          Vec3 initialPosition = this.position();
          ChunkPos initialPositionChunk = new ChunkPos(
-@@ -5044,7 +5128,7 @@ public abstract class Entity
+@@ -5069,7 +5153,7 @@ public abstract class Entity
          );
          // Luminol start - Level hot load/unload apis
          // let's acquire read reference first
@@ -217,7 +217,7 @@ index 1a35dc2c1f02617c25cac210ce227d7a8cf29a6d..9576ae0dbddc96d49d7fd55b5c5d1df6
              // failed, destination is under unloading process
              return false;
          }
-@@ -5057,12 +5141,12 @@ public abstract class Entity
+@@ -5082,12 +5166,12 @@ public abstract class Entity
  
          for (EntityTreeNode node : fullPassengerTree) {
              node.root.preChangeDimension();
@@ -232,7 +232,7 @@ index 1a35dc2c1f02617c25cac210ce227d7a8cf29a6d..9576ae0dbddc96d49d7fd55b5c5d1df6
              // set portal cooldown
              node.root.setPortalCooldown();
          }
-@@ -5100,7 +5184,7 @@ public abstract class Entity
+@@ -5125,7 +5209,7 @@ public abstract class Entity
  
              // place
              passengerTree.root.placeInAsync(
@@ -241,7 +241,7 @@ index 1a35dc2c1f02617c25cac210ce227d7a8cf29a6d..9576ae0dbddc96d49d7fd55b5c5d1df6
                  passengerTree,
                  (Entity teleported) -> {
                      if (info.postTeleportTransition() != null) {
-@@ -5108,7 +5192,7 @@ public abstract class Entity
+@@ -5133,7 +5217,7 @@ public abstract class Entity
                      }
                      // Luminol start - Level hot load/unload apis
                      // all done, release the read reference
@@ -250,7 +250,7 @@ index 1a35dc2c1f02617c25cac210ce227d7a8cf29a6d..9576ae0dbddc96d49d7fd55b5c5d1df6
                      // Luminol end
  
                      // Kaiiju start - vanilla end teleportation
-@@ -5124,7 +5208,7 @@ public abstract class Entity
+@@ -5149,7 +5233,7 @@ public abstract class Entity
          });
  
  
