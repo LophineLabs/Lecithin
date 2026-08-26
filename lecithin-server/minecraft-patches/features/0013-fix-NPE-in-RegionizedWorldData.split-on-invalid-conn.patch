@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 26 Aug 2026 22:09:01 +0800
+Subject: [PATCH] fix NPE in RegionizedWorldData.split on invalid connection or
+ target region
+
+RegionizedWorldData.split assumed every connection in from.connections has a non-null ServerPlayer located in an active surviving region section. Guard against null player or disconnected connection during region split, and guard against target region section lookup returning null.
+
+diff --git a/io/papermc/paper/threadedregions/RegionizedWorldData.java b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+index f0fabd9fd39e1024837dbb8633c39eb495984e4d..14445ab2c5a8a7a6ed5265347d6fcf84c98909db 100644
+--- a/io/papermc/paper/threadedregions/RegionizedWorldData.java
++++ b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+@@ -234,11 +234,35 @@ public final class RegionizedWorldData {
+             // connections
+             for (final Connection conn : from.connections) {
+                 final ServerPlayer player = conn.getPlayer();
++                if (player == null) {
++                    if (!conn.isConnected()) {
++                        RegionizedServer.getInstance().removeConnection(conn);
++                        cleanUpConnection(conn);
++                    }
++                    continue;
++                }
++
++                if (!conn.isConnected() || player.isRemoved()) {
++                    if (!conn.isConnected()) {
++                        RegionizedServer.getInstance().removeConnection(conn);
++                        cleanUpConnection(conn);
++                    }
++                    continue;
++                }
++
+                 final ChunkPos pos = player.chunkPosition();
+                 // Note: It is impossible for an entity in the world to _not_ be in an entity chunk, which means
+                 // the chunk holder must _exist_, and so the region section exists.
+-                regionToData.get(CoordinateUtils.getChunkKey(pos.x() >> chunkToRegionShift, pos.z() >> chunkToRegionShift))
+-                    .connections.add(conn);
++                final RegionizedWorldData into = regionToData.get(CoordinateUtils.getChunkKey(pos.x() >> chunkToRegionShift, pos.z() >> chunkToRegionShift));
++                if (into != null) {
++                    into.connections.add(conn);
++                } else {
++                    LOGGER.warn("Failed to relocate connection for player {} ({}) at {} during region split: target region data not found", player.getScoreboardName(), player.getUUID(), pos);
++                    if (!conn.isConnected()) {
++                        RegionizedServer.getInstance().removeConnection(conn);
++                        cleanUpConnection(conn);
++                    }
++                }
+             }
+             // entities
+             for (final ServerPlayer player : from.localPlayers) {
+@@ -620,14 +644,18 @@ public final class RegionizedWorldData {
+     }
+ 
+     private static void cleanUpConnection(final Connection conn) {
+-        // note: ALL connections HERE have a player
+         final ServerPlayer player = conn.getPlayer();
++        if (player == null || player.connection == null) {
++            return;
++        }
+         // now that the connection is removed, we can allow this region to die
+-        player.level().moonrise$getChunkTaskScheduler().chunkHolderManager.removeTicketAtLevel(
+-            ServerGamePacketListenerImpl.DISCONNECT_TICKET, player.connection.disconnectPos,
+-            ChunkHolderManager.MAX_TICKET_LEVEL,
+-            player.connection.disconnectTicketId
+-        );
++        if (player.connection.disconnectPos != null) {
++            player.level().moonrise$getChunkTaskScheduler().chunkHolderManager.removeTicketAtLevel(
++                ServerGamePacketListenerImpl.DISCONNECT_TICKET, player.connection.disconnectPos,
++                ChunkHolderManager.MAX_TICKET_LEVEL,
++                player.connection.disconnectTicketId
++            );
++        }
+         player.connection.resumeFlushing();
+     }
+ 
