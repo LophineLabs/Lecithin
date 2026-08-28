@@ -1,46 +1,46 @@
 package fun.bm.lecithin.config.modules;
 
-import me.earthme.luminol.config.IConfigModule;
 import me.earthme.luminol.config.flags.ConfigClassInfo;
 import me.earthme.luminol.config.flags.ConfigInfo;
-import me.earthme.luminol.config.flags.HotReloadUnsupported;
+import me.earthme.luminol.config.flags.DoNotLoad;
 import me.earthme.luminol.enums.EnumConfigCategory;
+import me.earthme.luminol.enums.EnumLoadType;
 
 @ConfigClassInfo(name = "compat-config", category = EnumConfigCategory.ROOT)
-public class CompatConfig implements IConfigModule {
-    @HotReloadUnsupported
+public class CompatConfig {
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "restore-async-scheduler")
     public static boolean restoreAsyncScheduler = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "economy-serialization")
     public static boolean economySerialization = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "diagnostics")
     public static boolean diagnostics = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "teleport-semantics")
     public static boolean teleportSemantics = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "caller-context-dispatch")
     public static boolean callerContextDispatch = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "paper-lib-environment")
     public static boolean paperLibEnvironment = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "permission-locking")
     public static boolean permissionLocking = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "region-read-diagnostics")
     public static boolean regionReadDiagnostics = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "riding-teleport")
     public static boolean ridingTeleport = true;
 
@@ -50,19 +50,19 @@ public class CompatConfig implements IConfigModule {
      * off restores the unconditional validating read. See {@link
      * fun.bm.lecithin.compat.LecithinRespawnLocationLookup}.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "respawn-location-lookup")
     public static boolean respawnLocationLookup = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "teleport-refusal-diagnostics")
     public static boolean teleportRefusalDiagnostics = false;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "teleport-handover")
     public static boolean teleportHandover = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "async-context-inheritance")
     public static boolean asyncContextInheritance = true;
 
@@ -71,7 +71,7 @@ public class CompatConfig implements IConfigModule {
      * provenance for legacy sync scheduler calls made from inside its listeners. Turning this off
      * restores stock Folia rejection for those calls; it does not affect any other dispatch path.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "async-event-provenance")
     public static boolean asyncEventProvenance = true;
 
@@ -82,23 +82,23 @@ public class CompatConfig implements IConfigModule {
      * claim (an event that names one player belongs to that player) can be kept while the weaker one
      * is turned off.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "async-platform-event-global-scope")
     public static boolean asyncPlatformEventGlobalScope = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "command-dispatch-handover")
     public static boolean commandDispatchHandover = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "server-current-tick")
     public static boolean serverCurrentTick = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "scoreboard-api")
     public static boolean scoreboardApi = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "cross-region-block-read")
     public static boolean crossRegionBlockRead = true;
 
@@ -110,9 +110,21 @@ public class CompatConfig implements IConfigModule {
      * off narrows {@link #crossRegionBlockRead} back to resident chunks only. See {@link
      * fun.bm.lecithin.compat.LecithinCrossRegionBlockRead}.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "cross-region-block-load")
     public static boolean crossRegionBlockLoad = true;
+
+    /**
+     * Do not try to drain another world's pending chunk full-status updates.
+     * {@code ChunkHolderManager#processTicketUpdates} guards that drain with a bare "is this a tick
+     * thread" test where it needs "is this a tick thread of this world", so a cross-world chunk load
+     * throws {@code World check failed} after adding its chunk ticket and before removing it -
+     * leaking that ticket permanently. See {@link
+     * fun.bm.lecithin.compat.LecithinForeignWorldTicketUpdates}.
+     */
+    @DoNotLoad(when = EnumLoadType.RELOAD)
+    @ConfigInfo(name = "foreign-world-ticket-updates")
+    public static boolean foreignWorldTicketUpdates = true;
 
     /**
      * Answer {@code Server#getTPS()} and {@code Server#getAverageTickTime()} at server scope - the
@@ -122,27 +134,15 @@ public class CompatConfig implements IConfigModule {
      * Callers that <em>are</em> on a world region thread keep the platform's per-region answer. See
      * {@link fun.bm.lecithin.compat.LecithinServerTps}.
      */
-    /**
-     * Do not try to drain another world's pending chunk full-status updates.
-     * {@code ChunkHolderManager#processTicketUpdates} guards that drain with a bare "is this a tick
-     * thread" test where it needs "is this a tick thread of this world", so a cross-world chunk load
-     * throws {@code World check failed} after adding its chunk ticket and before removing it -
-     * leaking that ticket permanently. See {@link
-     * fun.bm.lecithin.compat.LecithinForeignWorldTicketUpdates}.
-     */
-    @HotReloadUnsupported
-    @ConfigInfo(name = "foreign-world-ticket-updates")
-    public static boolean foreignWorldTicketUpdates = true;
-
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "server-tps-off-region")
     public static boolean serverTpsOffRegion = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "startup-global-context")
     public static boolean startupGlobalContext = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "startup-context-dispatch")
     public static boolean startupContextDispatch = true;
 }

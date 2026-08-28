@@ -1,22 +1,22 @@
 package fun.bm.lecithin.config.modules;
 
-import me.earthme.luminol.config.IConfigModule;
 import me.earthme.luminol.config.flags.ConfigClassInfo;
 import me.earthme.luminol.config.flags.ConfigInfo;
-import me.earthme.luminol.config.flags.HotReloadUnsupported;
+import me.earthme.luminol.config.flags.DoNotLoad;
 import me.earthme.luminol.enums.EnumConfigCategory;
+import me.earthme.luminol.enums.EnumLoadType;
 
 @ConfigClassInfo(name = "event-config", category = EnumConfigCategory.ROOT)
-public class EventConfig implements IConfigModule {
-    @HotReloadUnsupported
+public class EventConfig {
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "teleport-events")
     public static boolean teleportEvents = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "passenger-teleport-events")
     public static boolean passengerTeleportEvents = true;
 
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "passenger-teleport-cross-world-offset")
     public static boolean passengerTeleportCrossWorldOffset = true;
 
@@ -27,7 +27,7 @@ public class EventConfig implements IConfigModule {
      * player crosses worlds through a portal with no Bukkit event at all. See {@link
      * fun.bm.lecithin.compat.LecithinPortalEvents}.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "portal-events")
     public static boolean portalEvents = true;
 
@@ -39,7 +39,7 @@ public class EventConfig implements IConfigModule {
      * that is defined in terms of this event. See {@link
      * fun.bm.lecithin.compat.LecithinRespawnEvents}.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "respawn-event")
     public static boolean respawnEvent = true;
 
@@ -49,7 +49,7 @@ public class EventConfig implements IConfigModule {
      * plumbing it needs is still present and still used. Paper's newer
      * {@code AsyncPlayerSpawnLocationEvent} is unaffected either way.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "spawn-location-event")
     public static boolean spawnLocationEvent = true;
 
@@ -59,7 +59,7 @@ public class EventConfig implements IConfigModule {
      * rollback, which fires a {@code PLUGIN} {@code PlayerTeleportEvent} that another plugin can
      * cancel to defeat the rollback. See {@link fun.bm.lecithin.compat.LecithinMoveRollback}.
      */
-    @HotReloadUnsupported
+    @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "move-rollback-without-teleport")
     public static boolean moveRollbackWithoutTeleport = true;
 }

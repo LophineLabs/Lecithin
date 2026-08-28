@@ -5,15 +5,15 @@ Subject: [PATCH] Force disable all unsupported check
 
 
 diff --git a/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java b/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
-index 9055778fe40fca64ecc9699d08476f3054abb471..d07e3568afc84c996c54f9025abf7d52be01eb34 100644
+index 49638c4887492fedbab8b6ebe859790989e28fec..13712f5bc49ba38f813b424e2a5fadfa736456dd 100644
 --- a/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
 +++ b/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
-@@ -5,11 +5,7 @@ import me.earthme.luminol.config.flags.ConfigClassInfo;
+@@ -4,11 +4,7 @@ import me.earthme.luminol.config.flags.ConfigClassInfo;
  import me.earthme.luminol.config.flags.ConfigInfo;
  import me.earthme.luminol.enums.EnumConfigCategory;
  
 -@ConfigClassInfo(category = EnumConfigCategory.UNSUPPORTED, name = "disable_check_for_folia_supported")
- public class DisableCheckForFoliaSupported implements IConfigModule {
+ public class DisableCheckForFoliaSupported {
 -    @ConfigInfo(name = "disable_for_paper")
 -    public static boolean disableForPaper = false;
 -
