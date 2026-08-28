@@ -12,7 +12,7 @@ index 7a9907727fb221e06ae1bb0a553ef96e94b6702c..892e255be6ef0a9a11918d39d31484dc
                  "fun.bm.lophine.carpet.config.modules"
          ));
          // Lophine end - add carpet config
-+        registerConfig("lecithin", builder.of("lecithin", "fun.bm.lecithin.config.modules")); // Lecithin global config
++        registerConfig(builder.of("lecithin", "fun.bm.lecithin.config.modules")); // Lecithin global config
          preLoad();
      }
  
