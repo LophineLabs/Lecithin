@@ -5,7 +5,7 @@ Subject: [PATCH] Register config to config system
 
 
 diff --git a/src/main/java/me/earthme/luminol/config/ConfigManager.java b/src/main/java/me/earthme/luminol/config/ConfigManager.java
-index 7a9907727fb221e06ae1bb0a553ef96e94b6702c..892e255be6ef0a9a11918d39d31484dc45b7bbab 100644
+index 7a9907727fb221e06ae1bb0a553ef96e94b6702c..38600bdecd85bc73468fa3d07c53b8937f10fafa 100644
 --- a/src/main/java/me/earthme/luminol/config/ConfigManager.java
 +++ b/src/main/java/me/earthme/luminol/config/ConfigManager.java
 @@ -35,6 +35,7 @@ public class ConfigManager {
