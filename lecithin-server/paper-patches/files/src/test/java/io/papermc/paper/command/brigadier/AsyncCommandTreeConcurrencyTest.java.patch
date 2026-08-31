@@ -1,0 +1,304 @@
+--- /dev/null
++++ b/src/test/java/io/papermc/paper/command/brigadier/AsyncCommandTreeConcurrencyTest.java
+@@ -1,0 +_,301 @@
++package io.papermc.paper.command.brigadier;
++
++import com.mojang.brigadier.builder.LiteralArgumentBuilder;
++import com.mojang.brigadier.tree.CommandNode;
++import com.mojang.brigadier.tree.LiteralCommandNode;
++import com.mojang.brigadier.tree.RootCommandNode;
++import org.bukkit.support.environment.Normal;
++import org.junit.jupiter.api.Assertions;
++import org.junit.jupiter.api.Test;
++
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.List;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.Future;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicBoolean;
++import java.util.concurrent.atomic.AtomicInteger;
++
++@Normal
++public class AsyncCommandTreeConcurrencyTest {
++
++    @Test
++    public void testCommandNodeConcurrentModificationSafety() throws Exception {
++        final RootCommandNode<Object> root = new RootCommandNode<>();
++
++        // Populate initial commands
++        for (int i = 0; i < 50; i++) {
++            final LiteralCommandNode<Object> node = LiteralArgumentBuilder.literal("cmd" + i)
++                    .then(LiteralArgumentBuilder.literal("sub1"))
++                    .then(LiteralArgumentBuilder.literal("sub2"))
++                    .build();
++            root.addChild(node);
++        }
++
++        final int threads = 4;
++        final ExecutorService executor = Executors.newFixedThreadPool(threads);
++        final AtomicBoolean running = new AtomicBoolean(true);
++        final AtomicInteger npeCount = new AtomicInteger(0);
++        final AtomicInteger cmeCount = new AtomicInteger(0);
++        final CountDownLatch latch = new CountDownLatch(threads);
++        final List<Future<?>> futures = new ArrayList<>();
++
++        // Reader threads: simulating COMMAND_SENDING_POOL iterating children
++        for (int t = 0; t < 2; t++) {
++            futures.add(executor.submit(() -> {
++                latch.countDown();
++                try {
++                    latch.await();
++                    while (running.get()) {
++                        final Collection<CommandNode<Object>> children = root.getChildren();
++                        for (CommandNode<Object> child : children) {
++                            if (child == null) {
++                                npeCount.incrementAndGet();
++                                continue;
++                            }
++                            if (child.clientNode != null) {
++                                child = child.clientNode;
++                            }
++                            if (child == null) {
++                                npeCount.incrementAndGet();
++                                continue;
++                            }
++                            for (CommandNode<Object> sub : child.getChildren()) {
++                                if (sub == null) {
++                                    npeCount.incrementAndGet();
++                                    continue;
++                                }
++                                Assertions.assertNotNull(sub.getName());
++                            }
++                        }
++                    }
++                } catch (NullPointerException e) {
++                    npeCount.incrementAndGet();
++                } catch (java.util.ConcurrentModificationException e) {
++                    cmeCount.incrementAndGet();
++                } catch (InterruptedException ignored) {
++                }
++            }));
++        }
++
++        // Writer threads: simulating dynamic command registration / unregistration on server threads
++        for (int t = 0; t < 2; t++) {
++            final int writerId = t;
++            futures.add(executor.submit(() -> {
++                latch.countDown();
++                try {
++                    latch.await();
++                    int counter = 0;
++                    while (running.get()) {
++                        final String name = "dyn_" + writerId + "_" + (counter++ % 100);
++                        final LiteralCommandNode<Object> node = LiteralArgumentBuilder.literal(name)
++                                .then(LiteralArgumentBuilder.literal("arg"))
++                                .build();
++                        root.addChild(node);
++                        if (counter % 3 == 0) {
++                            root.removeCommand(name);
++                        }
++                    }
++                } catch (Exception ignored) {
++                }
++            }));
++        }
++
++        // Run concurrent load for 500ms
++        Thread.sleep(500);
++        running.set(false);
++        executor.shutdown();
++        Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
++
++        for (Future<?> f : futures) {
++            f.get();
++        }
++
++        Assertions.assertEquals(0, npeCount.get(), "NPE occurred during concurrent command tree reading!");
++        Assertions.assertEquals(0, cmeCount.get(), "ConcurrentModificationException occurred during command tree reading!");
++    }
++
++    @Test
++    public void testClientNodeAndRedirectFlatteningNullSafety() {
++        final RootCommandNode<Object> root = new RootCommandNode<>();
++        final LiteralCommandNode<Object> target = LiteralArgumentBuilder.literal("target").build();
++        final LiteralCommandNode<Object> alias = LiteralArgumentBuilder.literal("alias")
++                .redirect(target)
++                .build();
++        alias.clientNode = null; // Default clientNode is null
++
++        root.addChild(target);
++        root.addChild(alias);
++
++        final Collection<CommandNode<Object>> children = root.getChildren();
++        Assertions.assertFalse(children.isEmpty());
++
++        for (CommandNode<Object> child : children) {
++            Assertions.assertNotNull(child);
++            if (child.clientNode != null) {
++                child = child.clientNode;
++            }
++            Assertions.assertNotNull(child);
++            Assertions.assertNotNull(child.getName());
++        }
++    }
++
++    private static class TestSender {
++        final String name;
++        final boolean isOp;
++
++        TestSender(String name, boolean isOp) {
++            this.name = name;
++            this.isOp = isOp;
++        }
++    }
++
++    private static <S> void simulateFillUsableCommands(
++            final java.util.Collection<CommandNode<S>> children,
++            final CommandNode<S> target,
++            final S commandFilter,
++            final java.util.Map<CommandNode<S>, CommandNode<S>> converted
++    ) {
++        for (CommandNode<S> child : children) {
++            if (child == null) continue;
++            if (child.clientNode != null) {
++                child = child.clientNode;
++            }
++            if (child == null) continue;
++            if (child.canUse(commandFilter)) {
++                com.mojang.brigadier.builder.ArgumentBuilder<S, ?> builder = child.createBuilder();
++
++                if (builder.getRedirect() != null && converted.get(builder.getRedirect()) == null) {
++                    final CommandNode<S> redirect = builder.getRedirect();
++                    final LiteralArgumentBuilder<S> redirectBuilder = LiteralArgumentBuilder.literal(child.getName());
++                    redirectBuilder.requires(redirect.getRequirement());
++                    if (redirect.getCommand() != null) {
++                        redirectBuilder.executes(redirect.getCommand());
++                    }
++                    for (final CommandNode<S> redirectChild : redirect.getChildren()) {
++                        if (redirectChild != null) {
++                            redirectBuilder.then(redirectChild);
++                        }
++                    }
++                    builder = redirectBuilder;
++                }
++
++                if (builder.getRedirect() != null) {
++                    builder.redirect(converted.get(builder.getRedirect()));
++                }
++
++                CommandNode<S> node = builder.build();
++                converted.put(child, node);
++                target.addChild(node);
++                if (!child.getChildren().isEmpty()) {
++                    simulateFillUsableCommands(child.getChildren(), node, commandFilter, converted);
++                }
++            }
++        }
++    }
++
++    @Test
++    public void testCommandTreeSemanticEquivalenceWithPermissions() {
++        final RootCommandNode<TestSender> root = new RootCommandNode<>();
++
++        // Normal command: /help
++        final LiteralCommandNode<TestSender> helpCmd = LiteralArgumentBuilder.<TestSender>literal("help")
++                .executes(ctx -> 1)
++                .build();
++
++        // Op command: /stop
++        final LiteralCommandNode<TestSender> stopCmd = LiteralArgumentBuilder.<TestSender>literal("stop")
++                .requires(sender -> sender.isOp)
++                .executes(ctx -> 1)
++                .build();
++
++        // Mixed command: /gamemode <mode> (mode requires op, command has subcommands)
++        final LiteralCommandNode<TestSender> gmCmd = LiteralArgumentBuilder.<TestSender>literal("gamemode")
++                .requires(sender -> sender.isOp)
++                .then(LiteralArgumentBuilder.<TestSender>literal("creative").executes(ctx -> 1))
++                .then(LiteralArgumentBuilder.<TestSender>literal("survival").executes(ctx -> 1))
++                .build();
++
++        root.addChild(helpCmd);
++        root.addChild(stopCmd);
++        root.addChild(gmCmd);
++
++        // Case 1: Op sender
++        final TestSender opSender = new TestSender("admin", true);
++        final RootCommandNode<TestSender> opClientTree = new RootCommandNode<>();
++        simulateFillUsableCommands(root.getChildren(), opClientTree, opSender, new java.util.HashMap<>());
++
++        Assertions.assertNotNull(opClientTree.getChild("help"));
++        Assertions.assertNotNull(opClientTree.getChild("stop"));
++        Assertions.assertNotNull(opClientTree.getChild("gamemode"));
++        Assertions.assertEquals(2, opClientTree.getChild("gamemode").getChildren().size());
++
++        // Case 2: Regular player sender
++        final TestSender normalSender = new TestSender("player", false);
++        final RootCommandNode<TestSender> normalClientTree = new RootCommandNode<>();
++        simulateFillUsableCommands(root.getChildren(), normalClientTree, normalSender, new java.util.HashMap<>());
++
++        Assertions.assertNotNull(normalClientTree.getChild("help"));
++        Assertions.assertNull(normalClientTree.getChild("stop"), "Op command must be filtered out for normal sender");
++        Assertions.assertNull(normalClientTree.getChild("gamemode"), "Op command must be filtered out for normal sender");
++        Assertions.assertEquals(1, normalClientTree.getChildren().size());
++    }
++
++    @Test
++    public void testCommandRedirectSemanticPreservation() {
++        final RootCommandNode<TestSender> root = new RootCommandNode<>();
++
++        final LiteralCommandNode<TestSender> msgCmd = LiteralArgumentBuilder.<TestSender>literal("msg")
++                .then(LiteralArgumentBuilder.<TestSender>literal("target").executes(ctx -> 1))
++                .build();
++
++        final LiteralCommandNode<TestSender> tellCmd = LiteralArgumentBuilder.<TestSender>literal("tell")
++                .redirect(msgCmd)
++                .build();
++
++        root.addChild(msgCmd);
++        root.addChild(tellCmd);
++
++        final TestSender sender = new TestSender("player", false);
++        final RootCommandNode<TestSender> clientTree = new RootCommandNode<>();
++        final java.util.Map<CommandNode<TestSender>, CommandNode<TestSender>> converted = new java.util.HashMap<>();
++        simulateFillUsableCommands(root.getChildren(), clientTree, sender, converted);
++
++        final CommandNode<TestSender> convertedMsg = clientTree.getChild("msg");
++        final CommandNode<TestSender> convertedTell = clientTree.getChild("tell");
++
++        Assertions.assertNotNull(convertedMsg);
++        Assertions.assertNotNull(convertedTell);
++        Assertions.assertSame(convertedMsg, convertedTell.getRedirect(), "Redirect must point to the converted target node");
++    }
++
++    @Test
++    public void testDeadRedirectFlatteningSemantics() {
++        final RootCommandNode<TestSender> root = new RootCommandNode<>();
++
++        // Unregistered / unreachable target node that has children
++        final LiteralCommandNode<TestSender> unregisterableTarget = LiteralArgumentBuilder.<TestSender>literal("original")
++                .then(LiteralArgumentBuilder.<TestSender>literal("subcmd").executes(ctx -> 1))
++                .build();
++
++        // Alias redirecting to unregisterable target
++        final LiteralCommandNode<TestSender> aliasCmd = LiteralArgumentBuilder.<TestSender>literal("alias")
++                .redirect(unregisterableTarget)
++                .build();
++
++        root.addChild(aliasCmd); // Only alias is registered to root
++
++        final TestSender sender = new TestSender("player", false);
++        final RootCommandNode<TestSender> clientTree = new RootCommandNode<>();
++        final java.util.Map<CommandNode<TestSender>, CommandNode<TestSender>> converted = new java.util.HashMap<>();
++        simulateFillUsableCommands(root.getChildren(), clientTree, sender, converted);
++
++        final CommandNode<TestSender> convertedAlias = clientTree.getChild("alias");
++        Assertions.assertNotNull(convertedAlias);
++        Assertions.assertNull(convertedAlias.getRedirect(), "Dead redirect should be converted to flattened node");
++        Assertions.assertNotNull(convertedAlias.getChild("subcmd"), "Flattened node must inherit children from dead redirect target");
++    }
++}

@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Mon, 31 Aug 2026 21:21:19 +0800
+Subject: [PATCH] fix NPE during async client command tree building
+
+
+diff --git a/com/mojang/brigadier/tree/CommandNode.java b/com/mojang/brigadier/tree/CommandNode.java
+index da387d68cf74519da91dc1ee6d49ee44ca3c430b..dcafae28c457c9295a4928a10617e445484548f6 100644
+--- a/com/mojang/brigadier/tree/CommandNode.java
++++ b/com/mojang/brigadier/tree/CommandNode.java
+@@ -37,7 +37,7 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
+     public CommandNode<io.papermc.paper.command.brigadier.CommandSourceStack> wrappedCached = null; // Paper - Brigadier Command API
+     public io.papermc.paper.command.brigadier.APICommandMeta apiCommandMeta; // Paper - Brigadier Command API
+     // CraftBukkit start
+-    public void removeCommand(String name) {
++    public synchronized void removeCommand(String name) {
+         this.children.remove(name);
+         this.literals.remove(name);
+         this.arguments.remove(name);
+@@ -56,11 +56,11 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
+         return command;
+     }
+ 
+-    public Collection<CommandNode<S>> getChildren() {
+-        return children.values();
++    public synchronized Collection<CommandNode<S>> getChildren() {
++        return new java.util.ArrayList<>(children.values());
+     }
+ 
+-    public CommandNode<S> getChild(final String name) {
++    public synchronized CommandNode<S> getChild(final String name) {
+         return children.get(name);
+     }
+ 
+@@ -76,7 +76,7 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
+         return requirement.test(source);
+     }
+ 
+-    public void addChild(final CommandNode<S> node) {
++    public synchronized void addChild(final CommandNode<S> node) {
+         if (node instanceof RootCommandNode) {
+             throw new UnsupportedOperationException("Cannot add a RootCommandNode as a child to any other CommandNode");
+         }
+@@ -215,7 +215,7 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
+ 
+     public abstract Collection<String> getExamples();
+     // Paper start - Brigadier Command API
+-    public void clearAll() {
++    public synchronized void clearAll() {
+         this.children.clear();
+         this.literals.clear();
+         this.arguments.clear();
+diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
+index 82af03649c7537274aa54ed942e4aae589b97888..d11149f31b9c1e22e06d37438179236277f45090 100644
+--- a/net/minecraft/commands/Commands.java
++++ b/net/minecraft/commands/Commands.java
+@@ -564,10 +564,12 @@ public class Commands {
+         final java.util.Collection<CommandNode<S>> children, final CommandNode<S> target, final S commandFilter, final Map<CommandNode<S>, CommandNode<S>> converted // Paper - Perf: Async command map building; pass copy of children
+     ) {
+         for (CommandNode<S> child : children) { // Paper - Perf: Async command map building; pass copy of children
++            if (child == null) continue; // Lecithin - guard against concurrent modification races
+             // Paper start - Brigadier API
+             if (child.clientNode != null) {
+                 child = child.clientNode;
+             }
++            if (child == null) continue; // Lecithin - guard against concurrent modification races
+             // Paper end - Brigadier API
+             if (!org.spigotmc.SpigotConfig.sendNamespaced && child.getName().contains(":")) continue; // Spigot
+             if (child.canUse(commandFilter)) {
+@@ -601,7 +603,9 @@ public class Commands {
+                     }
+                     // Diff copied from LiteralCommand#createBuilder
+                     for (final CommandNode<S> redirectChild : redirect.getChildren()) {
+-                        redirectBuilder.then(redirectChild);
++                        if (redirectChild != null) {
++                            redirectBuilder.then(redirectChild);
++                        }
+                     }
+ 
+                     builder = redirectBuilder;
