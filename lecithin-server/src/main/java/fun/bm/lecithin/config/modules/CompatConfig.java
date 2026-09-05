@@ -145,4 +145,14 @@ public class CompatConfig {
     @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "startup-context-dispatch")
     public static boolean startupContextDispatch = true;
+
+    /**
+     * Accommodate World#setTime and World#setFullTime calls made from a region tick thread by
+     * staging the target time for immediate synchronous reads and dispatching canonical mutation
+     * to the global region, instead of throwing "Cannot modify time off of the global region".
+     * Arbitrary async callers remain rejected. See {@link fun.bm.lecithin.compat.LecithinWorldTimeSupport}.
+     */
+    @DoNotLoad(when = EnumLoadType.RELOAD)
+    @ConfigInfo(name = "world-time-boundary")
+    public static boolean worldTimeBoundary = true;
 }

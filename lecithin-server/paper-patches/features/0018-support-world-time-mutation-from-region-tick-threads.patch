@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 5 Sep 2026 18:37:40 +0800
+Subject: [PATCH] support world time mutation from region tick threads
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index ca6be9faab3f93da7e91bf73997111b7d737afa9..d1ae348a0b9e66972af0c18a3570357686895bef 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -800,33 +800,57 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setTime(long time) {
+-        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify time off of the global region"); // Folia - region threading
++        // Lecithin start - world time boundary support
++        if (!io.papermc.paper.threadedregions.RegionizedServer.isGlobalTickThread()
++                && !fun.bm.lecithin.compat.LecithinStartupGlobalContext.isStartupThread()
++                && !fun.bm.lecithin.compat.LecithinWorldTimeSupport.isAllowedRegionCaller()) {
++            io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify time off of the global region");
++        }
+         long margin = (time - this.getFullTime()) % SharedConstants.TICKS_PER_GAME_DAY;
+         if (margin < 0) margin += SharedConstants.TICKS_PER_GAME_DAY;
+         this.setFullTime(this.getFullTime() + margin);
++        // Lecithin end - world time boundary support
+     }
+ 
+     @Override
+     public long getFullTime() {
++        // Lecithin start - optimistic staged world time for off-global callers
++        Long staged = fun.bm.lecithin.compat.LecithinWorldTimeSupport.getStagedTime(this);
++        if (staged != null) {
++            return staged;
++        }
++        // Lecithin end - optimistic staged world time for off-global callers
+         return this.world.getDefaultClockTime();
+     }
+ 
+     @Override
+     public void setFullTime(long time) {
+-        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify time off of the global region"); // Folia - region threading
++        // Lecithin start - world time boundary support
+         if (this.world.dimensionType().defaultClock().isEmpty()) {
+             throw new IllegalArgumentException("Cannot set time in world without world clock");
+         }
+ 
+-        final long currentClockTime = this.world.getDefaultClockTime();
++        final long currentClockTime = this.getFullTime();
+         final ClockTimeSkipEvent event = new TimeSkipEvent(this, ClockTimeSkipEvent.SkipReason.CUSTOM, time - currentClockTime);
+         this.server.getPluginManager().callEvent(event);
+         if (event.isCancelled()) {
+             return;
+         }
+ 
+-        // Updates the clock for all players
+-        this.world.clockManager().setTotalTicks(this.world.dimensionType().defaultClock().get(), currentClockTime + event.getSkipAmount());
++        final long targetTotalTicks = currentClockTime + event.getSkipAmount();
++        final net.minecraft.core.Holder<net.minecraft.world.clock.WorldClock> clock = this.world.dimensionType().defaultClock().get();
++
++        if (io.papermc.paper.threadedregions.RegionizedServer.isGlobalTickThread() || fun.bm.lecithin.compat.LecithinStartupGlobalContext.isStartupThread()) {
++            this.world.clockManager().setTotalTicks(clock, targetTotalTicks);
++            return;
++        }
++
++        if (!fun.bm.lecithin.compat.LecithinWorldTimeSupport.isAllowedRegionCaller()) {
++            io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify time off of the global region");
++        }
++
++        fun.bm.lecithin.compat.LecithinWorldTimeSupport.stageAndDispatch(this, clock, targetTotalTicks);
++        // Lecithin end - world time boundary support
+     }
+ 
+     // Paper start
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 1844205bd7f46b0d64bfeec7593e3d8e466544b2..b62ad1f59b423e9b18fd0780ed67035fee289707 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -1577,15 +1577,20 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+ 
+     @Override
+     public void setPlayerTime(long time, boolean tickTime) {
+-        this.getHandle().timeOffset = time;
+-        this.getHandle().relativeTime = tickTime;
+-
+-        final ServerLevel level = this.getHandle().level();
+-        if (this.getHandle().connection == null || level.dimensionType().defaultClock().isEmpty()) {
+-            return;
+-        }
++        // Lecithin start - dispatch player time mutation to owning region
++        this.taskScheduler.scheduleOrExecute(entity -> {
++            ServerPlayer player = (ServerPlayer) entity;
++            player.timeOffset = time;
++            player.relativeTime = tickTime;
++
++            final ServerLevel level = player.level();
++            if (player.connection == null || level.dimensionType().defaultClock().isEmpty()) {
++                return;
++            }
+ 
+-        this.getHandle().connection.send(level.clockManager().createFullSyncPacket(this.getHandle()));
++            player.connection.send(level.clockManager().createFullSyncPacket(player));
++        });
++        // Lecithin end - dispatch player time mutation to owning region
+     }
+ 
+     @Override

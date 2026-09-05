@@ -24,6 +24,7 @@
   "lecithin.compat-config.teleport-handover.comment": "當實體前一次跨區域傳送仍在交接時，將後續傳送交給該實體的排程器處理，避免直接被拒絕。\n呼叫端不會等待前一次傳送完成。",
   "lecithin.compat-config.teleport-refusal-diagnostics.comment": "在傳送被拒絕時輸出額外的實體、區塊、載具與執行緒脈絡資訊。\n只增加診斷記錄，不改變傳送結果。",
   "lecithin.compat-config.teleport-semantics.comment": "讓 Entity.teleport(Location) 與 Player.teleport(Location) 交由 Folia 的非同步傳送機制處理。\n同區域傳送可立即取得結果，跨區域或跨世界時可能先回傳 true，傳送稍後完成。",
+  "lecithin.compat-config.world-time-boundary.comment": "當世界區域 tick 執行緒呼叫 World.setTime 或 World.setFullTime 時，暫存目標時間以供同步讀取，並將正規時間修改派送至全域區域執行，避免拋出「Cannot modify time off of the global region」錯誤。\n非 tick 執行緒的非同步呼叫仍會被拒絕。停用此選項將恢復 Folia 原生拒絕行為。",
   "lecithin.event-config.comment": "恢復部分 Folia 執行路徑中未觸發或行為不同的 Bukkit 事件。",
   "lecithin.event-config.move-rollback-without-teleport.comment": "當 PlayerMoveEvent 被取消時，優先直接修正玩家位置，避免額外產生一次 PLUGIN 原因的傳送事件。\n只有目前執行緒擁有目的地時才會使用這種方式。",
   "lecithin.event-config.passenger-teleport-cross-world-offset.comment": "跨世界傳送時，讓乘客的傳送事件使用乘客自己的相對位置，不直接沿用載具位置。\n需要 passenger-teleport-events。",
