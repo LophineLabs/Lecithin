@@ -9,7 +9,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     env:
-      TOOL: "https://github.com/LophineLabs/AutoUpdateUpstream.git"
+      TOOL: "LophineLabs/AutoUpdateUpstream"
       UPSTREAM_URL: "https://github.com/LophineLabs/Lophine.git"
       REF: "lophineRef"
       TITLE: "Update Upstream (Lophine)"
