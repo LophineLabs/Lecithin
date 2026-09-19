@@ -5,10 +5,10 @@ Subject: [PATCH] Register I18n
 
 
 diff --git a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
-index 907eef0ab2635d3f49f67649147ca29f003f9818..9a5af877cfc8559184772d3a0d612ba4f6ee80b5 100644
+index 1641853f9c9cf8338a8001b0f2f7030b845f7c31..13e38f89a3f7691a6785809834dd3f97a1331709 100644
 --- a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
 +++ b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
-@@ -57,6 +57,7 @@ public class ServerI18nUtil {
+@@ -59,6 +59,7 @@ public class ServerI18nUtil {
      private static Set<String> register() {
          Set<String> paths = new HashSet<>();
          register(paths, "assets/lophine/lang");
