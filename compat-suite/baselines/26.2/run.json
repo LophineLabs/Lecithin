@@ -1,9 +1,0 @@
-{
-  "runId": "20260924-baseline-26.2",
-  "suiteCommit": "70856ea637",
-  "targets": [
-    "paper",
-    "lecithin",
-    "lecithin-dispatch-off"
-  ]
-}
