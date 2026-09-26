@@ -52,10 +52,10 @@ completes and a player who left is cleaned up by the normal disconnect path.
 Kill switch: event-config.respawn-event=false.
 
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 28ce624e9952e9d45930d4550ef80d1e788f5916..db7e811d5b133557025f117ff9fabf0e9c670ad2 100644
+index d648b66dace7188b54d93e4a18b5eb5e30176719..21d6e476a17f33c70518fde24625fed2449723e2 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -1810,9 +1810,28 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1861,9 +1861,28 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          ca.spottedleaf.concurrentutil.completable.CallbackCompletable<org.bukkit.Location> spawnPosComplete =
              new ca.spottedleaf.concurrentutil.completable.CallbackCompletable<>();
          boolean[] usedRespawnAnchor = new boolean[1];
@@ -84,7 +84,7 @@ index 28ce624e9952e9d45930d4550ef80d1e788f5916..db7e811d5b133557025f117ff9fabf0e
              // update pos and velocity
              ServerPlayer.this.setPosRaw(spawnLoc.getX(), spawnLoc.getY(), spawnLoc.getZ());
              ServerPlayer.this.setYRot(spawnLoc.getYaw());
-@@ -1869,6 +1888,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1920,6 +1939,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                      ).orElse(null);
                      if (spawnPos == null) {
                          // no spawn
@@ -92,7 +92,7 @@ index 28ce624e9952e9d45930d4550ef80d1e788f5916..db7e811d5b133557025f117ff9fabf0e
                          ServerPlayer.this.connection.send(
                              new ClientboundGameEventPacket(ClientboundGameEventPacket.NO_RESPAWN_BLOCK_AVAILABLE, 0.0F)
                          );
-@@ -1883,6 +1903,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1934,6 +1954,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                      boolean isRespawnAnchor = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.world.level.block.Blocks.RESPAWN_ANCHOR);
                      boolean isBed = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.tags.BlockTags.BEDS);
                      usedRespawnAnchor[0] = !alive && isRespawnAnchor;

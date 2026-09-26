@@ -33,10 +33,10 @@ has the same Paper ground truth and the same shape.
 Kill switch: event-config.move-rollback-without-teleport=false.
 
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index e489da1acbb77c003951b608856ea706570cbed6..117f2ef2cc02f7a183f6773acfb6015e346d6174 100644
+index d5a7d32543e8a244375c614e797a869d3ba7fc96..1f2542738f6f1d7ad848debff421a802bf53c4cd 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -739,7 +739,14 @@ public class ServerGamePacketListenerImpl
+@@ -750,7 +750,14 @@ public class ServerGamePacketListenerImpl
  
                      // If the event is cancelled we move the player back to their old location.
                      if (event.isCancelled()) {
@@ -51,18 +51,18 @@ index e489da1acbb77c003951b608856ea706570cbed6..117f2ef2cc02f7a183f6773acfb6015e
                          return;
                      }
  
-@@ -1753,7 +1760,14 @@ public class ServerGamePacketListenerImpl
+@@ -1789,7 +1796,14 @@ public class ServerGamePacketListenerImpl
  
-                                         // If the event is cancelled we move the player back to their old location.
-                                         if (event.isCancelled()) {
+                         // If the event is cancelled we move the player back to their old location.
+                         if (event.isCancelled()) {
 +                                            // Lecithin start - roll back without firing a teleport, as Paper does.
 +                                            // Folia turned this correction into a real PLUGIN teleport, which both reports a
 +                                            // teleport Paper never reports and lets a second plugin cancel the rollback and keep
 +                                            // the movement the first one refused. See LecithinMoveRollback.
 +                                            if (!fun.bm.lecithin.compat.LecithinMoveRollback.rollback(this, this.player, from)) {
-                                             this.player.getBukkitEntity().teleportAsync(from, PlayerTeleportEvent.TeleportCause.PLUGIN); // Folia - region threading
+                             this.player.getBukkitEntity().teleportAsync(from, PlayerTeleportEvent.TeleportCause.PLUGIN); // Folia - region threading
 +                                            }
 +                                            // Lecithin end
-                                             return;
-                                         }
+                             return;
+                         }
  

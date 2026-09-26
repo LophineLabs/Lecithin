@@ -5,7 +5,7 @@ Subject: [PATCH] handle legacy cross-owner operations
 
 
 diff --git a/io/papermc/paper/threadedregions/RegionShutdownThread.java b/io/papermc/paper/threadedregions/RegionShutdownThread.java
-index d5c4e9b82f2ebc135b6747d19678b1a15e808ec8..2df352236bded488e790c63073d879114fd180f5 100644
+index 591002c9fdb58b5ee9d54d092c913a9eee01e6ec..c9f1d0a80091d9e791e7842cc48bce1a9268ffff 100644
 --- a/io/papermc/paper/threadedregions/RegionShutdownThread.java
 +++ b/io/papermc/paper/threadedregions/RegionShutdownThread.java
 @@ -151,6 +151,7 @@ public class RegionShutdownThread extends ca.spottedleaf.moonrise.common.util.Ti
@@ -186,10 +186,10 @@ index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e3
          /** Never 0L, since 0L is reserved for global region. */
          public final long id = ID_GENERATOR.incrementAndGet();
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index db7e811d5b133557025f117ff9fabf0e9c670ad2..7ccdf8fa3cca82194534107da1ae839e06683cdf 100644
+index 21d6e476a17f33c70518fde24625fed2449723e2..8680cf489ea3a60916afda07f4ff259492b5503e 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -3173,6 +3173,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3211,6 +3211,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public Entity getCamera() {

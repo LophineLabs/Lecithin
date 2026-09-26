@@ -1,0 +1,20 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 26 Sep 2026 21:22:35 +0800
+Subject: [PATCH] adapt the unsafe end-portal call to Folia's
+ endPortalLogicAsync callback
+
+
+diff --git a/net/minecraft/world/level/block/EndPortalBlock.java b/net/minecraft/world/level/block/EndPortalBlock.java
+index 0e2845d2837da2e69791c1014f532de0e3d929d6..5b011670aeec8a343ee1289bed6aa0eadf450086 100644
+--- a/net/minecraft/world/level/block/EndPortalBlock.java
++++ b/net/minecraft/world/level/block/EndPortalBlock.java
+@@ -71,7 +71,7 @@ public class EndPortalBlock extends BaseEntityBlock implements Portal {
+             } else {
+                 // Luminol start - unsafe teleportation
+                 if (me.earthme.luminol.config.modules.fixes.UnsafeTeleportationConfig.enabled && !(entity instanceof net.minecraft.world.entity.player.Player)) {
+-                    entity.endPortalLogicAsync(pos);
++                    entity.endPortalLogicAsync(pos, null); // Lecithin - Folia's endPortalLogicAsync now takes a completion callback; null is the no-callback path
+                     return;
+                 }
+                 // Luminol end

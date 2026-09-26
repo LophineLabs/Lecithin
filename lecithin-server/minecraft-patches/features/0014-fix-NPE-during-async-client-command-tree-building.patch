@@ -51,15 +51,10 @@ index da387d68cf74519da91dc1ee6d49ee44ca3c430b..dcafae28c457c9295a4928a10617e445
          this.literals.clear();
          this.arguments.clear();
 diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
-index 82af03649c7537274aa54ed942e4aae589b97888..d11149f31b9c1e22e06d37438179236277f45090 100644
+index da358ed058ca5b6b5e958417e63c127f63c5d0b5..3bf75791248d728a5b3a074ac2a03885c527241a 100644
 --- a/net/minecraft/commands/Commands.java
 +++ b/net/minecraft/commands/Commands.java
-@@ -564,10 +564,12 @@ public class Commands {
-         final java.util.Collection<CommandNode<S>> children, final CommandNode<S> target, final S commandFilter, final Map<CommandNode<S>, CommandNode<S>> converted // Paper - Perf: Async command map building; pass copy of children
-     ) {
-         for (CommandNode<S> child : children) { // Paper - Perf: Async command map building; pass copy of children
-+            if (child == null) continue; // Lecithin - guard against concurrent modification races
-             // Paper start - Brigadier API
+@@ -592,6 +592,7 @@ public class Commands {
              if (child.clientNode != null) {
                  child = child.clientNode;
              }
@@ -67,7 +62,7 @@ index 82af03649c7537274aa54ed942e4aae589b97888..d11149f31b9c1e22e06d374381792362
              // Paper end - Brigadier API
              if (!org.spigotmc.SpigotConfig.sendNamespaced && child.getName().contains(":")) continue; // Spigot
              if (child.canUse(commandFilter)) {
-@@ -601,7 +603,9 @@ public class Commands {
+@@ -625,7 +626,9 @@ public class Commands {
                      }
                      // Diff copied from LiteralCommand#createBuilder
                      for (final CommandNode<S> redirectChild : redirect.getChildren()) {

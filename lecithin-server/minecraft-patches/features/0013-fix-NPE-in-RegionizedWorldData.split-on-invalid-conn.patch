@@ -7,7 +7,7 @@ Subject: [PATCH] fix NPE in RegionizedWorldData.split on invalid connection or
 RegionizedWorldData.split assumed every connection in from.connections has a non-null ServerPlayer located in an active surviving region section. Guard against null player or disconnected connection during region split, and guard against target region section lookup returning null.
 
 diff --git a/io/papermc/paper/threadedregions/RegionizedWorldData.java b/io/papermc/paper/threadedregions/RegionizedWorldData.java
-index f0fabd9fd39e1024837dbb8633c39eb495984e4d..14445ab2c5a8a7a6ed5265347d6fcf84c98909db 100644
+index 7808af7ab885ca37f9e4e7dd3cc2167661021a8c..f8b4aaa08faeeb2d4233d0cda3dcc2ad2225ab29 100644
 --- a/io/papermc/paper/threadedregions/RegionizedWorldData.java
 +++ b/io/papermc/paper/threadedregions/RegionizedWorldData.java
 @@ -234,11 +234,35 @@ public final class RegionizedWorldData {
@@ -48,7 +48,7 @@ index f0fabd9fd39e1024837dbb8633c39eb495984e4d..14445ab2c5a8a7a6ed5265347d6fcf84
              }
              // entities
              for (final ServerPlayer player : from.localPlayers) {
-@@ -620,14 +644,18 @@ public final class RegionizedWorldData {
+@@ -604,14 +628,18 @@ public final class RegionizedWorldData {
      }
  
      private static void cleanUpConnection(final Connection conn) {

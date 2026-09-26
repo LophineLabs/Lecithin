@@ -24,7 +24,7 @@ redirect landed in, which would be an ownership violation rather than a
 behavioural difference.
 
 diff --git a/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
-index fdf220424f7693a7ea3ae385ddd771720825b0f7..d05a86e3ced1b64d87371744b5abbe3687cf5e3b 100644
+index c39615836fbbf9a5bed91b3af93a5b28fa71ffe8..9e45eab4266e8242e0b13539df46840778066d19 100644
 --- a/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
 +++ b/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
 @@ -224,9 +224,27 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
