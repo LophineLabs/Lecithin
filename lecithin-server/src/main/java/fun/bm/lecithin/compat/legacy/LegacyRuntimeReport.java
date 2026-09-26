@@ -53,7 +53,7 @@ public final class LegacyRuntimeReport {
                     + " scheduledBodies=" + s.scheduledBodiesOnGlobalThread.sum()
                     + " | domain acq=" + d.acquisitions.sum()
                     + " contended=" + d.contended.sum()
-                    + " borrows=" + d.borrows.sum()
+                    + " callbacks=" + d.callbacks.sum()
                     + " waitMs=" + TimeUnit.NANOSECONDS.toMillis(d.waitNanos.sum())
                     + " maxWaitMs=" + TimeUnit.NANOSECONDS.toMillis(d.maxWaitNanos)
                     + " holder=" + d.describeOwner()

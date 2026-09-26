@@ -54,15 +54,15 @@ public final class LegacyPluginState {
      * Run one lane body inside this plugin's domain. Called by the lane's drain loop only.
      */
     void runInLane(final Runnable body) {
-        final LegacyPluginRuntime.Frame frame = LegacyPluginRuntime.enter(this, LegacyAffinity.NONE, true);
         try {
-            this.ranInLane.increment();
-            body.run();
+            LegacyPluginRuntime.call(this, LegacyAffinity.NONE, true, () -> {
+                this.ranInLane.increment();
+                body.run();
+                return null;
+            });
         } catch (final Throwable t) {
             this.plugin.getLogger().log(java.util.logging.Level.WARNING,
                     "[Lecithin] legacy lane work for " + this.plugin.getName() + " generated an exception", t);
-        } finally {
-            LegacyPluginRuntime.exit(frame);
         }
     }
 }

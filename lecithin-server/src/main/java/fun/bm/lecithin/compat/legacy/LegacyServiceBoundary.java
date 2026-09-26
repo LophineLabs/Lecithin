@@ -85,12 +85,10 @@ public final class LegacyServiceBoundary {
                     default -> invokeDelegate(method, args);
                 };
             }
-            final LegacyPluginRuntime.Frame frame = LegacyPluginRuntime.enterService(this.state, this.serialiseAsyncCallers);
-            try {
-                return invokeDelegate(method, args);
-            } finally {
-                LegacyPluginRuntime.exit(frame);
-            }
+            return LegacyPluginRuntime.callService(this.state, this.serialiseAsyncCallers, () -> {
+                try { return invokeDelegate(method, args); }
+                catch (final Throwable failure) { throw LegacyCalls.unchecked(failure); }
+            });
         }
 
         private Object invokeDelegate(final Method method, final Object[] args) throws Throwable {

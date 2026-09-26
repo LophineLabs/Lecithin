@@ -220,12 +220,13 @@ public final class LegacyScheduler {
         }
 
         private void runOnOwner(final boolean entityOwner) {
-            final LegacyPluginRuntime.Frame frame = LegacyPluginRuntime.enter(this.state, this.affinity, false);
             try {
-                (entityOwner ? this.state.ranOnEntityOwner : this.state.ranOnRegionOwner).increment();
-                this.runBody();
+                LegacyPluginRuntime.call(this.state, this.affinity, false, () -> {
+                    (entityOwner ? this.state.ranOnEntityOwner : this.state.ranOnRegionOwner).increment();
+                    this.runBody();
+                    return null;
+                });
             } finally {
-                LegacyPluginRuntime.exit(frame);
                 this.afterRun();
             }
         }

@@ -52,12 +52,12 @@ import java.util.concurrent.ConcurrentHashMap;
  *       logging out, being removed or crossing regions, and stop when the plugin is disabled.</li>
  *   <li><b>Owner fast path.</b> A short one-shot continuation created on behalf of an entity or a
  *       region goes straight to that owner's Folia scheduler, as before, now inside the domain.</li>
- *   <li><b>Synchronous calls stay synchronous.</b> Events, service calls and dependency calls are
- *       never deferred: they run on the calling thread, entering the callee's domain, so return
- *       values, exceptions, cancellation and the atomicity of the caller's operation are exactly
- *       what the caller sees on Paper.</li>
+ *   <li><b>Synchronous calls stay synchronous.</b> Complete event, command and service bodies cross
+ *       the domain boundary. A waiting owner services reentry on its original JVM thread, keeping
+ *       monitors reentrant. Return values, exceptions and cancellation are observed before return.</li>
  *   <li><b>Ownership is never relaxed.</b> World, entity and chunk state is only touched on the
- *       thread that owns it; lane work that reaches for world state fails at the access, attributably.</li>
+ *       thread that owns it. Adapted APIs use {@link LegacyOwnerOperations}; unadapted accesses still
+ *       fail their original checks. Native plugin frames never enable these adapters.</li>
  * </ol>
  *
  * <p>Kill switch: {@code compat-config.legacy-managed-execution=false} turns every path in this
@@ -79,7 +79,7 @@ public final class LegacyPluginRuntime {
      * One platform-established execution frame: which plugin's domain this thread is inside, where
      * the work is anchored, and whether the thread is the legacy lane.
      */
-    public static final class Frame {
+    static final class Frame {
         final LegacyPluginState state;
         final LegacyAffinity affinity;
         final boolean lane;
@@ -139,8 +139,7 @@ public final class LegacyPluginRuntime {
 
     // ------------------------------------------------------------------ frames
 
-    static Frame enter(final LegacyPluginState state, final LegacyAffinity affinity, final boolean lane) {
-        state.domain.enter();
+    private static Frame enter(final LegacyPluginState state, final LegacyAffinity affinity, final boolean lane) {
         final Frame parent = FRAME.get();
         final Frame frame = new Frame(state, affinity, lane || (parent != null && parent.lane), parent);
         FRAME.set(frame);
@@ -154,7 +153,7 @@ public final class LegacyPluginRuntime {
      * Leave a frame returned by one of the {@code enter*} methods. A {@code null} frame is a no-op,
      * which keeps the call sites to a single unconditional {@code finally}.
      */
-    public static void exit(final Frame frame) {
+    private static void exit(final Frame frame) {
         if (frame == null) {
             return;
         }
@@ -163,7 +162,71 @@ public final class LegacyPluginRuntime {
         } else {
             FRAME.set(frame.parent);
         }
-        frame.state.domain.exit();
+    }
+
+    static Frame currentFrame() { return FRAME.get(); }
+    public static boolean isManagedContext() { return FRAME.get() != null; }
+
+    static <T> T withFrame(final Frame frame, final java.util.function.Supplier<T> body) {
+        final Frame previous = FRAME.get();
+        if (frame == null) FRAME.remove(); else FRAME.set(frame);
+        try { return body.get(); }
+        finally { if (previous == null) FRAME.remove(); else FRAME.set(previous); }
+    }
+
+    static <T> T call(final LegacyPluginState state, final LegacyAffinity affinity, final boolean lane,
+                      final java.util.function.Supplier<T> body) {
+        return state.domain.call(() -> {
+            final Frame frame = enter(state, affinity, lane);
+            try { return body.get(); }
+            finally { exit(frame); }
+        });
+    }
+
+    public static void callListener(final RegisteredListener registration, final Event event) throws org.bukkit.event.EventException {
+        final LegacyPluginState state = event.isAsynchronous() ? null : stateOf(registration.getPlugin());
+        final java.util.function.Supplier<Void> body = () -> {
+            try { registration.callEvent(event); return null; }
+            catch (final Throwable failure) { throw LegacyCalls.unchecked(failure); }
+        };
+        if (state == null) {
+            withFrame(null, body);
+        } else {
+            state.listenerCalls.increment();
+            final LegacyAffinity affinity = affinityOf(event);
+            LegacyCalls.callback(() -> call(state, affinity, false, body));
+        }
+    }
+
+    public static <T> T callCommand(final Command command, final CommandSender sender,
+                                    final java.util.function.Supplier<T> body) {
+        final LegacyPluginState state = command instanceof PluginIdentifiableCommand identifiable
+                ? stateOf(identifiable.getPlugin()) : null;
+        if (state == null) return withFrame(null, body);
+        state.commandCalls.increment();
+        final LegacyAffinity affinity = sender instanceof Entity entity && usableEntity(entity)
+                ? LegacyAffinity.entity(entity) : affinityOfThread();
+        return call(state, affinity, false, body);
+    }
+
+    public static void callLifecycle(final Plugin plugin, final Runnable body) {
+        final LegacyPluginState state = stateOf(plugin);
+        if (state == null) {
+            withFrame(null, () -> { body.run(); return null; });
+        } else {
+            state.lifecycleCalls.increment();
+            call(state, affinityOfThread(), false, () -> { body.run(); return null; });
+        }
+    }
+
+    static <T> T callService(final LegacyPluginState state, final boolean serialiseAsyncCallers,
+                            final java.util.function.Supplier<T> body) {
+        if (!serialiseAsyncCallers && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread() && !isLegacyLane()) {
+            return body.get();
+        }
+        state.serviceCalls.increment();
+        final Frame parent = FRAME.get();
+        return call(state, parent != null ? parent.affinity : affinityOfThread(), false, body);
     }
 
     /**
@@ -260,80 +323,6 @@ public final class LegacyPluginRuntime {
         }
         final Frame frame = FRAME.get();
         return frame != null && frame.affinity.kind() != LegacyAffinity.Kind.NONE ? frame.affinity : affinityOfThread();
-    }
-
-    // ------------------------------------------------------------------ entry points
-
-    /**
-     * Enter the domain of the plugin behind {@code registration} for one synchronous listener call.
-     *
-     * @return the frame to {@link #exit}, or {@code null} when no domain applies (native plugin,
-     * asynchronous event, runtime off)
-     */
-    public static Frame enterListener(final RegisteredListener registration, final Event event) {
-        if (event.isAsynchronous()) {
-            // Paper ran asynchronous listeners concurrently with the main thread; so do we.
-            return null;
-        }
-        final LegacyPluginState state = stateOf(registration.getPlugin());
-        if (state == null) {
-            return null;
-        }
-        state.listenerCalls.increment();
-        return enter(state, affinityOf(event), false);
-    }
-
-    /**
-     * Enter the domain of the plugin that owns {@code command}, for execution or tab completion.
-     */
-    public static Frame enterCommand(final Command command, final CommandSender sender) {
-        if (!(command instanceof PluginIdentifiableCommand identifiable)) {
-            return null;
-        }
-        final LegacyPluginState state = stateOf(identifiable.getPlugin());
-        if (state == null) {
-            return null;
-        }
-        state.commandCalls.increment();
-        final LegacyAffinity affinity = sender instanceof Entity entity && usableEntity(entity)
-                ? LegacyAffinity.entity(entity) : affinityOfThread();
-        return enter(state, affinity, false);
-    }
-
-    /**
-     * Enter {@code plugin}'s domain for an enable or disable, so a lifecycle transition never
-     * overlaps the plugin's own running work.
-     */
-    public static Frame enterLifecycle(final Plugin plugin) {
-        final LegacyPluginState state = stateOf(plugin);
-        if (state == null) {
-            return null;
-        }
-        state.lifecycleCalls.increment();
-        return enter(state, affinityOfThread(), false);
-    }
-
-    /**
-     * Enter a provider plugin's domain for one service call - from a synchronous context only.
-     *
-     * <p>Paper serialised a service call with the provider's own work only when both ran on the main
-     * thread; a call from an asynchronous thread always ran concurrently with it. Keeping that exact
-     * boundary matters beyond fidelity: making an async caller wait here would add a wait Paper never
-     * had, and an async caller holding its own lock while it waits could then deadlock against the
-     * provider calling back into it. So an async caller gets the provider directly, as on Paper.
-     *
-     * <p>{@code serialiseAsyncCallers} is the exception for an economy provider: see
-     * {@link LegacyServiceBoundary}.
-     *
-     * @return the frame to {@link #exit}, or {@code null} for an asynchronous caller
-     */
-    static Frame enterService(final LegacyPluginState state, final boolean serialiseAsyncCallers) {
-        if (!serialiseAsyncCallers && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread() && !isLegacyLane()) {
-            return null;
-        }
-        state.serviceCalls.increment();
-        final Frame parent = FRAME.get();
-        return enter(state, parent != null ? parent.affinity : affinityOfThread(), false);
     }
 
     // ------------------------------------------------------------------ lifecycle

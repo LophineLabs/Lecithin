@@ -1,0 +1,702 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 26 Sep 2026 17:36:41 +0800
+Subject: [PATCH] handle legacy cross-owner operations
+
+
+diff --git a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+index 8ecba0fdccfe45d4b41690f6d0e05e518cdb9fc5..aa2c9e577fb7fb6454daf6f7ab40474bdbbb878c 100644
+--- a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
++++ b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+@@ -82,9 +82,7 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+             // Note: we don't return the result of target.execute as thats success / failure, we return handled (true) or not handled (false)
+             // Lecithin start - Legacy Paper Runtime: a managed plugin's command runs inside its domain,
+             // which also subsumes the economy command lock (a managed provider is never guarded by it)
+-            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterCommand(this.command, sender);
+-            try {
++            return fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.callCommand(this.command, sender, () -> {
+             // Lecithin end - Legacy Paper Runtime
+             // Lecithin start - economy serialization: this is the single choke point through which
+             // every legacy (plugin.yml) Bukkit command is executed, so it is where the core can put
+@@ -105,9 +103,7 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+             // return true as command was handled
+             return 1;
+             // Lecithin start - Legacy Paper Runtime
+-            } finally {
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame);
+-            }
++            });
+             // Lecithin end - Legacy Paper Runtime
+         }
+     }
+@@ -130,15 +126,12 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+ 
+             List<String> results = null;
+             Location pos = context.getSource().getLocation();
+-            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterCommand(this.command, sender); // Lecithin - Legacy Paper Runtime
+             try {
+-                results = this.command.tabComplete(sender, this.literal, args, pos.clone());
++                results = fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.callCommand(this.command, sender,
++                    () -> this.command.tabComplete(sender, this.literal, args, pos.clone()));
+             } catch (CommandException ex) {
+                 sender.sendMessage(Component.text("An internal error occurred while attempting to tab-complete this command", NamedTextColor.RED));
+                 Bukkit.getServer().getLogger().log(Level.SEVERE, "Exception when " + sender.getName() + " attempted to tab complete " + builder.getRemaining(), ex);
+-            } finally {
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame); // Lecithin - Legacy Paper Runtime
+             }
+ 
+             if (sender instanceof final Player player) {
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+index b16ef38c33bae6c7ce54d99c1b76e5535c12ee2c..4dac946b8d46b857edc537ae1ff4190a2edb50b6 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+@@ -36,6 +36,7 @@ class PaperEventManager {
+ 
+     // SimplePluginManager
+     public void callEvent(@NotNull Event event) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.dispatchEvent(event, () -> this.callEvent(event))) return;
+         // Leaves start - process bot load/save
+         if (fun.bm.lophine.config.modules.function.FakeplayerConfig.checkEnabled() && fun.bm.lophine.carpet.config.modules.FakePlayerCompatConfig.fakePlayerResident) {
+             if (event instanceof org.bukkit.event.world.WorldLoadEvent worldLoadEvent) {
+@@ -90,12 +91,8 @@ class PaperEventManager {
+                 continue;
+             }
+ 
+-            // Lecithin start - Legacy Paper Runtime: serial entry into a managed plugin
+-            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterListener(registration, event);
+-            // Lecithin end - Legacy Paper Runtime
+             try {
+-                registration.callEvent(event);
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.callListener(registration, event);
+             } catch (AuthorNagException ex) {
+                 Plugin plugin = registration.getPlugin();
+ 
+@@ -115,8 +112,6 @@ class PaperEventManager {
+                 if (!(event instanceof ServerExceptionEvent)) { // We don't want to cause an endless event loop
+                     this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
+                 }
+-            } finally {
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame); // Lecithin - Legacy Paper Runtime
+             }
+         }
+     }
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+index 5b0efe5e0b87048c52180618c26ec57a1a5041b3..27e5cafa572b1b6da0fc45bbaa9471c2f90d3981 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+@@ -201,19 +201,15 @@ class PaperPluginInstanceManager {
+             fun.bm.lecithin.compat.LecithinPaperLibAdapter.install(jPlugin);
+             // Lecithin end
+ 
+-            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterLifecycle(jPlugin); // Lecithin - Legacy Paper Runtime
+             try {
+                 fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enabled(jPlugin); // Lecithin - Legacy Paper Runtime
+-                jPlugin.setEnabled(true);
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.callLifecycle(jPlugin, () -> jPlugin.setEnabled(true));
+             } catch (Throwable ex) {
+                 this.server.getLogger().log(Level.SEVERE, "Error occurred while enabling " + plugin.getPluginMeta().getDisplayName() + " (Is it up to date?)", ex);
+                 // Paper start - Disable plugins that fail to load
+                 this.server.getPluginManager().disablePlugin(jPlugin);
+                 return;
+                 // Paper end
+-            } finally {
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame); // Lecithin - Legacy Paper Runtime
+             }
+ 
+             // Perhaps abort here, rather than continue going, but as it stands,
+@@ -242,14 +238,10 @@ class PaperPluginInstanceManager {
+ 
+             this.server.getPluginManager().callEvent(new PluginDisableEvent(plugin));
+             // Lecithin - Legacy Paper Runtime: disabling waits for the plugin's running work, as Paper's single thread did
+-            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterLifecycle(javaPlugin);
+             try {
+-                javaPlugin.setEnabled(false);
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.callLifecycle(javaPlugin, () -> javaPlugin.setEnabled(false));
+             } catch (Throwable ex) {
+                 this.server.getLogger().log(Level.SEVERE, "Error occurred while disabling " + pluginName, ex);
+-            } finally {
+-                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame);
+             }
+ 
+             // Flush async appender before unloading, avoids issues when a log message with class context
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
+index fb89f6ef3adac92639d999f173383c3eeb8fabab..5c5d41f0c9045a61e54025dd33b71fb515f11f32 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
+@@ -117,6 +117,9 @@ public class CraftChunk implements Chunk {
+ 
+     @Override
+     public Entity[] getEntities() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.level,this.x,this.z)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.region(this.level,this.x,this.z,this::getEntities);
++        }
+         return FeatureHooks.getChunkEntities(this.level, this.x, this.z); // Paper - chunk system
+     }
+ 
+@@ -272,6 +275,10 @@ public class CraftChunk implements Chunk {
+ 
+     @Override
+     public ChunkSnapshot getChunkSnapshot(boolean includeMaxBlockY, boolean includeBiome, boolean includeBiomeTempRain, boolean includeLightData) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.level,this.x,this.z)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.region(this.level,this.x,this.z,
++                () -> this.getChunkSnapshot(includeMaxBlockY,includeBiome,includeBiomeTempRain,includeLightData));
++        }
+         ChunkAccess chunk = this.getHandle(ChunkStatus.FULL);
+ 
+         LevelChunkSection[] cs = chunk.getSections();
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 2fa26a2447274258ebce50e11d6b8d4f761dbeec..3044b754f11799732e34614d6f9d64c58789b0b8 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -1384,6 +1384,10 @@ public final class CraftServer implements Server {
+             return false;
+         }
+ 
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.isCallingOperationIn(handle)) {
++            return false; // A synchronous callback cannot unload its own active owner operation.
++        }
++
+         if (handle.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+             return false;
+         }
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index d1ae348a0b9e66972af0c18a3570357686895bef..f8136ce44f574f95d8fea3de271b888c93dc224e 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -370,6 +370,9 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public Chunk getChunkAt(int x, int z) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.world,x,z)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.region(this.world,x,z,() -> this.getChunkAt(x,z));
++        }
+         ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.getHandle(), x, z, "Async chunk retrieval"); // Folia - region threading
+         warnUnsafeChunk("getting a faraway chunk", x, z); // Paper
+         net.minecraft.world.level.chunk.LevelChunk chunk = (net.minecraft.world.level.chunk.LevelChunk) this.world.getChunk(x, z, ChunkStatus.FULL, true);
+diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
+index 64e2bebf4383b9b7c21102fc15f59f1b3676d3d7..7dd1f556093e702f60441deb711770c5e509de59 100644
+--- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
++++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
+@@ -80,6 +80,9 @@ public class CraftBlock implements Block {
+     }
+ 
+     public net.minecraft.world.level.block.state.BlockState getBlockState() {
++        if (this.level instanceof ServerLevel ownerWorld && fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(ownerWorld,this.position.getX() >> 4,this.position.getZ() >> 4)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.region(ownerWorld,this.position.getX() >> 4,this.position.getZ() >> 4,this::getBlockState);
++        }
+         // Folia start - region threading
+         if (this.level instanceof ServerLevel serverWorld) {
+             // Lecithin start - serve a read-only lookup from a resident chunk instead of refusing it
+@@ -210,6 +213,11 @@ public class CraftBlock implements Block {
+     }
+ 
+     public static boolean setBlockState(LevelAccessor level, BlockPos pos, net.minecraft.world.level.block.state.BlockState newState, boolean applyPhysics) {
++        if (level instanceof ServerLevel ownerWorld && fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(ownerWorld,pos.getX() >> 4,pos.getZ() >> 4)) {
++            final BlockPos immutable = pos.immutable();
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.region(ownerWorld,pos.getX() >> 4,pos.getZ() >> 4,
++                () -> setBlockState(level,immutable,newState,applyPhysics));
++        }
+         // Folia start - region threading
+         if (level instanceof ServerLevel serverWorld) {
+             ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, pos, "Cannot modify world asynchronously");
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java
+index df2f4d75bb0d9bc0e1cf24d0b51b6c934d6b0f11..4768951cb2cd4b519621d0a2acac6910ca2f7c84 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java
+@@ -65,22 +65,36 @@ public abstract class CraftAbstractHorse extends CraftAnimals implements Abstrac
+ 
+     @Override
+     public boolean isTamed() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.isTamed(); });
++        }
+         return this.getHandle().isTamed();
+     }
+ 
+     @Override
+     public void setTamed(boolean tamed) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setTamed(tamed);return null; });
++            return;
++        }
+         this.getHandle().setTamed(tamed);
+     }
+ 
+     @Override
+     public AnimalTamer getOwner() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.getOwner(); });
++        }
+         if (this.getOwnerUUID() == null) return null;
+         return this.getServer().getOfflinePlayer(this.getOwnerUUID());
+     }
+ 
+     @Override
+     public void setOwner(AnimalTamer owner) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setOwner(owner);return null; });
++            return;
++        }
+         if (owner != null) {
+             this.setTamed(true);
+             this.getHandle().setTarget(null, null);
+@@ -97,10 +111,17 @@ public abstract class CraftAbstractHorse extends CraftAnimals implements Abstrac
+     }
+ 
+     public UUID getOwnerUUID() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.getOwnerUUID(); });
++        }
+         return Optionull.map(this.getHandle().getOwnerReference(), EntityReference::getUUID);
+     }
+ 
+     public void setOwnerUUID(UUID uuid) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setOwnerUUID(uuid);return null; });
++            return;
++        }
+         this.getHandle().owner = uuid == null ? null : EntityReference.of(uuid);
+     }
+ 
+@@ -116,6 +137,9 @@ public abstract class CraftAbstractHorse extends CraftAnimals implements Abstrac
+ 
+     @Override
+     public AbstractHorseInventory getInventory() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,this::getInventory);
++        }
+         return new CraftInventorySaddledHorse(
+             this.getHandle().inventory,
+             this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+index fbdd2b02c9298c21c598d04531a577b8c0b1ec4d..68f2ca713ea217f9b5c461d9e54a8dfdff19342a 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+@@ -668,21 +668,35 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+ 
+     @Override
+     public void setMetadata(String metadataKey, MetadataValue newMetadataValue) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setMetadata(metadataKey,newMetadataValue);return null; });
++            return;
++        }
+         this.server.getEntityMetadata().setMetadata(this, metadataKey, newMetadataValue);
+     }
+ 
+     @Override
+     public List<MetadataValue> getMetadata(String metadataKey) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.getMetadata(metadataKey); });
++        }
+         return this.server.getEntityMetadata().getMetadata(this, metadataKey);
+     }
+ 
+     @Override
+     public boolean hasMetadata(String metadataKey) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.hasMetadata(metadataKey); });
++        }
+         return this.server.getEntityMetadata().hasMetadata(this, metadataKey);
+     }
+ 
+     @Override
+     public void removeMetadata(String metadataKey, Plugin owningPlugin) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.removeMetadata(metadataKey,owningPlugin);return null; });
++            return;
++        }
+         this.server.getEntityMetadata().removeMetadata(this, metadataKey, owningPlugin);
+     }
+ 
+@@ -778,6 +792,9 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+ 
+     @Override
+     public boolean isVisibleByDefault() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.isVisibleByDefault(); });
++        }
+         return this.getHandle().visibleByDefault;
+     }
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java
+index 030ab40d2727b4d808ccc5a9003152029cf46b1d..d4511ab5612fbed2c60661f553a07086d7e562e8 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java
+@@ -59,6 +59,9 @@ public class CraftHorse extends CraftAbstractHorse implements Horse {
+ 
+     @Override
+     public HorseInventory getInventory() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,this::getInventory);
++        }
+         return new CraftInventoryHorse(this.getHandle().inventory,
+             this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
+             this.getHandle().createEquipmentSlotContainer(EquipmentSlot.SADDLE)
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
+index c2c74485901a974301302ad30493dc321345ea0e..f52655d727c36e7ca482f6e364e33b303b792894 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
+@@ -506,6 +506,9 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+ 
+     @Override
+     public boolean addPotionEffect(PotionEffect effect) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> this.addPotionEffect(effect));
++        }
+         org.spigotmc.AsyncCatcher.catchOp("effect add"); // Paper
+         return this.getHandle().addEffect(org.bukkit.craftbukkit.potion.CraftPotionUtil.fromBukkit(effect), EntityPotionEffectEvent.Cause.PLUGIN); // Paper - Don't ignore icon
+     }
+@@ -521,17 +524,27 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+ 
+     @Override
+     public boolean hasPotionEffect(PotionEffectType type) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> this.hasPotionEffect(type));
++        }
+         return this.getHandle().hasEffect(CraftPotionEffectType.bukkitToMinecraftHolder(type));
+     }
+ 
+     @Override
+     public PotionEffect getPotionEffect(PotionEffectType type) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> this.getPotionEffect(type));
++        }
+         MobEffectInstance handle = this.getHandle().getEffect(CraftPotionEffectType.bukkitToMinecraftHolder(type));
+         return (handle == null) ? null : org.bukkit.craftbukkit.potion.CraftPotionUtil.toBukkit(handle); // Paper
+     }
+ 
+     @Override
+     public void removePotionEffect(PotionEffectType type) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.removePotionEffect(type);return null; });
++            return;
++        }
+         this.getHandle().removeEffect(CraftPotionEffectType.bukkitToMinecraftHolder(type), EntityPotionEffectEvent.Cause.PLUGIN);
+     }
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java
+index 31e8295128ccd9305ad1b5dd37b829539d7c78fb..6a320939c78583bd1ebb7a425eecd55627639039 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java
+@@ -34,6 +34,9 @@ public class CraftLlama extends CraftChestedHorse implements Llama, com.destroys
+ 
+     @Override
+     public LlamaInventory getInventory() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,this::getInventory);
++        }
+         return new CraftInventoryLlama(this.getHandle().inventory,
+             this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
+             this.getHandle().createEquipmentSlotContainer(EquipmentSlot.SADDLE)
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index b62ad1f59b423e9b18fd0780ed67035fee289707..4a26f51bff5c9e2fc4985b38e86ea9347fefd6d6 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -1400,12 +1400,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+ 
+     @Override
+     public void setSleepingIgnored(boolean isSleeping) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setSleepingIgnored(isSleeping);return null; });
++            return;
++        }
+         this.getHandle().fauxSleeping = isSleeping;
+         ((CraftWorld) this.getWorld()).getHandle().updateSleepingPlayerList();
+     }
+ 
+     @Override
+     public boolean isSleepingIgnored() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,this::isSleepingIgnored);
++        }
+         return this.getHandle().fauxSleeping;
+     }
+ 
+@@ -1888,6 +1895,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     }
+ 
+     private void hideEntity0(@Nullable Plugin plugin, org.bukkit.entity.Entity entity) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.hideEntity0(plugin,entity);return null; });
++            return;
++        }
+         Preconditions.checkArgument(entity != null, "Entity hidden cannot be null");
+         if (this.getHandle().connection == null) return;
+         if (this.equals(entity)) return;
+@@ -1922,12 +1933,23 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     private void untrackAndHideEntity(org.bukkit.entity.Entity entity) {
+         // Remove this entity from the hidden player's EntityTrackerEntry
+         // Paper start
+-        Entity other = ((CraftEntity) entity).getHandle();
++        Entity other = fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isManagedContext()
++            ? ((CraftEntity) entity).getHandleRaw() : ((CraftEntity) entity).getHandle();
+         unregisterEntity(other);
+ 
+         server.getPluginManager().callEvent(new PlayerHideEntityEvent(this, entity));
+     }
+     private void unregisterEntity(Entity other) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(other)) {
++            final ServerPlayer viewer = this.getHandle();
++            final UUID listedPlayer = fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(other,() -> {
++                final ChunkMap.TrackedEntity entry = other.moonrise$getTrackedEntity();
++                if (entry != null) entry.removePlayer(viewer);
++                return other instanceof ServerPlayer player && player.sentListPacket ? player.getUUID() : null;
++            });
++            if (viewer.sentListPacket && listedPlayer != null) viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(listedPlayer)));
++            return;
++        }
+         // Paper end
+         ChunkMap tracker = ((ServerLevel) this.getHandle().level()).getChunkSource().chunkMap;
+         ChunkMap.TrackedEntity entry = other.moonrise$getTrackedEntity(); // Folia - region threading
+@@ -1970,6 +1992,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     }
+ 
+     private void showEntity0(@Nullable Plugin plugin, org.bukkit.entity.Entity entity) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.showEntity0(plugin,entity);return null; });
++            return;
++        }
+         Preconditions.checkArgument(entity != null, "Entity show cannot be null");
+         if (this.getHandle().connection == null) return;
+         if (this.equals(entity)) return;
+@@ -2005,6 +2031,32 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     }
+ 
+     private void trackAndShowEntity(org.bukkit.entity.Entity entity, final @Nullable UUID uuidOverride) {
++        final Entity legacyTarget = ((CraftEntity) entity).getHandleRaw();
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(legacyTarget)) {
++            final ServerPlayer viewer = this.getHandle();
++            final boolean listed = !(entity instanceof Player player) || this.isListed(player);
++            final ClientboundPlayerInfoUpdatePacket info = fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(legacyTarget,() -> {
++                ClientboundPlayerInfoUpdatePacket packet = null;
++                if (legacyTarget instanceof ServerPlayer player) {
++                    final UUID original = player.getUUID();
++                    try {
++                        if (uuidOverride != null) player.setUUID(uuidOverride);
++                        packet = ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(player,listed);
++                    } finally { if (uuidOverride != null) player.setUUID(original); }
++                }
++                final ChunkMap.TrackedEntity entry = legacyTarget.moonrise$getTrackedEntity();
++                if (entry != null) {
++                    // Folia only pairs entities with viewers owned by the same region. Foreign
++                    // viewers receive the list snapshot now; normal tracking applies on proximity.
++                    if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(viewer)) entry.updatePlayer(viewer);
++                    else entry.removePlayer(viewer);
++                }
++                return packet;
++            });
++            if (info != null) viewer.connection.send(info);
++            this.server.getPluginManager().callEvent(new PlayerShowEntityEvent(this,entity));
++            return;
++        }
+         ChunkMap tracker = this.getHandle().level().getChunkSource().chunkMap;
+         Entity other = ((CraftEntity) entity).getHandle();
+ 
+@@ -2110,6 +2162,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+ 
+     @Override
+     public boolean canSee(org.bukkit.entity.Entity entity) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> this.canSee(entity));
++        }
+         return this.equals(entity) || entity.isVisibleByDefault() ^ this.invertedVisibilityEntities.containsKey(entity.getUniqueId()); // SPIGOT-7312: Can always see self
+     }
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java
+index 3d9cb57bb0d3dac3b950cc5f38305bab6c0f70b8..d20f3e39bf1e239540e25a2ced63f66ba8715bcf 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java
+@@ -27,15 +27,25 @@ public class CraftTameableAnimal extends CraftAnimals implements Tameable, Creat
+     }
+ 
+     public UUID getOwnerUUID() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.getOwnerUUID(); });
++        }
+         return Optionull.map(this.getHandle().getOwnerReference(), EntityReference::getUUID);
+     }
+ 
+     public void setOwnerUUID(UUID uuid) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setOwnerUUID(uuid);return null; });
++            return;
++        }
+         this.getHandle().setOwnerReference(uuid == null ? null : EntityReference.of(uuid));
+     }
+ 
+     @Override
+     public AnimalTamer getOwner() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.getOwner(); });
++        }
+         if (this.getOwnerUUID() == null) {
+             return null;
+         }
+@@ -50,11 +60,18 @@ public class CraftTameableAnimal extends CraftAnimals implements Tameable, Creat
+ 
+     @Override
+     public boolean isTamed() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.isTamed(); });
++        }
+         return this.getHandle().isTame();
+     }
+ 
+     @Override
+     public void setOwner(AnimalTamer tamer) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setOwner(tamer);return null; });
++            return;
++        }
+         if (tamer != null) {
+             this.setTamed(true);
+             this.getHandle().setTarget(null, null);
+@@ -67,6 +84,10 @@ public class CraftTameableAnimal extends CraftAnimals implements Tameable, Creat
+ 
+     @Override
+     public void setTamed(boolean tame) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setTamed(tame);return null; });
++            return;
++        }
+         this.getHandle().setTame(tame, true);
+         if (!tame) {
+             this.setOwnerUUID(null);
+@@ -74,10 +95,17 @@ public class CraftTameableAnimal extends CraftAnimals implements Tameable, Creat
+     }
+ 
+     public boolean isSitting() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.isSitting(); });
++        }
+         return this.getHandle().isInSittingPose();
+     }
+ 
+     public void setSitting(boolean sitting) {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { this.setSitting(sitting);return null; });
++            return;
++        }
+         this.getHandle().setInSittingPose(sitting);
+         this.getHandle().setOrderedToSit(sitting);
+     }
+diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
+index 5e5a4e48b2a96c355256b8f8bfcc09225d562944..b00f4a2a16ee72b618e5ae3ff150d2273c730df2 100644
+--- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
++++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
+@@ -431,11 +431,23 @@ public class CraftInventory implements Inventory {
+ 
+     @Override
+     public void clear(int index) {
++        if (fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isManagedContext()
++            && this.getHolder() instanceof org.bukkit.craftbukkit.entity.CraftEntity owner
++            && fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(owner.getHandleRaw())) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(owner.getHandleRaw(),() -> { this.clear(index);return null; });
++            return;
++        }
+         this.setItem(index, null);
+     }
+ 
+     @Override
+     public void clear() {
++        if (fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isManagedContext()
++            && this.getHolder() instanceof org.bukkit.craftbukkit.entity.CraftEntity owner
++            && fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(owner.getHandleRaw())) {
++            fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(owner.getHandleRaw(),() -> { this.clear();return null; });
++            return;
++        }
+         for (int i = 0; i < this.getSize(); i++) {
+             this.clear(i);
+         }
+diff --git a/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
+index 6b7a7f6a9ea47789605f4211ce046f5f39ebc9f2..f19718c7298c5705e596b294367e2530b58dcd3f 100644
+--- a/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
++++ b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
+@@ -46,16 +46,14 @@ class LegacyExecutionDomainTestSuite {
+                     throw new RuntimeException(e);
+                 }
+                 for (int i = 0; i < rounds; i++) {
+-                    domain.enter();
+-                    try {
++                    domain.call(() -> {
+                         if (inside.incrementAndGet() != 1) {
+                             overlap.compareAndSet(null, Thread.currentThread().getName());
+                         }
+                         this.unsafeCounter = this.unsafeCounter + 1;
+                         inside.decrementAndGet();
+-                    } finally {
+-                        domain.exit();
+-                    }
++                        return null;
++                    });
+                 }
+             }, "domain-worker-" + t);
+             workers.add(worker);
+@@ -74,12 +72,11 @@ class LegacyExecutionDomainTestSuite {
+     @Timeout(10)
+     void reentryOnTheOwningThreadDoesNotBlock() {
+         final LegacyExecutionDomain domain = new LegacyExecutionDomain("reentrant");
+-        domain.enter();
+-        domain.enter();
+-        assertTrue(domain.isHeldByCurrentThread());
+-        domain.exit();
+-        assertTrue(domain.isHeldByCurrentThread());
+-        domain.exit();
++        domain.call(() -> {
++            domain.call(() -> { assertTrue(domain.isHeldByCurrentThread()); return null; });
++            assertTrue(domain.isHeldByCurrentThread());
++            return null;
++        });
+         assertFalse(domain.isHeldByCurrentThread());
+     }
+ 
+@@ -109,7 +106,7 @@ class LegacyExecutionDomainTestSuite {
+         assertFalse(a.isAlive() || b.isAlive(), "cross-plugin call cycle deadlocked");
+         assertEquals(2, finished.get());
+         assertNull(overlap.get(), "two running threads were inside one domain at once");
+-        assertEquals(1, x.borrows.sum() + y.borrows.sum(), "exactly one thread should have closed the cycle");
++        assertTrue(x.callbacks.sum() + y.callbacks.sum() >= 1, "the cycle must use an original-thread callback");
+         assertFalse(x.isHeldByCurrentThread() || y.isHeldByCurrentThread());
+     }
+ 
+@@ -117,8 +114,7 @@ class LegacyExecutionDomainTestSuite {
+                                  final AtomicInteger insideOuter, final AtomicInteger insideInner,
+                                  final CountDownLatch bothInside, final AtomicReference<String> overlap,
+                                  final AtomicInteger finished) {
+-        outer.enter();
+-        try {
++        outer.call(() -> {
+             insideOuter.incrementAndGet();
+             bothInside.countDown();
+             try {
+@@ -130,20 +126,17 @@ class LegacyExecutionDomainTestSuite {
+             // Calling out: this frame of the outer plugin is suspended until the callee returns, as
+             // on Paper. Only now may another thread re-enter it.
+             insideOuter.decrementAndGet();
+-            inner.enter();
+-            try {
++            inner.call(() -> {
+                 if (insideInner.incrementAndGet() != 1) {
+                     overlap.compareAndSet(null, Thread.currentThread().getName());
+                 }
+                 insideInner.decrementAndGet();
+-            } finally {
+-                inner.exit();
+-            }
++                return null;
++            });
+             insideOuter.incrementAndGet();
+             insideOuter.decrementAndGet();
+-        } finally {
+-            outer.exit();
+-        }
++            return null;
++        });
+         finished.incrementAndGet();
+     }
+ }

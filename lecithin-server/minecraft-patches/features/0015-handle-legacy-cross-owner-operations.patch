@@ -1,0 +1,201 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 26 Sep 2026 17:36:35 +0800
+Subject: [PATCH] handle legacy cross-owner operations
+
+
+diff --git a/io/papermc/paper/threadedregions/RegionShutdownThread.java b/io/papermc/paper/threadedregions/RegionShutdownThread.java
+index d5c4e9b82f2ebc135b6747d19678b1a15e808ec8..2df352236bded488e790c63073d879114fd180f5 100644
+--- a/io/papermc/paper/threadedregions/RegionShutdownThread.java
++++ b/io/papermc/paper/threadedregions/RegionShutdownThread.java
+@@ -151,6 +151,7 @@ public class RegionShutdownThread extends ca.spottedleaf.moonrise.common.util.Ti
+ 
+     @Override
+     public void run() { // Luminol - Level hot unload apis - Make public
++        fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.beginShutdown();
+         // await scheduler termination
+         LOGGER.info("Awaiting scheduler termination for 60s...");
+         if (TickRegions.getScheduler().halt(true, TimeUnit.SECONDS.toNanos(60L))) {
+@@ -160,6 +161,7 @@ public class RegionShutdownThread extends ca.spottedleaf.moonrise.common.util.Ti
+             TickRegions.getScheduler().dumpAliveThreadTraces("Did not shut down in time");
+         }
+ 
++        TickRegionScheduler.awaitLegacyOwnerOperations();
+         MinecraftServer.getServer().stopServer(); // stop part 1: most logic, kicking players, plugins, etc
+         // halt all chunk systems first so that any in-progress chunk generation stops
+         LOGGER.info("Halting chunk systems...");
+diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+index ae424c8931a2f82c6c8d4ddd8422a2c142a77a95..63b2af8abe05d6b8342cfa73d74e50b850654e34 100644
+--- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
++++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+@@ -30,6 +30,7 @@ public final class TickRegionScheduler {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private static final ThreadMXBean THREAD_MX_BEAN = ManagementFactory.getThreadMXBean();
++    private static final AtomicInteger LEGACY_OWNER_OPERATIONS = new AtomicInteger();
+     private static final boolean MEASURE_CPU_TIME;
+     static {
+         MEASURE_CPU_TIME = THREAD_MX_BEAN.isThreadCpuTimeSupported();
+@@ -375,6 +376,93 @@ public final class TickRegionScheduler {
+         }
+     }
+ 
++    /** Lecithin: a carrier for exclusively acquired owner operations, never a plugin lane. */
++    public static Thread newLegacyOwnerThread(final Runnable run) {
++        final Thread thread = new TickThreadRunner(null, run, "Lecithin owner operations");
++        thread.setDaemon(true);
++        return thread;
++    }
++
++    /**
++     * Lecithin: acquire the real regioniser ownership used by normal ticks, without waiting for a
++     * busy region. Suspended ancestor regions stay acquired; same-thread reentry uses that existing
++     * acquisition. No TickThread predicate or region lookup is overridden.
++     */
++    public static boolean tryLegacyOwnerOperation(final ServerLevel world, final int chunkX, final int chunkZ,
++                                                   final Runnable operation) {
++        if (!(Thread.currentThread() instanceof TickThreadRunner runner)) {
++            return false;
++        }
++        final var region = world.regioniser.getRegionAtSynchronised(chunkX, chunkZ);
++        if (region == null) {
++            return false;
++        }
++        final var lock = region.getData().legacyExecutionLock;
++        final boolean ancestor = lock.isHeldByCurrentThread();
++        if (!lock.tryLock()) {
++            return false;
++        }
++        boolean acquired = false;
++        boolean worldReference = false;
++        final var previousRegion = runner.currentTickingRegion;
++        final var previousTask = runner.currentTickingTask;
++        final var previousData = runner.currentTickingWorldRegionizedData;
++        final var previousProfiler = runner.profiler;
++        FoliaWatchdogThread.RunningTick watch = null;
++        try {
++            if (!ancestor) {
++                if (!world.levelUnloadStateLock.acquireRead()) return false;
++                worldReference = true;
++            }
++            final var handle = region.getData().getRegionSchedulingHandle();
++            if (!ancestor && !region.tryMarkTicking(handle::isMarkedAsNonSchedulable)) {
++                return false;
++            }
++            acquired = !ancestor;
++            if (acquired) LEGACY_OWNER_OPERATIONS.incrementAndGet();
++            // Establish the normal tick caches only AFTER exclusive acquisition.
++            runner.currentTickingRegion = null;
++            setTickingRegion(region);
++            runner.currentTickingTask = handle;
++            if (acquired) {
++                watch = new FoliaWatchdogThread.RunningTick(System.nanoTime(), handle, runner);
++                WATCHDOG_THREAD.addTick(watch);
++            }
++            operation.run();
++            return true;
++        } finally {
++            try {
++                if (watch != null) {
++                    WATCHDOG_THREAD.removeTick(watch);
++                }
++                runner.currentTickingRegion = null;
++                runner.currentTickingWorldRegionizedData = null;
++                runner.currentTickingTask = null;
++                if (acquired) {
++                    region.markNotTicking();
++                }
++            } finally {
++                if (worldReference) world.levelUnloadStateLock.releaseRead();
++                if (acquired) LEGACY_OWNER_OPERATIONS.decrementAndGet();
++                runner.currentTickingRegion = previousRegion;
++                runner.currentTickingTask = previousTask;
++                runner.currentTickingWorldRegionizedData = previousData;
++                runner.profiler = previousProfiler;
++                lock.unlock();
++            }
++        }
++    }
++
++    /** Called after ordinary tick workers stop, before their chunk systems are halted. */
++    public static void awaitLegacyOwnerOperations() {
++        boolean interrupted = false;
++        while (LEGACY_OWNER_OPERATIONS.get() != 0) {
++            java.util.concurrent.locks.LockSupport.parkNanos(100_000L);
++            interrupted |= Thread.interrupted();
++        }
++        if (interrupted) Thread.currentThread().interrupt();
++    }
++
+     public static abstract class RegionScheduleHandle extends SchedulableTick {
+ 
+         protected long currentTick;
+@@ -445,6 +533,19 @@ public final class TickRegionScheduler {
+ 
+         @Override
+         public final boolean runTasks(final BooleanSupplier canContinue) {
++            if (this.region == null) {
++                return this.runTasksOwned(canContinue);
++            }
++            final var lock = this.region.legacyExecutionLock;
++            lock.lock();
++            try {
++                return this.runTasksOwned(canContinue);
++            } finally {
++                lock.unlock();
++            }
++        }
++
++        private boolean runTasksOwned(final BooleanSupplier canContinue) {
+             if (this.cancelled.get()) {
+                 return false;
+             }
+@@ -500,6 +601,19 @@ public final class TickRegionScheduler {
+ 
+         @Override
+         public final boolean runTick() {
++            if (this.region == null) {
++                return this.runTickOwned();
++            }
++            final var lock = this.region.legacyExecutionLock;
++            lock.lock();
++            try {
++                return this.runTickOwned();
++            } finally {
++                lock.unlock();
++            }
++        }
++
++        private boolean runTickOwned() {
+             // Remember, we are supposed use setScheduledStart if we return true here, otherwise
+             // the scheduler will try to schedule for the same time.
+             if (this.cancelled.get()) {
+diff --git a/io/papermc/paper/threadedregions/TickRegions.java b/io/papermc/paper/threadedregions/TickRegions.java
+index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e36941d2b6 100644
+--- a/io/papermc/paper/threadedregions/TickRegions.java
++++ b/io/papermc/paper/threadedregions/TickRegions.java
+@@ -183,6 +183,10 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+ 
+     public static final class TickRegionData implements ThreadedRegionizer.ThreadedRegionData<TickRegionData, TickRegionSectionData> {
+ 
++        // Lecithin: serialises real region acquisition by ticks and legacy owner operations.
++        // Cross-owner callers only tryLock; they never block on this lock while holding a region.
++        public final java.util.concurrent.locks.ReentrantLock legacyExecutionLock = new java.util.concurrent.locks.ReentrantLock();
++
+         private static final AtomicLong ID_GENERATOR = new AtomicLong();
+         /** Never 0L, since 0L is reserved for global region. */
+         public final long id = ID_GENERATOR.incrementAndGet();
+diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
+index db7e811d5b133557025f117ff9fabf0e9c670ad2..7ccdf8fa3cca82194534107da1ae839e06683cdf 100644
+--- a/net/minecraft/server/level/ServerPlayer.java
++++ b/net/minecraft/server/level/ServerPlayer.java
+@@ -3173,6 +3173,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+     }
+ 
+     public Entity getCamera() {
++        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this)) {
++            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this,this::getCamera);
++        }
+         return this.camera == null ? this : this.camera;
+     }
+ 
