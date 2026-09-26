@@ -51,7 +51,10 @@ public final class LecithinWorldTimeSupport {
     }
 
     public static boolean isAllowedRegionCaller() {
-        return isEnabled() && io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion() != null;
+        // The legacy lane is a managed plugin's logical main thread; the time mutation it asks for
+        // is handed to the global region exactly as from a region thread - staged, never blocking.
+        return isEnabled() && (io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion() != null
+                || fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isLegacyLane());
     }
 
     public static Long getStagedTime(final CraftWorld world) {

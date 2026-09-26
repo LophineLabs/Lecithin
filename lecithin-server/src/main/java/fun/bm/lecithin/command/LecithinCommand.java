@@ -1,6 +1,7 @@
 package fun.bm.lecithin.command;
 
 import fun.bm.lecithin.command.sub.ContextCommand;
+import fun.bm.lecithin.command.sub.LegacyCommand;
 import fun.bm.lecithin.command.sub.WorldsCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
@@ -23,6 +24,7 @@ public class LecithinCommand extends RootNode {
         super("lecithin", PERM_BASE);
         children(
                 new ContextCommand(),
+                new LegacyCommand(),
                 new WorldsCommand()
         );
     }

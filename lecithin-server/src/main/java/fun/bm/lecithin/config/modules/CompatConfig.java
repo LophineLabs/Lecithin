@@ -155,4 +155,17 @@ public class CompatConfig {
     @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "world-time-boundary")
     public static boolean worldTimeBoundary = true;
+
+    /**
+     * Run plugins that do not declare {@code folia-supported} under the Legacy Paper Runtime: every
+     * synchronous entry into such a plugin (sync listener, sync scheduler task, command, service call,
+     * enable/disable) is serialised in the plugin's own domain, and its legacy sync tasks are timed on
+     * the global clock, run in that domain, and executed on the owner of their world anchor or on the
+     * legacy lane - never on the global region by default. Plugins that declare Folia support are not
+     * affected. Turning this off restores the previous caller-context dispatch. See {@link
+     * fun.bm.lecithin.compat.legacy.LegacyPluginRuntime}.
+     */
+    @DoNotLoad(when = EnumLoadType.RELOAD)
+    @ConfigInfo(name = "legacy-managed-execution")
+    public static boolean legacyManagedExecution = true;
 }

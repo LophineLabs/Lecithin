@@ -83,7 +83,11 @@ public final class LecithinCrossRegionBlockRead {
      * @return the block state, or {@code null} to let the caller apply the stock ownership check
      */
     public static BlockState readIfResident(final ServerLevel level, final BlockPos pos) {
-        if (!CompatConfig.crossRegionBlockRead || !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+        // The legacy lane is a managed plugin's logical main thread and, like the global region thread,
+        // owns no chunk; a read-only lookup from it gets the same resident answer. Any other non-tick
+        // thread still fails, so the async catcher keeps working.
+        if (!CompatConfig.crossRegionBlockRead || !(ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()
+                || fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isLegacyLane())) {
             return null;
         }
         if (level.isOutsideBuildHeight(pos)) {
@@ -194,7 +198,9 @@ public final class LecithinCrossRegionBlockRead {
      * {@link #readIfResident} to chunks that are already resident, on every thread.
      */
     private static BlockState readByLoading(final ServerLevel level, final BlockPos pos) {
-        if (!CompatConfig.crossRegionBlockLoad) {
+        // The legacy lane holds a plugin's domain while it runs; a synchronous chunk load there would
+        // stretch that hold over disk and generation work. It gets resident chunks only.
+        if (!CompatConfig.crossRegionBlockLoad || fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isLegacyLane()) {
             return null;
         }
         // Hold the destination's unload lock for the whole load: Luminol can unload a level at
@@ -228,7 +234,8 @@ public final class LecithinCrossRegionBlockRead {
     private static void reportLoad(final ServerLevel level) {
         final String where = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion() != null
                 ? "a region thread"
-                : (LecithinStartupGlobalContext.isStartupThread() ? "the startup thread" : "the global region thread");
+                : (LecithinStartupGlobalContext.isStartupThread() ? "the startup thread"
+                : (fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isLegacyLane() ? "the legacy lane" : "the global region thread"));
         if (!REPORTED.add("load " + where + " -> " + level.getWorld().getName())) {
             return;
         }
@@ -243,7 +250,8 @@ public final class LecithinCrossRegionBlockRead {
 
     private static void report(final ServerLevel level) {
         final boolean global = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion() == null;
-        final String key = (global ? "global region" : "a region thread") + " -> " + level.getWorld().getName();
+        final String key = (fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isLegacyLane() ? "legacy lane"
+                : (global ? "global region" : "a region thread")) + " -> " + level.getWorld().getName();
         if (REPORTED.add(key)) {
             LOGGER.info("""
                     [Lecithin] Served a cross-region block read from a resident chunk: {}

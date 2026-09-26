@@ -1,0 +1,322 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 25 Sep 2026 20:29:54 +0800
+Subject: [PATCH] run plugins that do not declare folia-supported under a
+ managed legacy runtime
+
+
+diff --git a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+index 28fbdf2da69a1f97721a050980dc16160d566fa1..8ecba0fdccfe45d4b41690f6d0e05e518cdb9fc5 100644
+--- a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
++++ b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+@@ -80,6 +80,12 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+             String[] args = org.apache.commons.lang3.StringUtils.split(content, ' '); // fix adjacent spaces (from console/plugins) causing empty array elements
+ 
+             // Note: we don't return the result of target.execute as thats success / failure, we return handled (true) or not handled (false)
++            // Lecithin start - Legacy Paper Runtime: a managed plugin's command runs inside its domain,
++            // which also subsumes the economy command lock (a managed provider is never guarded by it)
++            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterCommand(this.command, sender);
++            try {
++            // Lecithin end - Legacy Paper Runtime
+             // Lecithin start - economy serialization: this is the single choke point through which
+             // every legacy (plugin.yml) Bukkit command is executed, so it is where the core can put
+             // a guarded plugin's own economy commands under the same lock as its Vault provider.
+@@ -98,6 +104,11 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+ 
+             // return true as command was handled
+             return 1;
++            // Lecithin start - Legacy Paper Runtime
++            } finally {
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame);
++            }
++            // Lecithin end - Legacy Paper Runtime
+         }
+     }
+ 
+@@ -119,11 +130,15 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+ 
+             List<String> results = null;
+             Location pos = context.getSource().getLocation();
++            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterCommand(this.command, sender); // Lecithin - Legacy Paper Runtime
+             try {
+                 results = this.command.tabComplete(sender, this.literal, args, pos.clone());
+             } catch (CommandException ex) {
+                 sender.sendMessage(Component.text("An internal error occurred while attempting to tab-complete this command", NamedTextColor.RED));
+                 Bukkit.getServer().getLogger().log(Level.SEVERE, "Exception when " + sender.getName() + " attempted to tab complete " + builder.getRemaining(), ex);
++            } finally {
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame); // Lecithin - Legacy Paper Runtime
+             }
+ 
+             if (sender instanceof final Player player) {
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+index 8316921c05f4bc791f5249df0e72dbb09f0cf5c4..b16ef38c33bae6c7ce54d99c1b76e5535c12ee2c 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+@@ -90,6 +90,10 @@ class PaperEventManager {
+                 continue;
+             }
+ 
++            // Lecithin start - Legacy Paper Runtime: serial entry into a managed plugin
++            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterListener(registration, event);
++            // Lecithin end - Legacy Paper Runtime
+             try {
+                 registration.callEvent(event);
+             } catch (AuthorNagException ex) {
+@@ -111,6 +115,8 @@ class PaperEventManager {
+                 if (!(event instanceof ServerExceptionEvent)) { // We don't want to cause an endless event loop
+                     this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
+                 }
++            } finally {
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame); // Lecithin - Legacy Paper Runtime
+             }
+         }
+     }
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+index 2c5792223d2f78ce0bfa991182f2be378ca9e90c..5b0efe5e0b87048c52180618c26ec57a1a5041b3 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+@@ -201,7 +201,10 @@ class PaperPluginInstanceManager {
+             fun.bm.lecithin.compat.LecithinPaperLibAdapter.install(jPlugin);
+             // Lecithin end
+ 
++            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterLifecycle(jPlugin); // Lecithin - Legacy Paper Runtime
+             try {
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enabled(jPlugin); // Lecithin - Legacy Paper Runtime
+                 jPlugin.setEnabled(true);
+             } catch (Throwable ex) {
+                 this.server.getLogger().log(Level.SEVERE, "Error occurred while enabling " + plugin.getPluginMeta().getDisplayName() + " (Is it up to date?)", ex);
+@@ -209,6 +212,8 @@ class PaperPluginInstanceManager {
+                 this.server.getPluginManager().disablePlugin(jPlugin);
+                 return;
+                 // Paper end
++            } finally {
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame); // Lecithin - Legacy Paper Runtime
+             }
+ 
+             // Perhaps abort here, rather than continue going, but as it stands,
+@@ -236,10 +241,15 @@ class PaperPluginInstanceManager {
+             plugin.getLogger().info("Disabling %s".formatted(pluginName));
+ 
+             this.server.getPluginManager().callEvent(new PluginDisableEvent(plugin));
++            // Lecithin - Legacy Paper Runtime: disabling waits for the plugin's running work, as Paper's single thread did
++            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterLifecycle(javaPlugin);
+             try {
+                 javaPlugin.setEnabled(false);
+             } catch (Throwable ex) {
+                 this.server.getLogger().log(Level.SEVERE, "Error occurred while disabling " + pluginName, ex);
++            } finally {
++                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.exit(lecithin$frame);
+             }
+ 
+             // Flush async appender before unloading, avoids issues when a log message with class context
+@@ -285,6 +295,7 @@ class PaperPluginInstanceManager {
+             fun.bm.lecithin.compat.LecithinDispatchedTasks.cancelAll(plugin);
+         } catch (Throwable ignored) {
+         }
++        fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.disabled(plugin); // Lecithin - Legacy Paper Runtime: close the lane, forget the instance
+         // Lecithin end - cancel redispatched legacy sync tasks
+ 
+         // Paper start - Folia schedulers
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 5295369735bbb7b4241fbb723ec5574e2353aaa1..2fa26a2447274258ebce50e11d6b8d4f761dbeec 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -2419,7 +2419,8 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public boolean isPrimaryThread() {
+-        return ca.spottedleaf.moonrise.common.util.TickThread.isTickThread(); // Paper - rewrite chunk system
++        return ca.spottedleaf.moonrise.common.util.TickThread.isTickThread() // Paper - rewrite chunk system
++            || fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isLegacyLane(); // Lecithin - Legacy Paper Runtime: the lane is a managed plugin's main thread; ownership checks are unaffected
+     }
+ 
+     @Override
+diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+index 954ab2b7e6812d5043bfccc801306bbcbf31688d..120025b1a8258f44d312f5152bf4a3d3d1de9bf1 100644
+--- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
++++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+@@ -426,7 +426,8 @@ public class CraftScheduler implements BukkitScheduler {
+             }
+         }
+         CraftTask task = this.runners.get(taskId);
+-        return task != null && task.getPeriod() >= CraftTask.NO_REPEATING;
++        // Lecithin - a redispatched or managed legacy task lives in none of the queues above
++        return (task != null && task.getPeriod() >= CraftTask.NO_REPEATING) || fun.bm.lecithin.compat.LecithinDispatchedTasks.isTracked(taskId);
+     }
+ 
+     @Override
+@@ -572,6 +573,14 @@ public class CraftScheduler implements BukkitScheduler {
+         // still falls through to the throw below, whenever nothing is known - which is the fail-closed
+         // case and stays that way.
+         if (!this.isAsyncScheduler && task.isSync()) {
++            // Lecithin start - Legacy Paper Runtime: a plugin that never declared Folia support gets
++            // the managed legacy scheduler (global-clock timing, plugin domain, owner or lane
++            // execution). A native plugin falls through to caller-context dispatch unchanged.
++            final CraftTask managed = fun.bm.lecithin.compat.legacy.LegacyScheduler.tryRoute(task, delay, task.getPeriod());
++            if (managed != null) {
++                return managed;
++            }
++            // Lecithin end - Legacy Paper Runtime
+             final CraftTask redispatched = fun.bm.lecithin.compat.LecithinCallerContextDispatch.tryDispatch(task, delay, task.getPeriod());
+             if (redispatched != null) {
+                 return redispatched;
+diff --git a/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b7a7f6a9ea47789605f4211ce046f5f39ebc9f2
+--- /dev/null
++++ b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
+@@ -0,0 +1,149 @@
++package fun.bm.lecithin.compat.legacy;
++
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.Timeout;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.CyclicBarrier;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicReference;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertFalse;
++import static org.junit.jupiter.api.Assertions.assertNull;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++/**
++ * Lecithin: the serial legacy domain - one thread inside at a time, re-entrant, and a two-plugin
++ * call cycle across two threads completes instead of deadlocking.
++ */
++class LegacyExecutionDomainTestSuite {
++
++    /**
++     * A plain field updated with a read-modify-write, the shape of every unsynchronised plugin map.
++     */
++    private int unsafeCounter;
++
++    @Test
++    @Timeout(30)
++    void onlyOneThreadIsInsideAtATime() throws Exception {
++        final LegacyExecutionDomain domain = new LegacyExecutionDomain("serial");
++        final int threads = 8;
++        final int rounds = 20_000;
++        final AtomicInteger inside = new AtomicInteger();
++        final AtomicReference<String> overlap = new AtomicReference<>();
++        final CyclicBarrier start = new CyclicBarrier(threads);
++        final List<Thread> workers = new ArrayList<>();
++        this.unsafeCounter = 0;
++        for (int t = 0; t < threads; t++) {
++            final Thread worker = new Thread(() -> {
++                try {
++                    start.await();
++                } catch (final Exception e) {
++                    throw new RuntimeException(e);
++                }
++                for (int i = 0; i < rounds; i++) {
++                    domain.enter();
++                    try {
++                        if (inside.incrementAndGet() != 1) {
++                            overlap.compareAndSet(null, Thread.currentThread().getName());
++                        }
++                        this.unsafeCounter = this.unsafeCounter + 1;
++                        inside.decrementAndGet();
++                    } finally {
++                        domain.exit();
++                    }
++                }
++            }, "domain-worker-" + t);
++            workers.add(worker);
++            worker.start();
++        }
++        for (final Thread worker : workers) {
++            worker.join();
++        }
++        assertNull(overlap.get(), "two threads were inside the domain at once");
++        // Exact: every hand-over is a release/acquire, so no increment is lost or stale.
++        assertEquals(threads * rounds, this.unsafeCounter);
++        assertTrue(domain.contended.sum() > 0, "the test never actually contended");
++    }
++
++    @Test
++    @Timeout(10)
++    void reentryOnTheOwningThreadDoesNotBlock() {
++        final LegacyExecutionDomain domain = new LegacyExecutionDomain("reentrant");
++        domain.enter();
++        domain.enter();
++        assertTrue(domain.isHeldByCurrentThread());
++        domain.exit();
++        assertTrue(domain.isHeldByCurrentThread());
++        domain.exit();
++        assertFalse(domain.isHeldByCurrentThread());
++    }
++
++    /**
++     * Thread A is inside plugin X and calls into plugin Y; at the same moment thread B is inside Y and
++     * calls into X. A lock per plugin deadlocks here. On Paper this is one thread re-entering, and the
++     * domain lets the thread that closes the cycle proceed as that re-entry while the other is parked.
++     */
++    @Test
++    @Timeout(20)
++    void crossPluginCycleCompletesAndNeverOverlaps() throws Exception {
++        final LegacyExecutionDomain x = new LegacyExecutionDomain("X");
++        final LegacyExecutionDomain y = new LegacyExecutionDomain("Y");
++        final CountDownLatch bothInside = new CountDownLatch(2);
++        final AtomicInteger insideX = new AtomicInteger();
++        final AtomicInteger insideY = new AtomicInteger();
++        final AtomicReference<String> overlap = new AtomicReference<>();
++        final AtomicInteger finished = new AtomicInteger();
++
++        final Thread a = new Thread(() -> callInto(x, y, insideX, insideY, bothInside, overlap, finished), "A");
++        final Thread b = new Thread(() -> callInto(y, x, insideY, insideX, bothInside, overlap, finished), "B");
++        a.start();
++        b.start();
++        a.join(TimeUnit.SECONDS.toMillis(15));
++        b.join(TimeUnit.SECONDS.toMillis(15));
++
++        assertFalse(a.isAlive() || b.isAlive(), "cross-plugin call cycle deadlocked");
++        assertEquals(2, finished.get());
++        assertNull(overlap.get(), "two running threads were inside one domain at once");
++        assertEquals(1, x.borrows.sum() + y.borrows.sum(), "exactly one thread should have closed the cycle");
++        assertFalse(x.isHeldByCurrentThread() || y.isHeldByCurrentThread());
++    }
++
++    private static void callInto(final LegacyExecutionDomain outer, final LegacyExecutionDomain inner,
++                                 final AtomicInteger insideOuter, final AtomicInteger insideInner,
++                                 final CountDownLatch bothInside, final AtomicReference<String> overlap,
++                                 final AtomicInteger finished) {
++        outer.enter();
++        try {
++            insideOuter.incrementAndGet();
++            bothInside.countDown();
++            try {
++                // Force the interleaving: both threads hold their outer domain before either calls out.
++                bothInside.await(5, TimeUnit.SECONDS);
++            } catch (final InterruptedException e) {
++                Thread.currentThread().interrupt();
++            }
++            // Calling out: this frame of the outer plugin is suspended until the callee returns, as
++            // on Paper. Only now may another thread re-enter it.
++            insideOuter.decrementAndGet();
++            inner.enter();
++            try {
++                if (insideInner.incrementAndGet() != 1) {
++                    overlap.compareAndSet(null, Thread.currentThread().getName());
++                }
++                insideInner.decrementAndGet();
++            } finally {
++                inner.exit();
++            }
++            insideOuter.incrementAndGet();
++            insideOuter.decrementAndGet();
++        } finally {
++            outer.exit();
++        }
++        finished.incrementAndGet();
++    }
++}

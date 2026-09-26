@@ -33,7 +33,12 @@ public class LecithinServicesManager extends SimpleServicesManager {
     @SuppressWarnings("unchecked")
     public <T> void register(@NotNull final Class<T> service, @NotNull final T provider,
                              @NotNull final Plugin plugin, @NotNull final ServicePriority priority) {
-        final Object wrapped = LecithinEconomySerialization.wrapServiceProvider(service, provider, plugin);
+        // A provider registered by a managed legacy plugin is served inside that plugin's domain,
+        // which subsumes the economy-specific serialization; the two are never stacked.
+        Object wrapped = fun.bm.lecithin.compat.legacy.LegacyServiceBoundary.wrap(service, provider, plugin);
+        if (wrapped == provider) {
+            wrapped = LecithinEconomySerialization.wrapServiceProvider(service, provider, plugin);
+        }
         if (wrapped != provider) {
             this.wrappers.put(provider, wrapped);
         }

@@ -133,6 +133,14 @@ public final class LecithinEconomySerialization {
     // ---------------------------------------------------------------- service boundary
 
     /**
+     * {@code true} for the economy service interfaces this class guards. Also read by the legacy
+     * service boundary, which keeps async callers of such a provider serialised as this class did.
+     */
+    public static boolean isGuardedService(final Class<?> service) {
+        return service != null && GUARDED_SERVICES.contains(service.getName());
+    }
+
+    /**
      * Called from the services manager on every {@code register(...)}.
      *
      * @return the wrapped provider, or {@code provider} unchanged when no rule applies or anything

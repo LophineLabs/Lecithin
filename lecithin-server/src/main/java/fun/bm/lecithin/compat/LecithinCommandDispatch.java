@@ -86,7 +86,10 @@ public final class LecithinCommandDispatch {
     public static boolean shouldHandOff() {
         return CompatConfig.commandDispatchHandover
                 && !RegionizedServer.isGlobalTickThread()
-                && TickRegionScheduler.getCurrentRegion() != null;
+                && (TickRegionScheduler.getCurrentRegion() != null
+                // A managed legacy plugin's lane work is that plugin's main-thread work; its console
+                // dispatch goes where a console sender executes, the same as from a region thread.
+                || fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.isLegacyLane());
     }
 
     /**
