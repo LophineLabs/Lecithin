@@ -24,10 +24,10 @@ the hot path. The player's board override becomes volatile for the same
 cross-thread readers.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index cae2422c607344dafa2b43ccb97b0db936517391..e0f667b680aeba37d83cc225ec624ca4fd168038 100644
+index 116614718bb14382475f9182ba796eb7ed73d50f..c0196b3e821e425155909714489e453ffcaade5e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -246,7 +246,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -251,7 +251,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      private CraftWorldBorder clientWorldBorder = null;
      private BorderChangeListener clientWorldBorderListener = this.createWorldBorderListener();
      private long lastSaveTime; // Paper - getLastPlayed replacement API

@@ -49,10 +49,10 @@ index 8ecba0fdccfe45d4b41690f6d0e05e518cdb9fc5..aa2c9e577fb7fb6454daf6f7ab40474b
  
              if (sender instanceof final Player player) {
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-index b16ef38c33bae6c7ce54d99c1b76e5535c12ee2c..4dac946b8d46b857edc537ae1ff4190a2edb50b6 100644
+index 8a74d94c602925da70f773c7261d54580b36749c..f5f86af514dd728f7d75133d5a0625ebf71cbf43 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-@@ -36,6 +36,7 @@ class PaperEventManager {
+@@ -34,6 +34,7 @@ class PaperEventManager {
  
      // SimplePluginManager
      public void callEvent(@NotNull Event event) {
@@ -60,7 +60,7 @@ index b16ef38c33bae6c7ce54d99c1b76e5535c12ee2c..4dac946b8d46b857edc537ae1ff4190a
          // Leaves start - process bot load/save
          if (fun.bm.lophine.config.modules.function.FakeplayerConfig.checkEnabled() && fun.bm.lophine.carpet.config.modules.FakePlayerCompatConfig.fakePlayerResident) {
              if (event instanceof org.bukkit.event.world.WorldLoadEvent worldLoadEvent) {
-@@ -90,12 +91,8 @@ class PaperEventManager {
+@@ -88,12 +89,8 @@ class PaperEventManager {
                  continue;
              }
  
@@ -74,7 +74,7 @@ index b16ef38c33bae6c7ce54d99c1b76e5535c12ee2c..4dac946b8d46b857edc537ae1ff4190a
              } catch (AuthorNagException ex) {
                  Plugin plugin = registration.getPlugin();
  
-@@ -115,8 +112,6 @@ class PaperEventManager {
+@@ -113,8 +110,6 @@ class PaperEventManager {
                  if (!(event instanceof ServerExceptionEvent)) { // We don't want to cause an endless event loop
                      this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
                  }
@@ -125,7 +125,7 @@ index 5b0efe5e0b87048c52180618c26ec57a1a5041b3..27e5cafa572b1b6da0fc45bbaa9471c2
  
              // Flush async appender before unloading, avoids issues when a log message with class context
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
-index fb89f6ef3adac92639d999f173383c3eeb8fabab..5c5d41f0c9045a61e54025dd33b71fb515f11f32 100644
+index c1954a651c2527e4ff6911326244ac7f8a076dd6..f2653ee2485df514ba24207932a0c89ca0dc7c95 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 @@ -117,6 +117,9 @@ public class CraftChunk implements Chunk {
@@ -138,7 +138,7 @@ index fb89f6ef3adac92639d999f173383c3eeb8fabab..5c5d41f0c9045a61e54025dd33b71fb5
          return FeatureHooks.getChunkEntities(this.level, this.x, this.z); // Paper - chunk system
      }
  
-@@ -272,6 +275,10 @@ public class CraftChunk implements Chunk {
+@@ -267,6 +270,10 @@ public class CraftChunk implements Chunk {
  
      @Override
      public ChunkSnapshot getChunkSnapshot(boolean includeMaxBlockY, boolean includeBiome, boolean includeBiomeTempRain, boolean includeLightData) {
@@ -150,10 +150,10 @@ index fb89f6ef3adac92639d999f173383c3eeb8fabab..5c5d41f0c9045a61e54025dd33b71fb5
  
          LevelChunkSection[] cs = chunk.getSections();
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 2fa26a2447274258ebce50e11d6b8d4f761dbeec..3044b754f11799732e34614d6f9d64c58789b0b8 100644
+index 1fe673de1d068ad9922c905e2297a5497c3c2897..fdad638d61c52ae44197d12094b462cfc743a1fd 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -1384,6 +1384,10 @@ public final class CraftServer implements Server {
+@@ -1382,6 +1382,10 @@ public final class CraftServer implements Server {
              return false;
          }
  
@@ -165,10 +165,10 @@ index 2fa26a2447274258ebce50e11d6b8d4f761dbeec..3044b754f11799732e34614d6f9d64c5
              return false;
          }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index d1ae348a0b9e66972af0c18a3570357686895bef..f8136ce44f574f95d8fea3de271b888c93dc224e 100644
+index 1bbfc174bde55b3e0eeb5c5816474e51b0881ad5..3a909522d3745889a8b88e12c13c3880587b47f9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-@@ -370,6 +370,9 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -374,6 +374,9 @@ public class CraftWorld extends CraftRegionAccessor implements World {
  
      @Override
      public Chunk getChunkAt(int x, int z) {
@@ -179,10 +179,10 @@ index d1ae348a0b9e66972af0c18a3570357686895bef..f8136ce44f574f95d8fea3de271b888c
          warnUnsafeChunk("getting a faraway chunk", x, z); // Paper
          net.minecraft.world.level.chunk.LevelChunk chunk = (net.minecraft.world.level.chunk.LevelChunk) this.world.getChunk(x, z, ChunkStatus.FULL, true);
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-index 64e2bebf4383b9b7c21102fc15f59f1b3676d3d7..7dd1f556093e702f60441deb711770c5e509de59 100644
+index 6c5a83ed95c54cb64aebfee7c44479ef204277b6..47e74e60bfdb6ec8ce6daa2d717de0bf8f7995a4 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-@@ -80,6 +80,9 @@ public class CraftBlock implements Block {
+@@ -81,6 +81,9 @@ public class CraftBlock implements Block {
      }
  
      public net.minecraft.world.level.block.state.BlockState getBlockState() {
@@ -192,7 +192,7 @@ index 64e2bebf4383b9b7c21102fc15f59f1b3676d3d7..7dd1f556093e702f60441deb711770c5
          // Folia start - region threading
          if (this.level instanceof ServerLevel serverWorld) {
              // Lecithin start - serve a read-only lookup from a resident chunk instead of refusing it
-@@ -210,6 +213,11 @@ public class CraftBlock implements Block {
+@@ -211,6 +214,11 @@ public class CraftBlock implements Block {
      }
  
      public static boolean setBlockState(LevelAccessor level, BlockPos pos, net.minecraft.world.level.block.state.BlockState newState, boolean applyPhysics) {
@@ -274,10 +274,10 @@ index df2f4d75bb0d9bc0e1cf24d0b51b6c934d6b0f11..4768951cb2cd4b519621d0a2acac6910
              this.getHandle().inventory,
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index fbdd2b02c9298c21c598d04531a577b8c0b1ec4d..68f2ca713ea217f9b5c461d9e54a8dfdff19342a 100644
+index 724ca079acb67bfae13ec73c3112f8965eaa1624..195213686d94c914ee93ed8583a35a971d2a51f8 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -668,21 +668,35 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -669,21 +669,35 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public void setMetadata(String metadataKey, MetadataValue newMetadataValue) {
@@ -313,7 +313,7 @@ index fbdd2b02c9298c21c598d04531a577b8c0b1ec4d..68f2ca713ea217f9b5c461d9e54a8dfd
          this.server.getEntityMetadata().removeMetadata(this, metadataKey, owningPlugin);
      }
  
-@@ -778,6 +792,9 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -779,6 +793,9 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public boolean isVisibleByDefault() {
@@ -338,10 +338,10 @@ index 030ab40d2727b4d808ccc5a9003152029cf46b1d..d4511ab5612fbed2c60661f553a07086
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.SADDLE)
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
-index c2c74485901a974301302ad30493dc321345ea0e..f52655d727c36e7ca482f6e364e33b303b792894 100644
+index 1b0dd3b036db7e5ec60fd850d4772c9872bb960e..9020f4f811abda97895c4185c21902969eaf520e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
-@@ -506,6 +506,9 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+@@ -507,6 +507,9 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
  
      @Override
      public boolean addPotionEffect(PotionEffect effect) {
@@ -351,7 +351,7 @@ index c2c74485901a974301302ad30493dc321345ea0e..f52655d727c36e7ca482f6e364e33b30
          org.spigotmc.AsyncCatcher.catchOp("effect add"); // Paper
          return this.getHandle().addEffect(org.bukkit.craftbukkit.potion.CraftPotionUtil.fromBukkit(effect), EntityPotionEffectEvent.Cause.PLUGIN); // Paper - Don't ignore icon
      }
-@@ -521,17 +524,27 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+@@ -522,17 +525,27 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
  
      @Override
      public boolean hasPotionEffect(PotionEffectType type) {
@@ -394,10 +394,10 @@ index 31e8295128ccd9305ad1b5dd37b829539d7c78fb..6a320939c78583bd1ebb7a425eecd556
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.SADDLE)
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index b62ad1f59b423e9b18fd0780ed67035fee289707..4a26f51bff5c9e2fc4985b38e86ea9347fefd6d6 100644
+index 44f3434ae33df4a444de3c0feeb5b1ed4caf076d..19edc7e2b4f76e36f08b951c6864f609ec875174 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -1400,12 +1400,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -1397,12 +1397,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
  
      @Override
      public void setSleepingIgnored(boolean isSleeping) {
@@ -586,10 +586,10 @@ index 3d9cb57bb0d3dac3b950cc5f38305bab6c0f70b8..d20f3e39bf1e239540e25a2ced63f66b
          this.getHandle().setOrderedToSit(sitting);
      }
 diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
-index 5e5a4e48b2a96c355256b8f8bfcc09225d562944..b00f4a2a16ee72b618e5ae3ff150d2273c730df2 100644
+index 24198f00ebe679ab19c2d30d6b30474dd99fb2a7..5f7d0f73d4c8aeee26f0439ff82198eed707a4bb 100644
 --- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
-@@ -431,11 +431,23 @@ public class CraftInventory implements Inventory {
+@@ -428,11 +428,23 @@ public class CraftInventory implements Inventory {
  
      @Override
      public void clear(int index) {

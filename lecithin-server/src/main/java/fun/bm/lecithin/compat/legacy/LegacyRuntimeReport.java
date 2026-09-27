@@ -54,6 +54,7 @@ public final class LegacyRuntimeReport {
                     + " | domain acq=" + d.acquisitions.sum()
                     + " contended=" + d.contended.sum()
                     + " callbacks=" + d.callbacks.sum()
+                    + " ownerBoundWaits=" + d.ownerBoundWaits.sum()
                     + " waitMs=" + TimeUnit.NANOSECONDS.toMillis(d.waitNanos.sum())
                     + " maxWaitMs=" + TimeUnit.NANOSECONDS.toMillis(d.maxWaitNanos)
                     + " holder=" + d.describeOwner()

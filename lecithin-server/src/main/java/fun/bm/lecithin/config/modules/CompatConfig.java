@@ -168,4 +168,17 @@ public class CompatConfig {
     @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "legacy-managed-execution")
     public static boolean legacyManagedExecution = true;
+
+    /**
+     * Inside the Legacy Paper Runtime, a synchronous entry into a legacy plugin (listener, command,
+     * service call) made by a thread that owns region or global world state waits for the plugin's
+     * domain and runs on that thread, instead of being handed to a parked domain holder - a legacy
+     * lane or another region - that does not own the event's world state. The holder still takes the
+     * entry when it is itself waiting, directly or through other parked threads, for the caller: that
+     * is the re-entry which keeps a call cycle from deadlocking. Turning this off hands every contended
+     * entry to a parked holder, as before. See {@link fun.bm.lecithin.compat.legacy.LegacyExecutionDomain}.
+     */
+    @DoNotLoad(when = EnumLoadType.RELOAD)
+    @ConfigInfo(name = "legacy-owner-bound-entries")
+    public static boolean legacyOwnerBoundEntries = true;
 }

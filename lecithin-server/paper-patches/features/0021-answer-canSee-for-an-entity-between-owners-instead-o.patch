@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 27 Sep 2026 14:12:38 +0800
+Subject: [PATCH] answer canSee for an entity between owners instead of failing
+ completion
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 19edc7e2b4f76e36f08b951c6864f609ec875174..1d7d35eeef168314790971e28b90801e825dbc6c 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -2162,10 +2162,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+ 
+     @Override
+     public boolean canSee(org.bukkit.entity.Entity entity) {
++        // Lecithin start - Legacy Paper Runtime: canSee never throws on Paper, and command completion
++        // relies on that. When the viewer or target has no owner for this lookup (teleport, respawn or
++        // logout handover), the lookup is cancelled before anything is read; answer "not visible" for
++        // this call only, which can never reveal a hidden entity. Any other failure propagates.
++        try {
+         if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
+             return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> this.canSee(entity));
+         }
+         return this.equals(entity) || entity.isVisibleByDefault() ^ this.invertedVisibilityEntities.containsKey(entity.getUniqueId()); // SPIGOT-7312: Can always see self
++        } catch (final fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.OwnerOperationCancelledException cancelled) {
++            return this.equals(entity);
++        }
++        // Lecithin end - Legacy Paper Runtime
+     }
+ 
+     public boolean canSeePlayer(UUID uuid) {

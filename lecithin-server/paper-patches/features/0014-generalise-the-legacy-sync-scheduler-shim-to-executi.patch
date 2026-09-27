@@ -47,10 +47,10 @@ per distinct callsite and DEBUG thereafter, instead of WARN on every single
 dispatch - which is what was flooding the production console.
 
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-index 0fce6dc8bffc341da2e7242422b4153b2743aa44..8316921c05f4bc791f5249df0e72dbb09f0cf5c4 100644
+index 8f1977d034fda8716b7d0a4c11f475e4748d456a..c86549a01ffab59d93e57d18e5da4ad24f830145 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-@@ -62,6 +62,29 @@ class PaperEventManager {
+@@ -60,6 +60,29 @@ class PaperEventManager {
          }
          // Leaves end - skip bot
  

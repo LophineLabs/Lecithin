@@ -5,10 +5,10 @@ Subject: [PATCH] answer a cross-region block read from a residen chunk
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-index b5dd9e16d11488318ef09b3d1adb614b45332d0c..64e2bebf4383b9b7c21102fc15f59f1b3676d3d7 100644
+index 69c0e315c77c0e4b8df048961c39f96958e21f89..6c5a83ed95c54cb64aebfee7c44479ef204277b6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-@@ -82,6 +82,15 @@ public class CraftBlock implements Block {
+@@ -83,6 +83,15 @@ public class CraftBlock implements Block {
      public net.minecraft.world.level.block.state.BlockState getBlockState() {
          // Folia start - region threading
          if (this.level instanceof ServerLevel serverWorld) {
