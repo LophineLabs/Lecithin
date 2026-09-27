@@ -1,0 +1,225 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 27 Sep 2026 14:12:39 +0800
+Subject: [PATCH] test that a legacy entry runs on its event's owner
+
+
+diff --git a/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
+index f19718c7298c5705e596b294367e2530b58dcd3f..da406c94a85a846eb9e44ee78ecd4b8ae2485bd0 100644
+--- a/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
++++ b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyExecutionDomainTestSuite.java
+@@ -5,11 +5,15 @@ import org.junit.jupiter.api.Timeout;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.Set;
++import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.CountDownLatch;
+ import java.util.concurrent.CyclicBarrier;
+ import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.concurrent.atomic.AtomicReference;
++import java.util.function.BooleanSupplier;
+ 
+ import static org.junit.jupiter.api.Assertions.assertEquals;
+ import static org.junit.jupiter.api.Assertions.assertFalse;
+@@ -110,6 +114,198 @@ class LegacyExecutionDomainTestSuite {
+         assertFalse(x.isHeldByCurrentThread() || y.isHeldByCurrentThread());
+     }
+ 
++    /**
++     * The production shape: a lane holds the plugin's domain and parks in an owner operation for an
++     * unrelated region, while a region thread fires an event for its own entity into the same plugin.
++     * The listener must run on the region thread - the entity's owner - after the lane releases, not
++     * on the parked lane, which owns nothing.
++     */
++    @Test
++    @Timeout(20)
++    void ownerBoundEntryRunsOnItsOwnerNotOnAParkedHolder() throws Exception {
++        final LegacyExecutionDomain domain = new LegacyExecutionDomain("owner-bound");
++        final CompletableFuture<Void> unrelatedOwnerOperation = new CompletableFuture<>();
++        final CountDownLatch holderParked = new CountDownLatch(1);
++        final AtomicReference<Thread> listenerThread = new AtomicReference<>();
++        final AtomicBoolean holderStillInside = new AtomicBoolean();
++        final Thread lane = new Thread(() -> domain.call(() -> {
++            holderStillInside.set(true);
++            holderParked.countDown();
++            LegacyCalls.await(unrelatedOwnerOperation, () -> {}, () -> null);
++            holderStillInside.set(false);
++            return null;
++        }), "lane");
++        final Thread region = new Thread(() -> domain.call(() -> {
++            if (holderStillInside.get()) throw new AssertionError("listener interleaved into the lane's body");
++            listenerThread.set(Thread.currentThread());
++            return null;
++        }), "region");
++        withOwners(Set.of(region), () -> {
++            lane.start();
++            holderParked.await(5, TimeUnit.SECONDS);
++            region.start();
++            // Give the parked lane every chance to take the listener.
++            Thread.sleep(300);
++            assertNull(listenerThread.get(), "the owner-bound listener ran while the lane still held the domain");
++            unrelatedOwnerOperation.complete(null);
++            lane.join(5_000);
++            region.join(5_000);
++        });
++        assertEquals(region, listenerThread.get(), "the listener did not run on the entity's owner");
++        assertEquals(0, domain.callbacks.sum(), "an owner-bound body was handed to the parked holder");
++        assertTrue(domain.ownerBoundWaits.sum() >= 1);
++    }
++
++    /** A caller that owns nothing (lane, async thread) loses nothing by moving: it is handed off as before. */
++    @Test
++    @Timeout(20)
++    void ownerlessEntryIsStillHandedToAParkedHolder() throws Exception {
++        final LegacyExecutionDomain domain = new LegacyExecutionDomain("ownerless");
++        final CompletableFuture<Void> release = new CompletableFuture<>();
++        final CountDownLatch holderParked = new CountDownLatch(1);
++        final AtomicReference<Thread> bodyThread = new AtomicReference<>();
++        final Thread holder = new Thread(() -> domain.call(() -> {
++            holderParked.countDown();
++            LegacyCalls.await(release, () -> {}, () -> null);
++            return null;
++        }), "holder");
++        final Thread caller = new Thread(() -> {
++            domain.call(() -> { bodyThread.set(Thread.currentThread()); return null; });
++            release.complete(null);
++        }, "async-caller");
++        withOwners(Set.of(), () -> {
++            holder.start();
++            holderParked.await(5, TimeUnit.SECONDS);
++            caller.start();
++            caller.join(5_000);
++            holder.join(5_000);
++        });
++        assertEquals(holder, bodyThread.get());
++        assertTrue(domain.callbacks.sum() >= 1);
++    }
++
++    /** Two owners in a cross-plugin cycle: each waits for the other, so the hand-off is the re-entry. */
++    @Test
++    @Timeout(20)
++    void ownerBoundCrossPluginCycleStillCompletes() throws Exception {
++        final LegacyExecutionDomain x = new LegacyExecutionDomain("X");
++        final LegacyExecutionDomain y = new LegacyExecutionDomain("Y");
++        final CountDownLatch bothInside = new CountDownLatch(2);
++        final AtomicInteger insideX = new AtomicInteger();
++        final AtomicInteger insideY = new AtomicInteger();
++        final AtomicReference<String> overlap = new AtomicReference<>();
++        final AtomicInteger finished = new AtomicInteger();
++        final Thread a = new Thread(() -> callInto(x, y, insideX, insideY, bothInside, overlap, finished), "region-A");
++        final Thread b = new Thread(() -> callInto(y, x, insideY, insideX, bothInside, overlap, finished), "region-B");
++        withOwners(Set.of(a, b), () -> {
++            a.start();
++            b.start();
++            a.join(TimeUnit.SECONDS.toMillis(15));
++            b.join(TimeUnit.SECONDS.toMillis(15));
++        });
++        assertFalse(a.isAlive() || b.isAlive(), "owner-bound cross-plugin call cycle deadlocked");
++        assertEquals(2, finished.get());
++        assertNull(overlap.get(), "two running threads were inside one domain at once");
++        assertTrue(x.callbacks.sum() + y.callbacks.sum() >= 1, "the cycle must use an original-thread callback");
++    }
++
++    /**
++     * A thread already serving the holder (it runs the holder's callback while the holder waits for
++     * it) and entering the holder's domain is part of a cycle through a callback, not an owner-op.
++     */
++    @Test
++    @Timeout(20)
++    void ownerBoundEntryFromTheHoldersOwnCallbackReEnters() throws Exception {
++        final LegacyExecutionDomain domain = new LegacyExecutionDomain("callback-cycle");
++        final AtomicReference<LegacyCalls.Channel> regionChannel = new AtomicReference<>();
++        final CountDownLatch regionWaiting = new CountDownLatch(1);
++        final AtomicReference<Thread> nestedThread = new AtomicReference<>();
++        final CompletableFuture<Void> regionDone = new CompletableFuture<>();
++        final Thread region = new Thread(() -> {
++            regionChannel.set(LegacyCalls.current());
++            regionWaiting.countDown();
++            // An owner parked in a managed wait services its mailbox, as a region does in an owner op.
++            LegacyCalls.await(regionDone, () -> {}, () -> null);
++        }, "region");
++        final Thread lane = new Thread(() -> domain.call(() -> {
++            // The lane asks the region to run something that fires back into the lane's plugin.
++            regionChannel.get().call(() -> domain.call(() -> { nestedThread.set(Thread.currentThread()); return null; }));
++            return null;
++        }), "lane");
++        withOwners(Set.of(region), () -> {
++            region.start();
++            regionWaiting.await(5, TimeUnit.SECONDS);
++            lane.start();
++            lane.join(10_000);
++            regionDone.complete(null);
++            region.join(5_000);
++        });
++        assertFalse(lane.isAlive(), "a callback cycle through the holder deadlocked");
++        assertEquals(lane, nestedThread.get(), "the re-entry must run on the domain's holder");
++    }
++
++    /**
++     * A lane draining a plugin's queue re-enters the domain back to back, nanoseconds after each
++     * release. An owner already waiting must get the released domain before that fresh entry, or a
++     * long drain starves the region that fired the event.
++     */
++    @Test
++    @Timeout(20)
++    void releasedDomainGoesToAWaitingOwnerBeforeAFreshEntry() throws Exception {
++        final LegacyExecutionDomain domain = new LegacyExecutionDomain("fair");
++        final CountDownLatch laneInside = new CountDownLatch(1);
++        final CountDownLatch regionBusy = new CountDownLatch(1);
++        final AtomicReference<LegacyCalls.Channel> regionChannel = new AtomicReference<>();
++        final List<String> order = java.util.Collections.synchronizedList(new ArrayList<>());
++        final Thread lane = new Thread(() -> {
++            domain.call(() -> {
++                laneInside.countDown();
++                try {
++                    regionBusy.await(5, TimeUnit.SECONDS);
++                } catch (final InterruptedException e) {
++                    Thread.currentThread().interrupt();
++                }
++                return null;
++            });
++            // Released while the waiting region is busy elsewhere; this fresh entry must queue behind it.
++            domain.call(() -> { order.add("lane-next-task"); return null; });
++        }, "lane");
++        final Thread region = new Thread(() -> {
++            regionChannel.set(LegacyCalls.current());
++            domain.call(() -> { order.add("region-listener"); return null; });
++        }, "region");
++        withOwners(Set.of(region), () -> {
++            lane.start();
++            laneInside.await(5, TimeUnit.SECONDS);
++            region.start();
++            while (regionChannel.get() == null || !regionChannel.get().isWaiting()) Thread.onSpinWait();
++            // The waiting region services a callback of its own at the moment the lane releases.
++            regionChannel.get().offer(() -> {
++                regionBusy.countDown();
++                try {
++                    Thread.sleep(300);
++                } catch (final InterruptedException e) {
++                    Thread.currentThread().interrupt();
++                }
++            });
++            region.join(5_000);
++            lane.join(5_000);
++        });
++        assertEquals(List.of("region-listener", "lane-next-task"), order, "a fresh entry overtook the waiting owner");
++    }
++
++    private interface Body { void run() throws Exception; }
++
++    private static void withOwners(final Set<Thread> owners, final Body body) throws Exception {
++        final BooleanSupplier previous = LegacyExecutionDomain.ownsWorldState;
++        LegacyExecutionDomain.ownsWorldState = () -> owners.contains(Thread.currentThread());
++        try {
++            body.run();
++        } finally {
++            LegacyExecutionDomain.ownsWorldState = previous;
++        }
++    }
++
+     private static void callInto(final LegacyExecutionDomain outer, final LegacyExecutionDomain inner,
+                                  final AtomicInteger insideOuter, final AtomicInteger insideInner,
+                                  final CountDownLatch bothInside, final AtomicReference<String> overlap,

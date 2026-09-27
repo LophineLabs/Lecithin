@@ -24,6 +24,12 @@ import java.util.function.Supplier;
  * Idle regions may be exclusively acquired without consuming an EDF worker. Busy owners service
  * requests while waiting in a managed call. Acquisition is always try-only; no region lock is held
  * while blocking on a second region lock. Native plugin entrypoints clear the managed frame.
+ *
+ * <p>An operation whose target has no owner that may run it - the entity is retired or between
+ * owners (teleport, respawn, logout handover), its world is unloading, the plugin is disabled or
+ * the server is stopping - is cancelled before its body starts and throws {@link
+ * OwnerOperationCancelledException}. Cancellation is an answer about this one call, never about the
+ * target's state; a failure inside a body that did run is rethrown unchanged.
  */
 public final class LegacyOwnerOperations {
     private static final Set<Request<?>> PENDING = ConcurrentHashMap.newKeySet();
@@ -54,7 +60,12 @@ public final class LegacyOwnerOperations {
         return LegacyPluginRuntime.currentFrame() != null && !TickThread.isTickThreadFor(world, chunkX, chunkZ);
     }
 
-    /** Standard entity events retain their declared owner's native listener context. */
+    /**
+     * Standard entity events retain their declared owner's native listener context. An entity with
+     * no owner right now (retired, or between owners during a teleport, respawn or logout handover)
+     * has no such context: the event is dispatched where it was called, as the platform dispatches
+     * the transition events around it. The event itself is never dropped.
+     */
     public static boolean dispatchEvent(final org.bukkit.event.Event event, final Runnable dispatch) {
         if (event.isAsynchronous() || LegacyPluginRuntime.currentFrame() == null) return false;
         final org.bukkit.entity.Entity owner;
@@ -62,8 +73,15 @@ public final class LegacyOwnerOperations {
         else if (event instanceof org.bukkit.event.entity.EntityEvent entity) owner = entity.getEntity();
         else return false;
         final Entity handle = ((org.bukkit.craftbukkit.entity.CraftEntity) owner).getHandleRaw();
-        if (!needed(handle)) return false;
-        entity(handle, () -> { dispatch.run();return null; });
+        if (handle.isRemoved() || !needed(handle)) return false;
+        final boolean[] started = {false};
+        try {
+            entity(handle, () -> { started[0] = true; dispatch.run();return null; });
+        } catch (final OwnerOperationCancelledException cancelled) {
+            // Retired while queued: no listener ran, so dispatching here delivers it exactly once.
+            if (started[0] || cancelled.reason() != OwnerOperationCancelledException.Reason.TARGET_RETIRED) throw cancelled;
+            return false;
+        }
         return true;
     }
 
@@ -86,10 +104,10 @@ public final class LegacyOwnerOperations {
             // A lane has no owner. Its carrier only executes an API body after acquiring a real one.
             // Tick callers can make the same try-only acquisition themselves inside await's pump.
             CARRIERS.execute(() -> {
-                try { LegacyCalls.await(request.result, request::attempt); }
+                try { LegacyCalls.await(request.result, request::attempt, () -> null); }
                 catch (final Throwable failure) { /* The synchronous caller receives this same failure. */ }
             });
-            return LegacyCalls.await(request.result, request::attempt);
+            return LegacyCalls.await(request.result, request::attempt, () -> request.executor);
         } finally {
             cancel.run();
             PENDING.remove(request);
@@ -112,6 +130,8 @@ public final class LegacyOwnerOperations {
         final LegacyCalls.Channel callback = LegacyCalls.RETURN_TO.get() == null ? LegacyCalls.current() : LegacyCalls.RETURN_TO.get();
         final CompletableFuture<T> result = new CompletableFuture<>();
         final AtomicBoolean claimed = new AtomicBoolean();
+        // The thread running the body, while it runs: the requester's wait-for edge.
+        volatile LegacyCalls.Channel executor;
         T value;
         Throwable failure;
 
@@ -123,15 +143,31 @@ public final class LegacyOwnerOperations {
         int chunkZ() { return this.entity == null ? this.fixedZ : this.entity.chunkPosition().z(); }
         boolean owned() { return this.entity == null ? TickThread.isTickThreadFor(this.fixedWorld,this.fixedX,this.fixedZ) : TickThread.isTickThreadFor(this.entity); }
 
+        OwnerOperationCancelledException.Reason cancellation(final ServerLevel world) {
+            if (closing || MinecraftServer.getServer().isStopped()) return OwnerOperationCancelledException.Reason.SERVER_STOPPING;
+            if (!this.frame.state.plugin.isEnabled()) return OwnerOperationCancelledException.Reason.PLUGIN_DISABLED;
+            if (world.levelUnloadStateLock.isReadReferencingBlocked()
+                    || Bukkit.getWorld(world.getWorld().getUID()) != world.getWorld()) return OwnerOperationCancelledException.Reason.WORLD_UNLOADED;
+            if (this.entity != null && this.entity.isRemoved()) return OwnerOperationCancelledException.Reason.TARGET_RETIRED;
+            return null;
+        }
+
+        String describe(final ServerLevel world) {
+            final String target = this.entity == null
+                    ? "chunk [" + this.fixedX + ", " + this.fixedZ + "]"
+                    : net.minecraft.world.entity.EntityType.getKey(this.entity.getType()) + " " + this.entity.getUUID()
+                        + (this.entity.getRemovalReason() == null ? "" : " (removed: " + this.entity.getRemovalReason() + ")");
+            return target + " in '" + world.getWorld().getName() + "' for " + this.frame.state.plugin.getName()
+                    + " from " + Thread.currentThread().getName();
+        }
+
         boolean attempt() {
             if (this.claimed.get()) return false;
             final ServerLevel world = this.world();
-            if (closing || MinecraftServer.getServer().isStopped() || !this.frame.state.plugin.isEnabled()
-                    || world.levelUnloadStateLock.isReadReferencingBlocked()
-                    || Bukkit.getWorld(world.getWorld().getUID()) != world.getWorld()
-                    || (this.entity != null && this.entity.isRemoved())) {
+            final OwnerOperationCancelledException.Reason cancelled = this.cancellation(world);
+            if (cancelled != null) {
                 if (this.claimed.compareAndSet(false,true)) this.result.completeExceptionally(
-                        new IllegalStateException("Legacy owner operation rejected before execution: plugin disabled, entity retired, world unloaded or server stopped"));
+                        new OwnerOperationCancelledException(cancelled, this.describe(world)));
                 return false;
             }
             if (this.owned()) {
@@ -156,11 +192,13 @@ public final class LegacyOwnerOperations {
             if (!this.owned() || !this.claimed.compareAndSet(false,true)) return false;
             final var previous = LegacyCalls.RETURN_TO.get();
             LegacyCalls.RETURN_TO.set(this.callback);
+            this.executor = LegacyCalls.current();
             try {
                 this.value = LegacyPluginRuntime.withFrame(this.frame, this.body);
             } catch (final Throwable failed) {
                 this.failure = failed;
             } finally {
+                this.executor = null;
                 if (previous == null) LegacyCalls.RETURN_TO.remove(); else LegacyCalls.RETURN_TO.set(previous);
             }
             return true;
@@ -170,5 +208,24 @@ public final class LegacyOwnerOperations {
             if (this.failure == null) this.result.complete(this.value);
             else this.result.completeExceptionally(this.failure);
         }
+    }
+
+    /**
+     * An owner operation that was cancelled before its body started: nothing of it ran and no state
+     * was read or changed. It is still an {@link IllegalStateException}, as the rejection was before.
+     * A platform lookup may answer for that one call from it (a player between owners is not visible
+     * to it); nothing may treat it as the target's actual state.
+     */
+    public static final class OwnerOperationCancelledException extends java.util.concurrent.CancellationException {
+        public enum Reason { SERVER_STOPPING, PLUGIN_DISABLED, WORLD_UNLOADED, TARGET_RETIRED }
+
+        private final Reason reason;
+
+        OwnerOperationCancelledException(final Reason reason, final String detail) {
+            super("Legacy owner operation cancelled before execution (" + reason + "): " + detail);
+            this.reason = reason;
+        }
+
+        public Reason reason() { return this.reason; }
     }
 }
