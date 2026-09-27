@@ -11,6 +11,8 @@ jobs:
     env:
       TOOL: "LophineLabs/AutoUpdateUpstream"
       UPSTREAM_URL: "https://github.com/LophineLabs/Lophine.git"
+      # 要跟踪的上游分支，留空则使用上游仓库默认分支（HEAD）
+      UPSTREAM_BRANCH: ""
       REF: "lophineRef"
       TITLE: "Update Upstream (Lophine)"
       REF_COMMIT: "auto-update/upstream"
@@ -31,7 +33,10 @@ jobs:
           else
             LOCAL_REF=$(grep '^${{ env.REF }}=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
           fi
-          UPSTREAM_REF=$(git ls-remote "${{ env.UPSTREAM_URL }}" HEAD | cut -f1)
+          # UPSTREAM_BRANCH 为空时回退到 HEAD（上游默认分支）
+          REF_SPEC="${{ env.UPSTREAM_BRANCH }}"
+          REF_SPEC="${REF_SPEC:-HEAD}"
+          UPSTREAM_REF=$(git ls-remote "${{ env.UPSTREAM_URL }}" "$REF_SPEC" | cut -f1)
           echo "Local ref: $LOCAL_REF"
           echo "Upstream ref: $UPSTREAM_REF"
           if [ "$LOCAL_REF" = "$UPSTREAM_REF" ]; then
@@ -117,7 +122,11 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          java -jar tool/build/libs/*.jar --repo=${{ github.workspace }}/repo --key=${{ env.REF }} --url=${{ env.UPSTREAM_URL }} --fix=rebuildLophineSingleFilePatches --rebuild=rebuildAllServerPatches --rebuild=rebuildFoliaApiPatches --rebuild=rebuildPaperApiPatches --rebuild=rebuildLophineApiPatches
+                    BRANCH_ARGS=""
+          if [ -n "${{ env.UPSTREAM_BRANCH }}" ]; then
+            BRANCH_ARGS="--branch=${{ env.UPSTREAM_BRANCH }}"
+          fi
+          java -jar tool/build/libs/*.jar --repo=${{ github.workspace }}/repo $BRANCH_ARGS --key=${{ env.REF }} --url=${{ env.UPSTREAM_URL }} --fix=rebuildLophineSingleFilePatches --rebuild=rebuildAllServerPatches --rebuild=rebuildPaperApiPatches --rebuild=rebuildFoliaApiPatches --rebuild=rebuildLophineApiPatches
 
       - name: Get upstream commit messages
         if: steps.uptodate.outputs.skip != 'true'
