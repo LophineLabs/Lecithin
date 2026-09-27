@@ -1,0 +1,450 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 27 Sep 2026 16:30:50 +0800
+Subject: [PATCH] test that an owner operation's cancellation reaches its
+ caller as itself
+
+
+diff --git a/src/test/java/fun/bm/lecithin/compat/legacy/LegacyOwnerOperationsTestSuite.java b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyOwnerOperationsTestSuite.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6cea3c8ecdb46426d7a80897f9ec4a3dedc56767
+--- /dev/null
++++ b/src/test/java/fun/bm/lecithin/compat/legacy/LegacyOwnerOperationsTestSuite.java
+@@ -0,0 +1,437 @@
++package fun.bm.lecithin.compat.legacy;
++
++import net.minecraft.server.level.ServerLevel;
++import org.bukkit.plugin.Plugin;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.Timeout;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.EnumSource;
++
++import java.util.List;
++import java.util.Set;
++import java.util.concurrent.CancellationException;
++import java.util.concurrent.CompletionException;
++import java.util.concurrent.ConcurrentLinkedQueue;
++import java.util.concurrent.CopyOnWriteArrayList;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicBoolean;
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicReference;
++import java.util.concurrent.locks.ReentrantLock;
++import java.util.function.Supplier;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertFalse;
++import static org.junit.jupiter.api.Assertions.assertInstanceOf;
++import static org.junit.jupiter.api.Assertions.assertNull;
++import static org.junit.jupiter.api.Assertions.assertSame;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++/**
++ * Owner operations end to end without a server: a real request is queued, claimed and completed
++ * exceptionally by whichever thread attempts it first, and the caller receives the outcome through
++ * the real await. Only the regionised server behind the target is stood in for.
++ */
++class LegacyOwnerOperationsTestSuite {
++
++    enum Loss {
++        HANDOVER(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.TARGET_RETIRED, "CHANGED_DIMENSION"),
++        LOGOUT(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.TARGET_RETIRED, "UNLOADED_WITH_PLAYER"),
++        RESPAWN(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.TARGET_RETIRED, "DISCARDED"),
++        PLUGIN_DISABLE(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.PLUGIN_DISABLED, null),
++        WORLD_UNLOAD(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.WORLD_UNLOADED, null),
++        SERVER_STOPPED(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.SERVER_STOPPING, null);
++
++        final LegacyOwnerOperations.OwnerOperationCancelledException.Reason reason;
++        final String removal;
++        Loss(final LegacyOwnerOperations.OwnerOperationCancelledException.Reason reason, final String removal) {
++            this.reason = reason;
++            this.removal = removal;
++        }
++    }
++
++    /**
++     * An owner lost while the operation waits in its queue cancels it before the body starts, and
++     * the caller receives that very cancellation - its reason and detail - not a wrapper around it.
++     */
++    @ParameterizedTest
++    @EnumSource(Loss.class)
++    @Timeout(20)
++    void cancellationWhileQueuedReachesTheCallerAsItself(final Loss loss) throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        final FakeOwner owner = new FakeOwner("target");
++        final AtomicBoolean bodyRan = new AtomicBoolean();
++        final Caller caller = plugin.callAsync(() -> LegacyOwnerOperations.call(owner, () -> { bodyRan.set(true); return "read"; }));
++        owner.awaitQueued();
++        switch (loss) {
++            case PLUGIN_DISABLE -> plugin.enabled.set(false);
++            case WORLD_UNLOAD -> owner.unloaded = true;
++            case SERVER_STOPPED -> owner.stopped = true;
++            default -> owner.removal = loss.removal;
++        }
++        final Throwable thrown = caller.failure();
++
++        final var cancelled = assertInstanceOf(LegacyOwnerOperations.OwnerOperationCancelledException.class, thrown,
++                () -> "the caller received " + thrown + " instead of the owner operation's cancellation");
++        assertEquals(loss.reason, cancelled.reason());
++        assertNull(cancelled.getCause(), "a cancellation is its own cause");
++        assertTrue(cancelled.getMessage().contains("ManagedProbe"), cancelled.getMessage());
++        if (loss.removal != null) assertTrue(cancelled.getMessage().contains("(removed: " + loss.removal + ")"), cancelled.getMessage());
++        assertFalse(bodyRan.get(), "a cancelled operation ran its body");
++        caller.assertClean();
++        owner.assertClean();
++        assertNothingPending();
++    }
++
++    /** Shutdown cancels every waiting operation, so no caller - region or lane - waits forever. */
++    @Test
++    @Timeout(20)
++    void serverStoppingReleasesEveryWaitingCaller() throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        final FakeOwner owner = new FakeOwner("busy");
++        final Caller first = plugin.callAsync(() -> LegacyOwnerOperations.call(owner, () -> "first"));
++        final Caller second = plugin.callAsync(() -> LegacyOwnerOperations.call(owner, () -> "second"));
++        owner.awaitQueued(2);
++        try {
++            LegacyOwnerOperations.beginShutdown();
++            for (final Caller caller : List.of(first, second)) {
++                final Throwable thrown = caller.failure();
++                final var cancelled = assertInstanceOf(LegacyOwnerOperations.OwnerOperationCancelledException.class, thrown, () -> "got " + thrown);
++                assertEquals(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.SERVER_STOPPING, cancelled.reason());
++                caller.assertClean();
++            }
++            owner.assertClean();
++            assertNothingPending();
++        } finally {
++            final var closing = LegacyOwnerOperations.class.getDeclaredField("closing");
++            closing.setAccessible(true);
++            closing.setBoolean(null, false);
++        }
++    }
++
++    /** The owner's own thread runs the body; the value and its thread cross back unchanged. */
++    @Test
++    @Timeout(20)
++    void anOwnedOperationRunsOnTheOwner() throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        final FakeOwner owner = new FakeOwner("ticking");
++        final Caller caller = plugin.callAsync(() -> LegacyOwnerOperations.call(owner, () -> Thread.currentThread().getName()));
++        owner.awaitQueued();
++        owner.tickOnce("region-tick");
++        assertEquals("region-tick", caller.value());
++        caller.assertClean();
++        owner.assertClean();
++        assertNothingPending();
++    }
++
++    /**
++     * A body that did run and failed is rethrown as that same throwable - including one that is
++     * itself a cancellation or a completion wrapper, which the boundary must not reinterpret.
++     */
++    @Test
++    @Timeout(20)
++    void aBodyFailurePassesThroughUnchanged() throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        for (final RuntimeException failure : List.of(
++                new IllegalStateException("plugin bug"),
++                new CancellationException("the body's own cancellation"),
++                new CompletionException("the body's own wrapper", new IllegalArgumentException("inner")))) {
++            final FakeOwner owner = new FakeOwner("ticking");
++            final AtomicInteger runs = new AtomicInteger();
++            final Caller caller = plugin.callAsync(() -> LegacyOwnerOperations.call(owner, () -> { runs.incrementAndGet(); throw failure; }));
++            owner.awaitQueued();
++            owner.tickOnce("region-tick");
++            assertSame(failure, caller.failure(), "the body's failure was replaced on its way to the caller");
++            assertEquals(1, runs.get());
++            caller.assertClean();
++            owner.assertClean();
++        }
++        assertNothingPending();
++    }
++
++    /**
++     * The event-dispatch entry: an entity retired while its dispatch waits for the owner is
++     * dispatched where it was called, exactly once. Without that, the cancellation escaped the event
++     * call and failed the region that fired the event.
++     */
++    @Test
++    @Timeout(20)
++    void anEventWhoseEntityRetiredWhileQueuedIsDispatchedHereOnce() throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        final FakeOwner owner = new FakeOwner("player");
++        final List<String> deliveries = new CopyOnWriteArrayList<>();
++        final Caller caller = plugin.callAsync(() -> {
++            // PaperEventManager.callEvent: dispatch on the owner, or here when the owner declines.
++            final Runnable listeners = () -> deliveries.add(Thread.currentThread().getName());
++            if (!LegacyOwnerOperations.dispatchOnOwner(owner, listeners)) listeners.run();
++            return null;
++        });
++        owner.awaitQueued();
++        owner.removal = "CHANGED_DIMENSION";
++        caller.value();
++        assertEquals(List.of(caller.thread.getName()), deliveries, "the event was not delivered exactly once, on its caller");
++        caller.assertClean();
++        owner.assertClean();
++        assertNothingPending();
++    }
++
++    /** An event dispatched on its owner is delivered there, once. */
++    @Test
++    @Timeout(20)
++    void anEventIsDispatchedOnItsOwner() throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        final FakeOwner owner = new FakeOwner("player");
++        final List<String> deliveries = new CopyOnWriteArrayList<>();
++        final Caller caller = plugin.callAsync(() -> LegacyOwnerOperations.dispatchOnOwner(owner,
++                () -> deliveries.add(Thread.currentThread().getName())));
++        owner.awaitQueued();
++        owner.tickOnce("region-tick");
++        assertEquals(Boolean.TRUE, caller.value());
++        assertEquals(List.of("region-tick"), deliveries);
++        caller.assertClean();
++        assertNothingPending();
++    }
++
++    /**
++     * A listener that already ran on the owner and let a nested cancellation escape must not be
++     * delivered a second time: the failure is the listener's, rethrown as it was.
++     */
++    @Test
++    @Timeout(20)
++    void aCancellationFromAListenerThatRanIsNotADeclinedDispatch() throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        final FakeOwner owner = new FakeOwner("player");
++        final FakeOwner other = new FakeOwner("other");
++        other.removal = "CHANGED_DIMENSION";
++        final AtomicInteger deliveries = new AtomicInteger();
++        final AtomicReference<Throwable> nested = new AtomicReference<>();
++        final Caller caller = plugin.callAsync(() -> {
++            final Runnable listeners = () -> {
++                deliveries.incrementAndGet();
++                try {
++                    LegacyOwnerOperations.call(other, () -> "unreachable");
++                } catch (final RuntimeException escaped) {
++                    nested.set(escaped);
++                    throw escaped;
++                }
++            };
++            if (!LegacyOwnerOperations.dispatchOnOwner(owner, listeners)) listeners.run();
++            return null;
++        });
++        owner.awaitQueued();
++        owner.tickOnce("region-tick");
++        final Throwable thrown = caller.failure();
++        assertInstanceOf(LegacyOwnerOperations.OwnerOperationCancelledException.class, nested.get());
++        assertSame(nested.get(), thrown, "the listener's own failure was replaced");
++        assertEquals(1, deliveries.get(), "a listener that ran was dispatched again");
++        caller.assertClean();
++        assertNothingPending();
++    }
++
++    /**
++     * The completion shape of the production failure: a lookup inside a managed plugin's domain
++     * (tab completion) is cancelled and answered by its platform entry, while a second entry into
++     * that domain lets the same kind of cancellation escape. Each gets its own outcome, the domain
++     * stays serial, and nothing is left held: domain, frame, wait state or the region lock.
++     */
++    @Test
++    @Timeout(20)
++    void cancelledLookupsInsideADomainLeaveNothingHeld() throws Exception {
++        final Managed plugin = new Managed("ManagedProbe");
++        final FakeOwner target = new FakeOwner("player");
++        final AtomicInteger inside = new AtomicInteger();
++        final AtomicReference<String> overlap = new AtomicReference<>();
++        final Supplier<Boolean> canSee = () -> {
++            // CraftPlayer.canSee: a lookup cancelled before it ran answers "not visible" for this call.
++            try {
++                return LegacyOwnerOperations.call(target, () -> true);
++            } catch (final LegacyOwnerOperations.OwnerOperationCancelledException cancelled) {
++                return false;
++            }
++        };
++        final CountDownLatch firstQueued = new CountDownLatch(1);
++        final Caller completion = plugin.callAsync(() -> plugin.entry(() -> {
++            if (inside.incrementAndGet() != 1) overlap.set("completion");
++            try {
++                firstQueued.countDown();
++                return canSee.get();
++            } finally {
++                inside.decrementAndGet();
++            }
++        }), false);
++        target.awaitQueued();
++        firstQueued.await(5, TimeUnit.SECONDS);
++        final Caller second = plugin.callAsync(() -> plugin.entry(() -> {
++            if (inside.incrementAndGet() != 1 && !Thread.currentThread().equals(completion.thread)) overlap.set("second");
++            try {
++                return LegacyOwnerOperations.call(target, () -> "unreachable");
++            } finally {
++                inside.decrementAndGet();
++            }
++        }), false);
++        second.awaitWaiting();
++        target.removal = "CHANGED_DIMENSION";
++
++        assertEquals(Boolean.FALSE, completion.value(), "the cancelled lookup was not answered by its entry");
++        final Throwable escaped = second.failure();
++        final var cancelled = assertInstanceOf(LegacyOwnerOperations.OwnerOperationCancelledException.class, escaped, () -> "got " + escaped);
++        assertEquals(LegacyOwnerOperations.OwnerOperationCancelledException.Reason.TARGET_RETIRED, cancelled.reason());
++        assertNull(overlap.get(), "two threads were inside the plugin's domain at once");
++        assertEquals("-", plugin.state.domain.describeOwner(), "the domain is still held");
++        completion.assertClean();
++        second.assertClean();
++        target.assertClean();
++        assertNothingPending();
++    }
++
++    // ------------------------------------------------------------------ fixtures
++
++    private static void assertNothingPending() throws Exception {
++        final var pending = LegacyOwnerOperations.class.getDeclaredField("PENDING");
++        pending.setAccessible(true);
++        final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
++        while (!((Set<?>) pending.get(null)).isEmpty() && System.nanoTime() < deadline) Thread.onSpinWait();
++        assertTrue(((Set<?>) pending.get(null)).isEmpty(), "an owner operation is still pending");
++    }
++
++    /** A managed plugin: its state, domain and the frame a platform entry establishes for it. */
++    private static final class Managed {
++        final AtomicBoolean enabled = new AtomicBoolean(true);
++        final LegacyPluginState state;
++
++        Managed(final String name) {
++            final Plugin plugin = mock(Plugin.class);
++            when(plugin.getName()).thenReturn(name);
++            when(plugin.isEnabled()).thenAnswer(invocation -> this.enabled.get());
++            this.state = new LegacyPluginState(plugin);
++        }
++
++        /** A listener or command entry: the plugin's domain, then its frame (LegacyPluginRuntime.call). */
++        <T> T entry(final Supplier<T> body) {
++            return this.state.domain.call(() -> LegacyPluginRuntime.withFrame(new LegacyPluginRuntime.Frame(this.state, LegacyAffinity.NONE, false, null), body));
++        }
++
++        Caller callAsync(final Supplier<?> body) { return this.callAsync(body, true); }
++
++        /** @param framed whether to establish a managed frame, as a listener or command entry does */
++        Caller callAsync(final Supplier<?> body, final boolean framed) {
++            final Caller caller = new Caller();
++            caller.thread = new Thread(() -> {
++                try {
++                    caller.value.set(framed
++                            ? LegacyPluginRuntime.withFrame(new LegacyPluginRuntime.Frame(this.state, LegacyAffinity.NONE, false, null), body)
++                            : body.get());
++                } catch (final Throwable failure) {
++                    caller.failure.set(failure);
++                } finally {
++                    caller.channel = LegacyCalls.current();
++                    caller.waitingAfter = caller.channel.isWaiting();
++                    caller.returnToAfter = LegacyCalls.RETURN_TO.get();
++                    caller.frameAfter = LegacyPluginRuntime.currentFrame();
++                }
++            }, "caller-" + CALLERS.incrementAndGet());
++            caller.thread.start();
++            return caller;
++        }
++    }
++
++    private static final AtomicInteger CALLERS = new AtomicInteger();
++
++    private static final class Caller {
++        Thread thread;
++        final AtomicReference<Object> value = new AtomicReference<>();
++        final AtomicReference<Throwable> failure = new AtomicReference<>();
++        volatile LegacyCalls.Channel channel;
++        volatile boolean waitingAfter;
++        volatile LegacyCalls.Channel returnToAfter;
++        volatile LegacyPluginRuntime.Frame frameAfter;
++
++        private void join() throws InterruptedException {
++            this.thread.join(TimeUnit.SECONDS.toMillis(10));
++            assertFalse(this.thread.isAlive(), "the caller is still waiting");
++        }
++        Object value() throws InterruptedException {
++            this.join();
++            if (this.failure.get() != null) throw new AssertionError("the caller failed", this.failure.get());
++            return this.value.get();
++        }
++        Throwable failure() throws InterruptedException {
++            this.join();
++            assertTrue(this.failure.get() != null, "the caller returned " + this.value.get());
++            return this.failure.get();
++        }
++        void awaitWaiting() {
++            final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
++            // The channel is thread-local; a caller parked in a managed wait shows as waiting on it.
++            while (System.nanoTime() < deadline && this.thread.getState() != Thread.State.TIMED_WAITING) Thread.onSpinWait();
++        }
++        void assertClean() {
++            assertFalse(this.waitingAfter, "the caller's channel is still marked waiting");
++            assertNull(this.returnToAfter, "a callback target leaked into the caller");
++            assertNull(this.frameAfter, "a managed frame leaked out of the entry");
++        }
++    }
++
++    /**
++     * The regionised server behind one target. Its owner is busy until a test ticks it; an idle
++     * owner would be acquired try-only by a waiting caller or carrier, as a real idle region is.
++     */
++    private static final class FakeOwner implements LegacyOwnerOperations.Target {
++        final String name;
++        volatile String removal;
++        volatile boolean unloaded;
++        volatile boolean stopped;
++        volatile Thread ticking;
++        final ReentrantLock regionLock = new ReentrantLock();
++        final ConcurrentLinkedQueue<Runnable> tickQueue = new ConcurrentLinkedQueue<>();
++        final AtomicInteger queued = new AtomicInteger();
++
++        FakeOwner(final String name) { this.name = name; }
++
++        @Override public ServerLevel world() { return null; }
++        @Override public boolean serverStopped() { return this.stopped; }
++        @Override public boolean worldUnloaded() { return this.unloaded; }
++        @Override public boolean retired() { return this.removal != null; }
++        @Override public boolean owned() { return Thread.currentThread() == this.ticking; }
++        @Override public void tryAcquire(final Runnable operation) { /* busy: never acquired from outside */ }
++        @Override public Runnable queue(final Runnable attempt) {
++            this.tickQueue.add(attempt);
++            this.queued.incrementAndGet();
++            return () -> this.tickQueue.remove(attempt);
++        }
++        @Override public String describe() {
++            return "fake:" + this.name + (this.removal == null ? "" : " (removed: " + this.removal + ")") + " in 'world'";
++        }
++
++        void awaitQueued() { this.awaitQueued(1); }
++        void awaitQueued(final int count) {
++            final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
++            while (this.queued.get() < count && System.nanoTime() < deadline) Thread.onSpinWait();
++            assertTrue(this.queued.get() >= count, "the operation was never queued on its owner");
++        }
++
++        /** One region tick on a thread of its own: runs its task queue as the owner, holding the region. */
++        void tickOnce(final String threadName) throws InterruptedException {
++            final Thread tick = new Thread(() -> {
++                this.regionLock.lock();
++                try {
++                    for (Runnable task; (task = this.tickQueue.poll()) != null; ) task.run();
++                } finally {
++                    this.regionLock.unlock();
++                }
++            }, threadName);
++            this.ticking = tick;
++            tick.start();
++            tick.join(TimeUnit.SECONDS.toMillis(10));
++            this.ticking = null;
++        }
++
++        void assertClean() {
++            assertTrue(this.tickQueue.isEmpty(), "a queued owner task was left behind");
++            assertFalse(this.regionLock.isLocked(), "the region is still held");
++        }
++    }
++}

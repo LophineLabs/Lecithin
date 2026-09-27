@@ -48,7 +48,7 @@ public final class LegacyOwnerOperations {
     public static boolean isCallingOperationIn(final ServerLevel world) {
         final LegacyCalls.Channel caller = LegacyCalls.current();
         for (final Request<?> request : PENDING) {
-            if (request.callback == caller && request.claimed.get() && !request.result.isDone() && request.world() == world) return true;
+            if (request.callback == caller && request.claimed.get() && !request.result.isDone() && request.target.world() == world) return true;
         }
         return false;
     }
@@ -74,9 +74,13 @@ public final class LegacyOwnerOperations {
         else return false;
         final Entity handle = ((org.bukkit.craftbukkit.entity.CraftEntity) owner).getHandleRaw();
         if (handle.isRemoved() || !needed(handle)) return false;
+        return dispatchOnOwner(new EntityTarget(handle), dispatch);
+    }
+
+    static boolean dispatchOnOwner(final Target owner, final Runnable dispatch) {
         final boolean[] started = {false};
         try {
-            entity(handle, () -> { started[0] = true; dispatch.run();return null; });
+            call(new Request<>(owner, () -> { started[0] = true; dispatch.run();return null; }));
         } catch (final OwnerOperationCancelledException cancelled) {
             // Retired while queued: no listener ran, so dispatching here delivers it exactly once.
             if (started[0] || cancelled.reason() != OwnerOperationCancelledException.Reason.TARGET_RETIRED) throw cancelled;
@@ -86,10 +90,14 @@ public final class LegacyOwnerOperations {
     }
 
     public static <T> T entity(final Entity entity, final Supplier<T> body) {
-        return call(new Request<>(entity, null, 0, 0, body));
+        return call(new Request<>(new EntityTarget(entity), body));
     }
     public static <T> T region(final ServerLevel world, final int chunkX, final int chunkZ, final Supplier<T> body) {
-        return call(new Request<>(null, world, chunkX, chunkZ, body));
+        return call(new Request<>(new ChunkTarget(world, chunkX, chunkZ), body));
+    }
+
+    static <T> T call(final Target target, final Supplier<T> body) {
+        return call(new Request<>(target, body));
     }
 
     private static <T> T call(final Request<T> request) {
@@ -97,10 +105,7 @@ public final class LegacyOwnerOperations {
         PENDING.add(request);
         Runnable cancel = () -> {};
         try {
-            final ServerLevel world = request.world();
-            final var task = RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(world,
-                    request.chunkX(), request.chunkZ(), request::attempt);
-            cancel = () -> task.cancel();
+            cancel = request.target.queue(request::attempt);
             // A lane has no owner. Its carrier only executes an API body after acquiring a real one.
             // Tick callers can make the same try-only acquisition themselves inside await's pump.
             CARRIERS.execute(() -> {
@@ -121,10 +126,74 @@ public final class LegacyOwnerOperations {
         }
     }
 
-    private static final class Request<T> {
+    /**
+     * What an operation needs from the owner of its target. {@link EntityTarget} and {@link
+     * ChunkTarget} are the regionised server; tests stand in for it without one.
+     */
+    interface Target {
+        /** The world an unload of which must not wait for this operation. */
+        ServerLevel world();
+        boolean serverStopped();
+        boolean worldUnloaded();
+        boolean retired();
+        /** Whether the current thread owns the target now. */
+        boolean owned();
+        /** Acquire the target's owner try-only and run {@code operation} under it, or return without running it. */
+        void tryAcquire(Runnable operation);
+        /** Queue {@code attempt} on the owner's tick queue; the result removes it again. */
+        Runnable queue(Runnable attempt);
+        String describe();
+    }
+
+    private abstract static class ServerTarget implements Target {
+        abstract int chunkX();
+        abstract int chunkZ();
+        abstract String describeTarget();
+
+        @Override public boolean serverStopped() { return MinecraftServer.getServer().isStopped(); }
+        @Override public boolean worldUnloaded() {
+            final ServerLevel world = this.world();
+            return world.levelUnloadStateLock.isReadReferencingBlocked()
+                    || Bukkit.getWorld(world.getWorld().getUID()) != world.getWorld();
+        }
+        @Override public void tryAcquire(final Runnable operation) {
+            TickRegionScheduler.tryLegacyOwnerOperation(this.world(), this.chunkX(), this.chunkZ(), operation);
+        }
+        @Override public Runnable queue(final Runnable attempt) {
+            final var task = RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(this.world(), this.chunkX(), this.chunkZ(), attempt);
+            return () -> task.cancel();
+        }
+        @Override public String describe() { return this.describeTarget() + " in '" + this.world().getWorld().getName() + "'"; }
+    }
+
+    private static final class EntityTarget extends ServerTarget {
         final Entity entity;
-        final ServerLevel fixedWorld;
-        final int fixedX, fixedZ;
+        EntityTarget(final Entity entity) { this.entity = entity; }
+        @Override public ServerLevel world() { return (ServerLevel) this.entity.level(); }
+        @Override int chunkX() { return this.entity.chunkPosition().x(); }
+        @Override int chunkZ() { return this.entity.chunkPosition().z(); }
+        @Override public boolean retired() { return this.entity.isRemoved(); }
+        @Override public boolean owned() { return TickThread.isTickThreadFor(this.entity); }
+        @Override String describeTarget() {
+            return net.minecraft.world.entity.EntityType.getKey(this.entity.getType()) + " " + this.entity.getUUID()
+                    + (this.entity.getRemovalReason() == null ? "" : " (removed: " + this.entity.getRemovalReason() + ")");
+        }
+    }
+
+    private static final class ChunkTarget extends ServerTarget {
+        final ServerLevel world;
+        final int x, z;
+        ChunkTarget(final ServerLevel world, final int x, final int z) { this.world = world; this.x = x; this.z = z; }
+        @Override public ServerLevel world() { return this.world; }
+        @Override int chunkX() { return this.x; }
+        @Override int chunkZ() { return this.z; }
+        @Override public boolean retired() { return false; }
+        @Override public boolean owned() { return TickThread.isTickThreadFor(this.world, this.x, this.z); }
+        @Override String describeTarget() { return "chunk [" + this.x + ", " + this.z + "]"; }
+    }
+
+    private static final class Request<T> {
+        final Target target;
         final Supplier<T> body;
         final LegacyPluginRuntime.Frame frame = LegacyPluginRuntime.currentFrame();
         final LegacyCalls.Channel callback = LegacyCalls.RETURN_TO.get() == null ? LegacyCalls.current() : LegacyCalls.RETURN_TO.get();
@@ -135,49 +204,36 @@ public final class LegacyOwnerOperations {
         T value;
         Throwable failure;
 
-        Request(final Entity entity, final ServerLevel world, final int x, final int z, final Supplier<T> body) {
-            this.entity = entity; this.fixedWorld = world; this.fixedX = x; this.fixedZ = z; this.body = body;
-        }
-        ServerLevel world() { return this.entity == null ? this.fixedWorld : (ServerLevel) this.entity.level(); }
-        int chunkX() { return this.entity == null ? this.fixedX : this.entity.chunkPosition().x(); }
-        int chunkZ() { return this.entity == null ? this.fixedZ : this.entity.chunkPosition().z(); }
-        boolean owned() { return this.entity == null ? TickThread.isTickThreadFor(this.fixedWorld,this.fixedX,this.fixedZ) : TickThread.isTickThreadFor(this.entity); }
+        Request(final Target target, final Supplier<T> body) { this.target = target; this.body = body; }
 
-        OwnerOperationCancelledException.Reason cancellation(final ServerLevel world) {
-            if (closing || MinecraftServer.getServer().isStopped()) return OwnerOperationCancelledException.Reason.SERVER_STOPPING;
+        OwnerOperationCancelledException.Reason cancellation() {
+            if (closing || this.target.serverStopped()) return OwnerOperationCancelledException.Reason.SERVER_STOPPING;
             if (!this.frame.state.plugin.isEnabled()) return OwnerOperationCancelledException.Reason.PLUGIN_DISABLED;
-            if (world.levelUnloadStateLock.isReadReferencingBlocked()
-                    || Bukkit.getWorld(world.getWorld().getUID()) != world.getWorld()) return OwnerOperationCancelledException.Reason.WORLD_UNLOADED;
-            if (this.entity != null && this.entity.isRemoved()) return OwnerOperationCancelledException.Reason.TARGET_RETIRED;
+            if (this.target.worldUnloaded()) return OwnerOperationCancelledException.Reason.WORLD_UNLOADED;
+            if (this.target.retired()) return OwnerOperationCancelledException.Reason.TARGET_RETIRED;
             return null;
         }
 
-        String describe(final ServerLevel world) {
-            final String target = this.entity == null
-                    ? "chunk [" + this.fixedX + ", " + this.fixedZ + "]"
-                    : net.minecraft.world.entity.EntityType.getKey(this.entity.getType()) + " " + this.entity.getUUID()
-                        + (this.entity.getRemovalReason() == null ? "" : " (removed: " + this.entity.getRemovalReason() + ")");
-            return target + " in '" + world.getWorld().getName() + "' for " + this.frame.state.plugin.getName()
-                    + " from " + Thread.currentThread().getName();
+        String describe() {
+            return this.target.describe() + " for " + this.frame.state.plugin.getName() + " from " + Thread.currentThread().getName();
         }
 
         boolean attempt() {
             if (this.claimed.get()) return false;
-            final ServerLevel world = this.world();
-            final OwnerOperationCancelledException.Reason cancelled = this.cancellation(world);
+            final OwnerOperationCancelledException.Reason cancelled = this.cancellation();
             if (cancelled != null) {
                 if (this.claimed.compareAndSet(false,true)) this.result.completeExceptionally(
-                        new OwnerOperationCancelledException(cancelled, this.describe(world)));
+                        new OwnerOperationCancelledException(cancelled, this.describe()));
                 return false;
             }
-            if (this.owned()) {
+            if (this.target.owned()) {
                 if (!this.execute()) return false;
                 this.finish();
                 return true;
             }
             final boolean[] executed = {false};
             try {
-                TickRegionScheduler.tryLegacyOwnerOperation(world, this.chunkX(), this.chunkZ(), () -> executed[0] = this.execute());
+                this.target.tryAcquire(() -> executed[0] = this.execute());
             } catch (final Throwable failed) {
                 if (executed[0]) this.failure = failed;
                 else if (this.claimed.compareAndSet(false,true)) this.result.completeExceptionally(failed);
@@ -189,7 +245,7 @@ public final class LegacyOwnerOperations {
         boolean execute() {
             // Routing coordinates can become stale while an entity moves. Check the actual owner
             // again AFTER acquisition, before claiming the request or touching its mutable state.
-            if (!this.owned() || !this.claimed.compareAndSet(false,true)) return false;
+            if (!this.target.owned() || !this.claimed.compareAndSet(false,true)) return false;
             final var previous = LegacyCalls.RETURN_TO.get();
             LegacyCalls.RETURN_TO.set(this.callback);
             this.executor = LegacyCalls.current();

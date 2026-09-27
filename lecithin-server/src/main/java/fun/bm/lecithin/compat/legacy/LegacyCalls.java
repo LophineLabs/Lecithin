@@ -1,7 +1,6 @@
 package fun.bm.lecithin.compat.legacy;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
@@ -103,13 +102,27 @@ final class LegacyCalls {
                 if (!callback && !result.isDone()) LockSupport.parkNanos(100_000L);
                 interrupted |= Thread.interrupted();
             }
-            try { return result.join(); }
-            catch (final CompletionException failed) { throw unchecked(failed.getCause()); }
+            return outcome(result);
         } finally {
             channel.blockedOn = outer;
             channel.waiting--;
             if (interrupted) Thread.currentThread().interrupt();
         }
+    }
+
+    /**
+     * The value a completed {@code result} holds, or the very throwable it was completed
+     * exceptionally with. Every future awaited here is completed directly by {@link #complete} or
+     * {@code completeExceptionally}, so that throwable is the body's own failure or the owner
+     * operation's cancellation, and it crosses the boundary as it is. {@code join()} does not keep
+     * it: since JDK 23 (JDK-8331987) it throws a new {@code CancellationException} whose cause is
+     * the stored one, so a caller handling the cancellation it knows never sees it.
+     */
+    private static <T> T outcome(final CompletableFuture<T> result) {
+        final Throwable[] failure = {null};
+        final T value = result.handle((done, thrown) -> { failure[0] = thrown; return done; }).join();
+        if (failure[0] != null) throw unchecked(failure[0]);
+        return value;
     }
 
     static RuntimeException unchecked(final Throwable failure) {
