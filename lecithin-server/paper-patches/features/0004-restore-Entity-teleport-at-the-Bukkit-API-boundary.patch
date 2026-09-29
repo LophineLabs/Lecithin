@@ -25,7 +25,7 @@ index a52c6981493e2b70be6c073a4f19d0ec7b6d32f3..4fec4bd78ddcf23714fd705635452930
          // Folia end - region threading
          Entity entity = this.getHandle();
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 9135327aacf818d3b80ec1102e2b11f40ac93261..cae2422c607344dafa2b43ccb97b0db936517391 100644
+index fdedf5d8f376c72f796f63acfad8c1deef04f86b..23ac58a9acb6a3b0879ab6275cd208e81d7bf6c9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -1342,9 +1342,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
