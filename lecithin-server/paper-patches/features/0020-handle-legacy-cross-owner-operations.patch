@@ -125,7 +125,7 @@ index 5b0efe5e0b87048c52180618c26ec57a1a5041b3..27e5cafa572b1b6da0fc45bbaa9471c2
  
              // Flush async appender before unloading, avoids issues when a log message with class context
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
-index c1954a651c2527e4ff6911326244ac7f8a076dd6..f2653ee2485df514ba24207932a0c89ca0dc7c95 100644
+index 525b91a16d4e65ee8a00db8377daef287499f45c..bbbe078ae94148d021706d57ab7caacd15457011 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 @@ -117,6 +117,9 @@ public class CraftChunk implements Chunk {
@@ -138,7 +138,7 @@ index c1954a651c2527e4ff6911326244ac7f8a076dd6..f2653ee2485df514ba24207932a0c89c
          return FeatureHooks.getChunkEntities(this.level, this.x, this.z); // Paper - chunk system
      }
  
-@@ -267,6 +270,10 @@ public class CraftChunk implements Chunk {
+@@ -274,6 +277,10 @@ public class CraftChunk implements Chunk {
  
      @Override
      public ChunkSnapshot getChunkSnapshot(boolean includeMaxBlockY, boolean includeBiome, boolean includeBiomeTempRain, boolean includeLightData) {
@@ -150,10 +150,10 @@ index c1954a651c2527e4ff6911326244ac7f8a076dd6..f2653ee2485df514ba24207932a0c89c
  
          LevelChunkSection[] cs = chunk.getSections();
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 1fe673de1d068ad9922c905e2297a5497c3c2897..fdad638d61c52ae44197d12094b462cfc743a1fd 100644
+index e42692b4d21e344806d2725d198c732db6a36222..d561c50aff9684dd363e3fe0313f7888afbc3113 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -1382,6 +1382,10 @@ public final class CraftServer implements Server {
+@@ -1387,6 +1387,10 @@ public final class CraftServer implements Server {
              return false;
          }
  
@@ -165,7 +165,7 @@ index 1fe673de1d068ad9922c905e2297a5497c3c2897..fdad638d61c52ae44197d12094b462cf
              return false;
          }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 1bbfc174bde55b3e0eeb5c5816474e51b0881ad5..3a909522d3745889a8b88e12c13c3880587b47f9 100644
+index 94791ab6e4876f7e05b0cb74cae6042a8b75f65e..f58e5aa533274db79170ff23d205f361e9e16f11 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -374,6 +374,9 @@ public class CraftWorld extends CraftRegionAccessor implements World {

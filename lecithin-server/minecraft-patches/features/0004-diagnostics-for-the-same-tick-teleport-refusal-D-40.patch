@@ -28,10 +28,10 @@ lifecycle, scheduling, return values or teleport results changes.
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index c5f40d86f639692df5143c047b3af2b801f853ab..00081bf78414c1f2ca876f17af942560014c42f9 100644
+index f3d2f38726cd0a0ca321a390856d649fa0976650..a7e7618c66fbf2034c54b97f2de0766a177c3033 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -4665,6 +4665,13 @@ public abstract class Entity
+@@ -4675,6 +4675,13 @@ public abstract class Entity
          }
  
          if (!this.canTeleportAsync()) {
@@ -45,7 +45,7 @@ index c5f40d86f639692df5143c047b3af2b801f853ab..00081bf78414c1f2ca876f17af942560
              return false;
          }
          this.getBukkitEntity(); // force bukkit entity to be created before TPing
-@@ -6584,6 +6591,13 @@ public abstract class Entity
+@@ -6594,6 +6601,13 @@ public abstract class Entity
  
      @Override
      public void setLevelCallback(final EntityInLevelCallback levelCallback) {

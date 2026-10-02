@@ -123,10 +123,10 @@ index 2c5792223d2f78ce0bfa991182f2be378ca9e90c..5b0efe5e0b87048c52180618c26ec57a
  
          // Paper start - Folia schedulers
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 19163d64f708316d13a5dfbdb498392df5ceb530..1fe673de1d068ad9922c905e2297a5497c3c2897 100644
+index 04752ac101ca8a297f359467e1b005951e21f9db..e42692b4d21e344806d2725d198c732db6a36222 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -2404,7 +2404,8 @@ public final class CraftServer implements Server {
+@@ -2411,7 +2411,8 @@ public final class CraftServer implements Server {
  
      @Override
      public boolean isPrimaryThread() {

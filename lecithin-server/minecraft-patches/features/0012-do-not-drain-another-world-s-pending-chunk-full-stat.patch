@@ -52,10 +52,10 @@ no business processing that queue no longer walks into it.
 Kill switch: compat-config.foreign-world-ticket-updates=false.
 
 diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
-index f28fecf17b63dd6adb8f5e519a50605b06e8124d..fbbb4b69d341cfaad80c7ea49cc45e8f3e28a021 100644
+index b944f8a465af5417d64b749096c74fbbcc000ca3..ea2b9174b737d1f55b1ced59e6af7a00b2dce996 100644
 --- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
 +++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
-@@ -1598,7 +1598,14 @@ public final class ChunkHolderManager {
+@@ -1621,7 +1621,14 @@ public final class ChunkHolderManager {
              }
          }
  

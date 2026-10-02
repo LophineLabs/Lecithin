@@ -5,7 +5,7 @@ Subject: [PATCH] support world time mutation from region tick threads
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 5138ba1498f120b482b8b3644c988b4a1aaa605f..1bbfc174bde55b3e0eeb5c5816474e51b0881ad5 100644
+index dbd090a45c8749c777c32f34b597823773b0a511..94791ab6e4876f7e05b0cb74cae6042a8b75f65e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -804,33 +804,57 @@ public class CraftWorld extends CraftRegionAccessor implements World {
