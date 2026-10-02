@@ -12,7 +12,7 @@ jobs:
       TOOL: "LophineLabs/AutoUpdateUpstream"
       UPSTREAM_URL: "https://github.com/LophineLabs/Lophine.git"
       # 要跟踪的上游分支，留空则使用上游仓库默认分支（HEAD）
-      UPSTREAM_BRANCH: ""
+      UPSTREAM_BRANCH: "dev/26.3"
       REF: "lophineRef"
       TITLE: "Update Upstream (Lophine)"
       REF_COMMIT: "auto-update/upstream"
