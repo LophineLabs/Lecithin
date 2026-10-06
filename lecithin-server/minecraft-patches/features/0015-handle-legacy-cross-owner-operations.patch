@@ -186,10 +186,10 @@ index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e3
          /** Never 0L, since 0L is reserved for global region. */
          public final long id = ID_GENERATOR.incrementAndGet();
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index db7e811d5b133557025f117ff9fabf0e9c670ad2..7ccdf8fa3cca82194534107da1ae839e06683cdf 100644
+index 290c84b828b267fad2f08d2ffd6e90045c142c0a..0bc0f9d72d7a239acbd5da49da04930414546077 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -3173,6 +3173,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3224,6 +3224,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public Entity getCamera() {
