@@ -165,7 +165,7 @@ index e42692b4d21e344806d2725d198c732db6a36222..d561c50aff9684dd363e3fe0313f7888
              return false;
          }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 94791ab6e4876f7e05b0cb74cae6042a8b75f65e..f58e5aa533274db79170ff23d205f361e9e16f11 100644
+index d8513bedf489d2e11eab8c88d8509d172ffbf0ae..59306dfcdab0d396d0de4666a2a9a065eb13991a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -374,6 +374,9 @@ public class CraftWorld extends CraftRegionAccessor implements World {
@@ -274,7 +274,7 @@ index df2f4d75bb0d9bc0e1cf24d0b51b6c934d6b0f11..4768951cb2cd4b519621d0a2acac6910
              this.getHandle().inventory,
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 724ca079acb67bfae13ec73c3112f8965eaa1624..195213686d94c914ee93ed8583a35a971d2a51f8 100644
+index 724ca079acb67bfae13ec73c3112f8965eaa1624..f490bd7029caf5fe04c72cb37160a8f1985ee04d 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 @@ -669,21 +669,35 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
@@ -313,12 +313,13 @@ index 724ca079acb67bfae13ec73c3112f8965eaa1624..195213686d94c914ee93ed8583a35a97
          this.server.getEntityMetadata().removeMetadata(this, metadataKey, owningPlugin);
      }
  
-@@ -779,6 +793,9 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -779,6 +793,10 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public boolean isVisibleByDefault() {
 +        if (fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.needed(this.entity)) {
-+            return fun.bm.lecithin.compat.legacy.LegacyOwnerOperations.entity(this.entity,() -> { return this.isVisibleByDefault(); });
++            // Lecithin - a volatile scalar, not owner-owned state: read it directly instead of waiting for the owner
++            return this.getHandleRaw().visibleByDefault;
 +        }
          return this.getHandle().visibleByDefault;
      }

@@ -199,3 +199,24 @@ index d4c5a4495e5195e8e1725b66211ba6df5608d44e..fc8da5e5bdd19279a2eb739e65e4a8be
          return this.camera == null ? this : this.camera;
      }
  
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+index 6dc3bcda0fcc04681b946d3607c7c30edf5579a4..714ee2a4c69a8a462d27f37ffc6b90aa73e5e57d 100644
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -363,7 +363,7 @@ public abstract class Entity
+     private CustomData customData = CustomData.EMPTY;
+     // CraftBukkit start
+     public boolean persist = true;
+-    public boolean visibleByDefault = true;
++    public volatile boolean visibleByDefault = true; // Lecithin - read across owners by isVisibleByDefault()
+     public boolean valid;
+     public boolean inWorld = false;
+     public boolean generation;
+@@ -4265,6 +4265,7 @@ public abstract class Entity
+         // Paper start - Forward CraftEntity in teleport command
+         org.bukkit.craftbukkit.entity.CraftEntity bukkitEntity = oldEntity.bukkitEntity;
+         if (bukkitEntity != null) {
++            this.visibleByDefault = oldEntity.visibleByDefault; // Lecithin - the handle is published below, before load() copies the rest
+             bukkitEntity.setHandle(this);
+             this.bukkitEntity = bukkitEntity;
+         }
