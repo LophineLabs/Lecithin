@@ -136,7 +136,7 @@ public final class LecithinTeleportEvents {
                     ? new PlayerTeleportEvent(player, from, to.clone(), cause)
                     : new com.destroystokyo.paper.event.player.PlayerTeleportEndGatewayEvent(
                             player, from, to.clone(),
-                            new org.bukkit.craftbukkit.block.CraftEndGateway(entity.level().getWorld(), gateway));
+                            new org.bukkit.craftbukkit.block.CraftEndGateway(entity.level().getWorld(), gateway, true));
             if (!event.callEvent()) {
                 return null;
             }
@@ -146,7 +146,7 @@ public final class LecithinTeleportEvents {
                     ? new EntityTeleportEvent(bukkitEntity, from, to.clone())
                     : new com.destroystokyo.paper.event.entity.EntityTeleportEndGatewayEvent(
                             bukkitEntity, from, to.clone(),
-                            new org.bukkit.craftbukkit.block.CraftEndGateway(entity.level().getWorld(), gateway));
+                            new org.bukkit.craftbukkit.block.CraftEndGateway(entity.level().getWorld(), gateway, true));
             if (!event.callEvent()) {
                 return null;
             }
