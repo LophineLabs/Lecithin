@@ -25,7 +25,7 @@ index 591002c9fdb58b5ee9d54d092c913a9eee01e6ec..c9f1d0a80091d9e791e7842cc48bce1a
          // halt all chunk systems first so that any in-progress chunk generation stops
          LOGGER.info("Halting chunk systems...");
 diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
-index ae424c8931a2f82c6c8d4ddd8422a2c142a77a95..63b2af8abe05d6b8342cfa73d74e50b850654e34 100644
+index 70ef6100e8f4e8fa8c1978bbc22c204f3b5327b2..abac099946919745e779f5e282e5f85950e1a189 100644
 --- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
 +++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -30,6 +30,7 @@ public final class TickRegionScheduler {
@@ -147,10 +147,10 @@ index ae424c8931a2f82c6c8d4ddd8422a2c142a77a95..63b2af8abe05d6b8342cfa73d74e50b8
 +        }
 +
 +        private boolean runTasksOwned(final BooleanSupplier canContinue) {
-             if (this.cancelled.get()) {
-                 return false;
-             }
-@@ -500,6 +601,19 @@ public final class TickRegionScheduler {
+             boolean carpetResourceReader = this.region != null;
+             if (carpetResourceReader && !fun.bm.lophine.carpet.CarpetResourceReloadCoordinator.tryEnterRegion()) {
+                 return !this.cancelled.get();
+@@ -510,6 +611,19 @@ public final class TickRegionScheduler {
  
          @Override
          public final boolean runTick() {
@@ -167,9 +167,9 @@ index ae424c8931a2f82c6c8d4ddd8422a2c142a77a95..63b2af8abe05d6b8342cfa73d74e50b8
 +        }
 +
 +        private boolean runTickOwned() {
-             // Remember, we are supposed use setScheduledStart if we return true here, otherwise
-             // the scheduler will try to schedule for the same time.
-             if (this.cancelled.get()) {
+             boolean carpetResourceReader = this.region != null;
+             if (carpetResourceReader && !fun.bm.lophine.carpet.CarpetResourceReloadCoordinator.tryEnterRegion()) {
+                 this.updateScheduledStart(System.nanoTime() + TIME_BETWEEN_TICKS);
 diff --git a/io/papermc/paper/threadedregions/TickRegions.java b/io/papermc/paper/threadedregions/TickRegions.java
 index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e36941d2b6 100644
 --- a/io/papermc/paper/threadedregions/TickRegions.java
@@ -186,10 +186,10 @@ index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e3
          /** Never 0L, since 0L is reserved for global region. */
          public final long id = ID_GENERATOR.incrementAndGet();
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index d4c5a4495e5195e8e1725b66211ba6df5608d44e..fc8da5e5bdd19279a2eb739e65e4a8be40dbf1ea 100644
+index 512616efa352535cf9233573565641618c950b8f..73ca6aefb9dc3f1f10b039ecb3273e2cf0563655 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -3230,6 +3230,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3407,6 +3407,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public Entity getCamera() {
@@ -200,10 +200,10 @@ index d4c5a4495e5195e8e1725b66211ba6df5608d44e..fc8da5e5bdd19279a2eb739e65e4a8be
      }
  
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 6dc3bcda0fcc04681b946d3607c7c30edf5579a4..714ee2a4c69a8a462d27f37ffc6b90aa73e5e57d 100644
+index f5e69cfe0343fd84c41d3674b70abce5e85dad52..d7ae81c9e7bb9e6a9032f48e302adc376cc586a9 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -363,7 +363,7 @@ public abstract class Entity
+@@ -365,7 +365,7 @@ public abstract class Entity
      private CustomData customData = CustomData.EMPTY;
      // CraftBukkit start
      public boolean persist = true;
@@ -212,7 +212,7 @@ index 6dc3bcda0fcc04681b946d3607c7c30edf5579a4..714ee2a4c69a8a462d27f37ffc6b90aa
      public boolean valid;
      public boolean inWorld = false;
      public boolean generation;
-@@ -4265,6 +4265,7 @@ public abstract class Entity
+@@ -4391,6 +4391,7 @@ public abstract class Entity
          // Paper start - Forward CraftEntity in teleport command
          org.bukkit.craftbukkit.entity.CraftEntity bukkitEntity = oldEntity.bukkitEntity;
          if (bukkitEntity != null) {

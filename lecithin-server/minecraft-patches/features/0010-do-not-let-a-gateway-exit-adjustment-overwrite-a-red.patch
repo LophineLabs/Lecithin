@@ -24,10 +24,10 @@ redirect landed in, which would be an ownership violation rather than a
 behavioural difference.
 
 diff --git a/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
-index c39615836fbbf9a5bed91b3af93a5b28fa71ffe8..9e45eab4266e8242e0b13539df46840778066d19 100644
+index ff716d0463476c354c0586c35fa4742fa4f6a064..8f55e5493fd8dababa1cf765af9ce465fde938c0 100644
 --- a/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
 +++ b/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
-@@ -224,9 +224,27 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+@@ -223,9 +223,27 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
              // should be teleported, something something else...
              // however, we know the target location cannot differ by one region section: so we can
              // just teleport and adjust the position after

@@ -12,23 +12,26 @@ successor here, so it is the single writer. volatile for the
 cross-thread readers the old plain int already had in practice.
 
 diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
-index 7577533f82688304f06c445fd5a1c3fa3c4575fc..342f4764724ba0860d7def1b826ddd9f8f161994 100644
+index ee1c37a91f60a6e5401d2ebf0289667ba733f1a1..a65ad3391f26b622c27dba9066f0b35cecd63773 100644
 --- a/io/papermc/paper/threadedregions/RegionizedServer.java
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -237,9 +237,11 @@ public final class RegionizedServer {
+@@ -237,12 +237,14 @@ public final class RegionizedServer {
      private long lastServerStatus;
      private long tickCount;
  
 +    // Lecithin - restore MinecraftServer.currentTick; kill switch freezes it at 0 (the field
      private void globalTick(final long tickCount) {
+         fun.bm.lophine.carpet.CarpetProfileService.startGlobalTick();
+         var carpetProfileTick = fun.bm.lophine.carpet.CarpetProfileObserver.global("Full Tick");
+         try {
          final long tickStartNanos = System.nanoTime(); // Lophine - Carpet features
          ++this.tickCount;
 +        if (fun.bm.lecithin.config.modules.CompatConfig.serverCurrentTick) MinecraftServer.currentTick = (int) this.tickCount; // Lecithin - restore currentTick, single writer is this global tick
+         fun.bm.lophine.protocol.CarpetLoggerProtocol.onGlobalTick(this.tickCount);
          // Luminol start - Add a config to enable tick command
-         if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.commandTick) { // Lophine - redirect
-             MinecraftServer.getServer().tickRateManager().tick();
+         if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.tickCommandEnabled()) { // Lophine - redirect
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index cd56cae73a21800b8a8663836b050784e7fb3c79..4154e42e69ae2956ef847c40d9f8aa107d6e1ae5 100644
+index ccb89748cddd5baf52192e553699afa0a5970472..e734794aa8f7bd6d62a6a7c030b281e7acf3cf07 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -314,7 +314,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa

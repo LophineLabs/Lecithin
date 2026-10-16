@@ -51,10 +51,10 @@ index da387d68cf74519da91dc1ee6d49ee44ca3c430b..dcafae28c457c9295a4928a10617e445
          this.literals.clear();
          this.arguments.clear();
 diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
-index f30b2e998fd01d588d6581ac539ca867dae19791..4db94000ffd14e39cd963016a96a88f6f82ab487 100644
+index ccba2e040fa5742f4c90a8e97181343b5473c77f..f6bcfcde05d81ff4f07d104c973ee2a567a4ce81 100644
 --- a/net/minecraft/commands/Commands.java
 +++ b/net/minecraft/commands/Commands.java
-@@ -595,6 +595,7 @@ public class Commands {
+@@ -709,6 +709,7 @@ public class Commands {
              if (child.clientNode != null) {
                  child = child.clientNode;
              }
@@ -62,7 +62,7 @@ index f30b2e998fd01d588d6581ac539ca867dae19791..4db94000ffd14e39cd963016a96a88f6
              // Paper end - Brigadier API
              if (!org.spigotmc.SpigotConfig.sendNamespaced && child.getName().contains(":")) continue; // Spigot
              if (child.canUse(commandFilter)) {
-@@ -628,7 +629,9 @@ public class Commands {
+@@ -742,7 +743,9 @@ public class Commands {
                      }
                      // Diff copied from LiteralCommand#createBuilder
                      for (final CommandNode<S> redirectChild : redirect.getChildren()) {

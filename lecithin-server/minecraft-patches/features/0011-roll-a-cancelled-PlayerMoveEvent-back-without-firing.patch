@@ -33,10 +33,10 @@ has the same Paper ground truth and the same shape.
 Kill switch: event-config.move-rollback-without-teleport=false.
 
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index e344e9748034515da6c888403ca7882d9bd1ba89..1b17bbe8bc3f770c241e591a2be148594280fc91 100644
+index 59d11d1f3279c7d5bda110fc69bfe7e38adbb506..28323e6190a23812cf7ff20cc6337da658ee1214 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -750,7 +750,14 @@ public class ServerGamePacketListenerImpl
+@@ -756,7 +756,14 @@ public class ServerGamePacketListenerImpl
  
                      // If the event is cancelled we move the player back to their old location.
                      if (event.isCancelled()) {
@@ -51,7 +51,7 @@ index e344e9748034515da6c888403ca7882d9bd1ba89..1b17bbe8bc3f770c241e591a2be14859
                          return;
                      }
  
-@@ -1789,7 +1796,14 @@ public class ServerGamePacketListenerImpl
+@@ -1834,7 +1841,14 @@ public class ServerGamePacketListenerImpl
  
                          // If the event is cancelled we move the player back to their old location.
                          if (event.isCancelled()) {

@@ -24,10 +24,10 @@ afterwards and still starts from this one's result, which is Paper's ordering.
 Kill switch: event-config.spawn-location-event=false.
 
 diff --git a/net/minecraft/server/network/config/PrepareSpawnTask.java b/net/minecraft/server/network/config/PrepareSpawnTask.java
-index 854f8954ccfd8c34c9f9c91fd1805260f9b429b5..e78fe44bb1befb4e84a7064cbba5f4b0f813a2a1 100644
+index 3758bb2186ade87f1f64a91d9ab7785123a00938..5c9dfcbf5a096fb6ced4b9ecd9e0f4c6bac43254 100644
 --- a/net/minecraft/server/network/config/PrepareSpawnTask.java
 +++ b/net/minecraft/server/network/config/PrepareSpawnTask.java
-@@ -240,7 +240,22 @@ public class PrepareSpawnTask implements ConfigurationTask {
+@@ -256,7 +256,22 @@ public class PrepareSpawnTask implements ConfigurationTask {
              Vec3 spawnPosition = this.spawnPosition.join();
              if (this.chunkLoadFuture == null) {
                  // Paper start - PlayerSpawnLocationEvent
