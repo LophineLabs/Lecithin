@@ -26,23 +26,20 @@ jobs:
       - name: Check if upstream already up to date
         working-directory: check
         run: |
-          BRANCH=${{ env.REF_COMMIT }}
-          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-            git fetch origin "$BRANCH"
-            LOCAL_REF=$(git show "origin/$BRANCH:gradle.properties" | grep '^${{ env.REF }}=' | cut -d'=' -f2 | tr -d '[:space:]')
-          else
-            LOCAL_REF=$(grep '^${{ env.REF }}=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
-          fi
+          # 以当前默认分支（更新所基于的提交）为准，不读自动更新分支。
+          # 自动更新分支可能已经记下最新上游提交，但默认分支仍落后，此时仍要完整执行更新。
+          LOCAL_REF=$(grep '^${{ env.REF }}=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
           # UPSTREAM_BRANCH 为空时回退到 HEAD（上游默认分支）
           REF_SPEC="${{ env.UPSTREAM_BRANCH }}"
           REF_SPEC="${REF_SPEC:-HEAD}"
           UPSTREAM_REF=$(git ls-remote "${{ env.UPSTREAM_URL }}" "$REF_SPEC" | cut -f1)
-          echo "Local ref: $LOCAL_REF"
+          echo "Base ref: $LOCAL_REF"
           echo "Upstream ref: $UPSTREAM_REF"
           if [ "$LOCAL_REF" = "$UPSTREAM_REF" ]; then
-            echo "Upstream is already up to date, skipping all steps."
+            echo "Base commit is already the latest upstream, skipping update."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
+            echo "Base commit is behind upstream, running the full update."
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
         id: uptodate
