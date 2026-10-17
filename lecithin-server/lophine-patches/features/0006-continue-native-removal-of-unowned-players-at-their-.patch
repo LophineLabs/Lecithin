@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sat, 17 Oct 2026 16:23:28 +0800
+Subject: [PATCH] continue native removal of unowned players at their final
+ owner
+
+
+diff --git a/src/main/java/carpet/script/external/ScarpetEntityOwnership.java b/src/main/java/carpet/script/external/ScarpetEntityOwnership.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ea1ef74f35fed58c7e9dbad7c2bf7573a3d4552b
+--- /dev/null
++++ b/src/main/java/carpet/script/external/ScarpetEntityOwnership.java
+@@ -0,0 +1,48 @@
++// SPDX-License-Identifier: MIT
++package carpet.script.external;
++
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++
++/**
++ * Decides whether owner-bound native work may be parked on an entity's own scheduler.
++ *
++ * <p>Folia drives an {@code EntityScheduler} only while the entity is registered with a level's
++ * scheduler tick list, and it retires a player's scheduler only when a player registry removes it
++ * ({@code PlayerList}, Carpet fake players, Leaves bots; all resolve through {@code PlayerList#getPlayer}).
++ * A non-player is retired by {@code setRemoved}, so its parked work always ends in either the run or the
++ * retired callback. A {@code ServerPlayer} that no registry manages has no such end in two states:
++ * <ul>
++ *     <li>It was never placed (null level callback) while its native removal is pending. Nothing
++ *     registers its scheduler, and when the removal finishes {@code ServerLevel#addEntity} rejects it.</li>
++ *     <li>It was removed from its level with a destroying reason ({@code KILLED}/{@code DISCARDED}).
++ *     Leaving the level unregisters its scheduler from the tick list (the level callback becomes a no-op,
++ *     not null), {@code setRemoved} skips retirement for players, and a removed entity cannot be added
++ *     again. This holds after the removal finished as well, so it does not depend on a pending removal.</li>
++ * </ul>
++ * Work parked on such a scheduler would never run and never be retired, which strands every tracked
++ * native future waiting on it.
++ *
++ * <p>Players that are managed by a registry keep the normal scheduler path even while they are between
++ * levels (respawn, dimension change, cross-region teleport): their scheduler is registered again when the
++ * transfer places them, and those transfers never use a destroying removal reason. Non-players keep the
++ * normal path as well, since Folia owns an unplaced non-player through its position and retires it on removal.
++ */
++public final class ScarpetEntityOwnership {
++    private ScarpetEntityOwnership() {
++    }
++
++    /**
++     * True only for a player object that no level and no player registry owns, in one of the two states
++     * above. Callers continue such work at the entity's final owner instead of its scheduler.
++     */
++    public static boolean unowned(Entity entity) {
++        if (!(entity instanceof ServerPlayer player)) return false;
++        if (player.getBukkitEntity().taskScheduler.isRetiredOffThread()) return false;
++        var reason = player.getRemovalReason();
++        boolean destroyed = player.isRemoved() && reason != null && reason.shouldDestroy();
++        if (!destroyed && !(player.hasNullCallback() && ScarpetNativeRemovals.isPending(player))) return false;
++        var server = player.level().getServer();
++        return server == null || server.getPlayerList().getPlayer(player.getUUID()) != player;
++    }
++}
+diff --git a/src/main/java/carpet/script/external/ScarpetExplosionActors.java b/src/main/java/carpet/script/external/ScarpetExplosionActors.java
+index 621144a37e67affa2407c87dd5035229bfc44144..f8a00d8ab9d65737eb2ee99f5bee696e1b13b3c0 100644
+--- a/src/main/java/carpet/script/external/ScarpetExplosionActors.java
++++ b/src/main/java/carpet/script/external/ScarpetExplosionActors.java
+@@ -70,6 +70,13 @@ public final class ScarpetExplosionActors {
+                     result.complete(unadmittedRetirement.get());
+                 else retired(entity, captured, result, 0);
+             };
++            if (ScarpetEntityOwnership.unowned(entity)) {
++                // Its scheduler will never run or retire; continue at the region that owns its final position.
++                // A removed player keeps the owner its remover captured; without one the retired path fails closed.
++                if (!entity.isRemoved()) ScarpetRetiredActors.capture(entity);
++                rejected.run();
++                return result;
++            }
+             boolean scheduled = entity.getBukkitEntity().taskScheduler.schedule(ignored -> runEntity(entity, captured, result),
+                     ignored -> rejected.run(), 1L);
+             if (!scheduled) rejected.run();
