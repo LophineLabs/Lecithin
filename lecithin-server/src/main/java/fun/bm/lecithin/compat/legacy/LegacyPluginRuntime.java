@@ -9,6 +9,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginIdentifiableCommand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.block.BlockEvent;
 import org.bukkit.event.entity.EntityEvent;
@@ -93,6 +94,13 @@ public final class LegacyPluginRuntime {
         }
     }
 
+    /**
+     * Leaving the outermost frame stores {@code null} instead of calling {@code remove()}: the entry
+     * stays resident, so the hot enter/exit path skips remove()'s stale-entry expunge and the next
+     * {@code get()} does not re-insert it. A {@code null} value retains no plugin or class loader, and
+     * the static key never goes stale. This deliberately differs from the always-remove rule in
+     * {@link LecithinExecutionProvenance}: {@code get()} cannot tell a {@code null} value from no entry.
+     */
     private static final ThreadLocal<Frame> FRAME = new ThreadLocal<>();
 
     private LegacyPluginRuntime() {
@@ -157,11 +165,7 @@ public final class LegacyPluginRuntime {
         if (frame == null) {
             return;
         }
-        if (frame.parent == null) {
-            FRAME.remove();
-        } else {
-            FRAME.set(frame.parent);
-        }
+        FRAME.set(frame.parent);
     }
 
     static Frame currentFrame() { return FRAME.get(); }
@@ -169,9 +173,9 @@ public final class LegacyPluginRuntime {
 
     static <T> T withFrame(final Frame frame, final java.util.function.Supplier<T> body) {
         final Frame previous = FRAME.get();
-        if (frame == null) FRAME.remove(); else FRAME.set(frame);
+        FRAME.set(frame);
         try { return body.get(); }
-        finally { if (previous == null) FRAME.remove(); else FRAME.set(previous); }
+        finally { FRAME.set(previous); }
     }
 
     static <T> T call(final LegacyPluginState state, final LegacyAffinity affinity, final boolean lane,
@@ -193,6 +197,12 @@ public final class LegacyPluginRuntime {
             withFrame(null, body);
         } else {
             state.listenerCalls.increment();
+            // Same skip RegisteredListener.callEvent makes, taken before waiting for the domain. Exact
+            // class only: a subclass may override callEvent, so it keeps the full path.
+            if (registration.getClass() == RegisteredListener.class && registration.isIgnoringCancelled()
+                    && event instanceof Cancellable cancellable && cancellable.isCancelled()) {
+                return;
+            }
             final LegacyAffinity affinity = affinityOf(event);
             LegacyCalls.callback(() -> call(state, affinity, false, body));
         }
