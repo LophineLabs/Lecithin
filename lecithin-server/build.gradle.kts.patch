@@ -57,7 +57,7 @@
      // Lophine start - Dependenices insert
      implementation("net.objecthunter:exp4j:0.4.8")
      implementation("com.electronwill.night-config:toml:3.8.4") // Night config
-@@ -233,14 +_,14 @@
+@@ -236,14 +_,14 @@
          val gitBranch = git.exec(providers, "rev-parse", "--abbrev-ref", "HEAD").get().trim()
          attributes(
              "Main-Class" to "org.bukkit.craftbukkit.Main",
