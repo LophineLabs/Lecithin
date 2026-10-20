@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Tue, 20 Oct 2026 22:16:58 +0800
+Subject: [PATCH] Sync buffered linear region files before marking them closed
+
+
+diff --git a/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java b/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java
+index 93dae100dd37b2c3eec4feebd71fd4769e69b1d0..79e55502841aeccd77783f054a709e5abcfe6442 100644
+--- a/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java
++++ b/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java
+@@ -52,6 +52,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
+  * on-disk format is unchanged.
+  */
+ public class BufferedLinearRegionFile implements io.anonymous.anonymous.data.RegionFile {
++    private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger(); // Lecithin
+     private static final double SWAP_FILE_AUTO_COMPACT_PERCENT = 3.0 / 5.0; // 60 %
+     private static final long SWAP_FILE_AUTO_COMPACT_SIZE = 1024 * 1024; // 1 MiB
+ 
+@@ -464,22 +465,29 @@ public class BufferedLinearRegionFile implements io.anonymous.anonymous.data.Reg
+                         return;
+                     }
+ 
+-                    // remove from flusher
+-                    this.markClosed();
+-
+                     IOException failure = null;
+ 
++                    // Lecithin start - final sync BEFORE markClosed()
+                     // final sync so no buffered data is lost; holding syncLock also guarantees no
+                     // concurrent flusher sync is still running when we tear down below.
+-                    // if this throws we deliberately stay open: the flusher can retry the sync
+-                    // later, and the not-yet-synced swap data is not dropped on the floor
++                    // it must run while we are still open: syncToMasterFile() returns early once
++                    // closed, and the master rewrite reads unloaded buckets through guardAgainstClosed(),
++                    // so syncing after markClosed() silently dropped every write since the last
++                    // flusher sync together with the DELETE_ON_CLOSE swap file.
+                     // since we hold the write lock and any read/write/sync ops is currently blocked all along the close logic, acquiring the locks inside sync is a disaster
+                     try {
+                         this.syncToMasterFile(true, true, true, true);
+                     } catch (IOException ex) {
++                        // we still close below (the swap file is not recovered on reopen and an
++                        // evicted instance must not stay alive next to a fresh one), so make the loss loud
++                        LOGGER.error("Failed final sync of buffered linear region file {} on close, writes since the last sync are lost", this.masterFilePath, ex);
+                         failure = ex;
+                     }
+ 
++                    // remove from flusher
++                    this.markClosed();
++                    // Lecithin end - final sync BEFORE markClosed()
++
+                     try {
+                         this.swapFileChannel.close();
+                     } catch (IOException ex) {
