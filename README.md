@@ -70,7 +70,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("fun.bm.lophine:lophine-api:26.2.build.+")
+    compileOnly("fun.bm.lophine:lophine-api:26.3.build.+")
 }
 
 java {
@@ -92,7 +92,7 @@ java {
     <dependency>
         <groupId>fun.bm.lophine</groupId>
         <artifactId>lophine-api</artifactId>
-        <version>[26.2.build,)</version>
+        <version>[26.3.build,)</version>
     </dependency>
 </dependencies>
 ```
@@ -138,3 +138,17 @@ java {
 ## ⭐ 请给我们一个 Star！
 
 > 你的每一个免费的 ⭐Star 就是我们每一个前进的动力。
+
+### Star 历史
+
+<a href="https://www.star-history.com/?repos=lophinelabs%2Flophine%2Clophinelabs%2Flecithin&type=date&legend=bottom-right">
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=lophinelabs/lophine%2Clophinelabs/lecithin&type=date&theme=dark&legend=bottom-right" />
+        <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=lophinelabs/lophine%2Clophinelabs/lecithin&type=date&legend=bottom-right" />
+        <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=lophinelabs/lophine%2Clophinelabs/lecithin&type=date&legend=bottom-right" />
+    </picture>
+</a>
+
+<div align="center">
+  <b>如果这个项目对您有帮助，请不要忘记给我们一个 ⭐Star ！</b>
+</div>
