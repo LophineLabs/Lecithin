@@ -4,9 +4,19 @@ on:
   push:
     branches:
       - "**"
+    paths:
+      - 'lophine-server/**'
+      - 'lophine-api/**'
+      - 'lophine-checkstyle/**'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - "**"
+    paths:
+      - 'lophine-server/**'
+      - 'lophine-api/**'
+      - 'lophine-checkstyle/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       force-release:

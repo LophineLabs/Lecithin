@@ -2,11 +2,21 @@ name: Qodana
 on:
   workflow_dispatch:
   pull_request:
+    paths:
+      - 'lophine-server/**'
+      - 'lophine-api/**'
+      - 'lophine-checkstyle/**'
+      - '.github/workflows/**'
   push:
     branches: # Specify your branches here
       - ver/* # Stable branch
       - exp/* # Experimental branch
       - dev/* # Development Branch
+    paths:
+      - 'lophine-server/**'
+      - 'lophine-api/**'
+      - 'lophine-checkstyle/**'
+      - '.github/workflows/**'
 
 jobs:
   qodana:
