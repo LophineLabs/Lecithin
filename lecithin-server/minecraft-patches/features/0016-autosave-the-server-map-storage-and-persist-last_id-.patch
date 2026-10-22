@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 22 Oct 2026 10:09:15 +0800
+Subject: [PATCH] autosave the server map storage and persist last_id when a
+ map id is allocated
+
+
+diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
+index a31e1ac190078a07a61a9df08fe41167e0238b2c..951ce638c0fe804169a4223ff35845b3e0d9814c 100644
+--- a/io/papermc/paper/threadedregions/RegionizedServer.java
++++ b/io/papermc/paper/threadedregions/RegionizedServer.java
+@@ -294,6 +294,8 @@ public final class RegionizedServer {
+             this.globalTick(world, tickCount);
+         }
+ 
++        this.autoSaveMaps(); // Lecithin - maps and last_id live in the server storage: save it once per global tick, not once per world
++
+         // Lophine start - Add a config to enable tick command
+         if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.tickCommandEnabled()) {
+             net.minecraft.server.ServerTickRateManager rateManager = MinecraftServer.getServer().tickRateManager();
+@@ -447,7 +449,7 @@ public final class RegionizedServer {
+                 world.moonrise$getChunkTaskScheduler().chunkHolderManager.processTicketUpdates(); // required to eventually process ticket updates
+             }
+ 
+-            this.autoSaveMaps(world);
++            //this.autoSaveMaps(world); // Lecithin - moved to the global tick, see autoSaveMaps()
+         }
+     }
+ 
+@@ -510,17 +512,42 @@ public final class RegionizedServer {
+         }
+     }
+ 
+-    private void autoSaveMaps(final ServerLevel world) {
+-        try (var carpetProfilePhase = fun.bm.lophine.carpet.CarpetProfileObserver.globalWorld(world, "Map Autosave")) {
+-        final int autoSavePeriod = net.minecraft.server.MinecraftServer.getServer().autosavePeriod;
++    // Lecithin start - autosave the storage that actually holds MapItemSavedData and MapIndex (last_id)
++    // ServerLevel#getMapData/setMapData/getFreeMapId use MinecraftServer#getDataStorage(); the per-world storage never holds maps,
++    // and MinecraftServer#tickServer never runs saveGlobalData (region != null), so maps reached disk only on shutdown. A crash then
++    // lost every map made since, and last_id rolled back so the same ids were handed out again.
++    private long lastMapAutoSave = System.nanoTime();
++    private final AtomicBoolean mapSaveRequested = new AtomicBoolean();
++
++    /**
++     * Asks the next global tick to save the dirty maps and last_id of the server storage. Safe from any thread and idempotent:
++     * requests coalesce into one save, which encodes on the global tick and writes on the dimension data IO pool.
++     */
++    public static void requestMapSave() {
++        INSTANCE.mapSaveRequested.set(true);
++    }
++
++    private void autoSaveMaps() {
++        try (var carpetProfilePhase = fun.bm.lophine.carpet.CarpetProfileObserver.global("Map Autosave")) {
++        final MinecraftServer server = MinecraftServer.getServer();
++        final int autoSavePeriod = server.autosavePeriod;
+         final long currTime = System.nanoTime();
+-        if (autoSavePeriod > 0 && (currTime - world.lastMapAutoSave) > (java.util.concurrent.TimeUnit.SECONDS.toNanos((long)autoSavePeriod) / 20L)) {
+-            world.lastMapAutoSave = currTime;
+-            world.getDataStorage().saveMaps();
++        boolean save = this.mapSaveRequested.getAndSet(false);
++        if (autoSavePeriod > 0 && (currTime - this.lastMapAutoSave) > (java.util.concurrent.TimeUnit.SECONDS.toNanos((long)autoSavePeriod) / 20L)) {
++            this.lastMapAutoSave = currTime;
++            save = true;
++        }
++        if (save) {
++            try {
++                server.getDataStorage().saveMaps();
++            } catch (final Throwable throwable) {
++                LOGGER.error("Failed to autosave map data", throwable);
++            }
+         }
+ 
+         }
+     }
++    // Lecithin end - autosave the storage that actually holds MapItemSavedData and MapIndex (last_id)
+ 
+     public static final record WorldLevelData(ServerLevel world, long nonRedstoneGameTime) {}
+ }
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index 2e500f078debc5055f5bc284fe5567612680789e..d90b5dfded48357c4bd530eefdf550ee7eff8fa7 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -3055,10 +3055,15 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+         event.callEvent();
+         // CraftBukkit end
+         this.getServer().getDataStorage().set(MapItemSavedData.type(id), data);
++        io.papermc.paper.threadedregions.RegionizedServer.requestMapSave(); // Lecithin - write a new map before chunks referencing it are saved
+     }
+ 
+     public MapId getFreeMapId() {
+-        return this.getServer().getDataStorage().computeIfAbsent(MapIndex.TYPE).getNextMapId();
++        // Lecithin start - persist last_id on the next global tick, so a crash cannot roll it back behind saved chunks and hand the id out again
++        final MapId id = this.getServer().getDataStorage().computeIfAbsent(MapIndex.TYPE).getNextMapId();
++        io.papermc.paper.threadedregions.RegionizedServer.requestMapSave();
++        return id;
++        // Lecithin end - persist last_id on the next global tick, so a crash cannot roll it back behind saved chunks and hand the id out again
+     }
+ 
+     @Override
+diff --git a/net/minecraft/world/level/storage/SavedDataStorage.java b/net/minecraft/world/level/storage/SavedDataStorage.java
+index 8f60ea7922c6ca981c92cbc6acc9cdb1e8600198..1f0ce36ac29f6f9ee4b02064a7b50a0adb24e5a5 100644
+--- a/net/minecraft/world/level/storage/SavedDataStorage.java
++++ b/net/minecraft/world/level/storage/SavedDataStorage.java
+@@ -183,7 +183,7 @@ public class SavedDataStorage implements AutoCloseable {
+     }
+ 
+     // Folia start - region threading
+-    public CompletableFuture<?> saveMaps() {
++    public synchronized CompletableFuture<?> saveMaps() { // Lecithin - serialise pendingWriteFuture updates with scheduleSave (shutdown may overlap a global tick that failed to halt)
+         Map<SavedDataType<?>, CompoundTag> savedData = new HashMap<>();
+         RegistryOps<Tag> registryOps = this.registries.createSerializationContext(NbtOps.INSTANCE);
+         for (Map.Entry<SavedDataType<?>, Optional<SavedData>> entry : this.cache.entrySet()) {
+@@ -219,7 +219,7 @@ public class SavedDataStorage implements AutoCloseable {
+ 
+     public CompletableFuture<?> carpetScheduledWrites() { return this.pendingWriteFuture; }
+ 
+-    public CompletableFuture<?> scheduleSave() {
++    public synchronized CompletableFuture<?> scheduleSave() { // Lecithin - serialise pendingWriteFuture updates with saveMaps
+         if (this.closed) {
+             throw new IllegalStateException("Trying to schedule save when SavedDataStorage is already closed");
+         }

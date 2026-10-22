@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Thu, 22 Oct 2026 10:09:15 +0800
+Subject: [PATCH] save the server map storage on save-all
+
+
+diff --git a/src/main/java/fun/bm/lophine/utils/SaveAllUtil.java b/src/main/java/fun/bm/lophine/utils/SaveAllUtil.java
+index 48735320b3930274e3a72c1b0129e4ab54b60182..6b3ed9a9bf07164ee9e5364b9f52b0e46fa979e6 100644
+--- a/src/main/java/fun/bm/lophine/utils/SaveAllUtil.java
++++ b/src/main/java/fun/bm/lophine/utils/SaveAllUtil.java
+@@ -38,6 +38,8 @@ public class SaveAllUtil {
+                 savedRegionCount.set(0);
+                 withError.set(false);
+                 lastSaveAllTime = System.currentTimeMillis();
++                // Lecithin - region saves below never touch the server storage holding map data and last_id; save it on the next global tick
++                io.papermc.paper.threadedregions.RegionizedServer.requestMapSave();
+             }
+         }
+     }
