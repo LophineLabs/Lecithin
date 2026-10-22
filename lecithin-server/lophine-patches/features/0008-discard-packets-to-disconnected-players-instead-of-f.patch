@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 21 Oct 2026 20:05:55 +0800
+Subject: [PATCH] discard packets to disconnected players instead of failing
+ natively
+
+
+diff --git a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
+index 4300223dc14c2507afd783aa46f2bfcfecc02132..761d737f3f58271d875fc227b4317bbecd16486d 100644
+--- a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
++++ b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
+@@ -148,23 +148,30 @@ public final class AmsNativeCommandEffects {
+                 actual.complete(null);
+                 return actual;
+             }
++            // Disconnected recipient: packet is discarded rather than failed natively.
+             if (connection == null || connection.channel == null || !connection.isConnected()) {
+-                actual.completeExceptionally(new java.nio.channels.ClosedChannelException());
++                actual.complete(null);
+                 return actual;
+             }
+             var closing = connection.channel.closeFuture();
+-            io.netty.channel.ChannelFutureListener closed = ignored -> actual.completeExceptionally(new java.nio.channels.ClosedChannelException());
++            io.netty.channel.ChannelFutureListener closed = ignored -> actual.complete(null);
+             closing.addListener(closed);
+             actual.whenComplete((result, failure) -> closing.removeListener(closed));
+             if (actual.isDone()) return actual;
+             if (!connection.isConnected()) {
+-                actual.completeExceptionally(new java.nio.channels.ClosedChannelException());
++                actual.complete(null);
+                 return actual;
+             }
+             listener.send(packet, completed -> {
+                 if (completed.isSuccess()) actual.complete(null);
+-                else
+-                    actual.completeExceptionally(completed.cause() == null ? new IllegalStateException("Actual AMS packet failed") : completed.cause());
++                else {
++                    Throwable cause = completed.cause();
++                    if (cause instanceof java.nio.channels.ClosedChannelException || !connection.isConnected()) {
++                        actual.complete(null);
++                    } else {
++                        actual.completeExceptionally(cause == null ? new IllegalStateException("Actual AMS packet failed") : cause);
++                    }
++                }
+             });
+         } catch (Throwable failure) {
+             actual.completeExceptionally(failure);

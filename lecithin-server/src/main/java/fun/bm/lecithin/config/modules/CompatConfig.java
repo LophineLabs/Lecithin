@@ -40,6 +40,18 @@ public class CompatConfig {
     @ConfigInfo(name = "region-read-diagnostics")
     public static boolean regionReadDiagnostics = true;
 
+    /**
+     * Upper bound, in milliseconds, on how long a native Carpet packet receipt (the wither birth
+     * sound, AMS/TIS command packets) waits for the network pipeline to acknowledge a write while
+     * the connection stays open. A plugin's channel handler can hold that promise forever, which
+     * left a wither invulnerable and frozen at birth. On expiry the packet counts as sent; Netty
+     * still writes it in order. A value of 0 or less removes the bound (wait for the write or the
+     * disconnect, as before).
+     */
+    @DoNotLoad(when = EnumLoadType.RELOAD)
+    @ConfigInfo(name = "packet-receipt-timeout-millis")
+    public static long packetReceiptTimeoutMillis = 1000;
+
     @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "riding-teleport")
     public static boolean ridingTeleport = true;

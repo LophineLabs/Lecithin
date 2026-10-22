@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Wed, 21 Oct 2026 23:35:56 +0800
+Subject: [PATCH] bound native packet receipts the pipeline never acknowledges
+
+
+diff --git a/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java b/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java
+index 165187b79906a73ab247778cc7428aa12056ccb3..2b2c507cc4d88345f376732da01c8d1f569ed573 100644
+--- a/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java
++++ b/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java
+@@ -335,22 +335,9 @@ public final class ScarpetDragonDeathContinuations {
+                 }));
+     }
+ 
++    // The same receipt as the wither birth sound: it is the same packet type, so an outbound
++    // interceptor that drops its write promise would otherwise stall the death tick here too.
+     private static void send(ServerPlayer player, BlockPos position) {
+-        var receipt = new CompletableFuture<Void>();
+-        ScarpetNativeWork.record(receipt);
+-        try {
+-            var closing = player.connection.connection.channel.closeFuture();
+-            io.netty.channel.ChannelFutureListener closed = network -> receipt.completeExceptionally(new java.nio.channels.ClosedChannelException());
+-            closing.addListener(closed);
+-            receipt.whenComplete((value, failure) -> closing.removeListener(closed));
+-            player.connection.send(new ClientboundLevelEventPacket(LevelEvent.SOUND_DRAGON_DEATH, position, 0, true), network -> {
+-                if (network.isSuccess()) receipt.complete(null);
+-                else
+-                    receipt.completeExceptionally(network.cause() == null ? new IllegalStateException("Native dragon death sound send failed") : network.cause());
+-            });
+-        } catch (Throwable failure) {
+-            receipt.completeExceptionally(failure);
+-            throw failure;
+-        }
++        fun.bm.lophine.carpet.AmsNativeCommandEffects.packet(player, new ClientboundLevelEventPacket(LevelEvent.SOUND_DRAGON_DEATH, position, 0, true));
+     }
+ }
+diff --git a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
+index 761d737f3f58271d875fc227b4317bbecd16486d..05ecf9c23fd4aa99bf9f8e83e424e89062b450f0 100644
+--- a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
++++ b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
+@@ -127,8 +127,37 @@ public final class AmsNativeCommandEffects {
+         return protectedValue(player.carpetSpawnServer(), () -> TisCommandContinuations.owned(player, () -> value(body)));
+     }
+ 
++    /**
++     * Runs a receipt's expiry off the Netty event loop, which a channel handler may proxy.
++     * Package-private so a test can drive expiry without real time.
++     */
++    @FunctionalInterface
++    interface ReceiptTimer {
++        void schedule(long millis, Runnable expire);
++    }
++
++    static volatile ReceiptTimer receiptTimer = (millis, expire) ->
++            CompletableFuture.delayedExecutor(millis, java.util.concurrent.TimeUnit.MILLISECONDS).execute(expire);
++
++    private static final org.slf4j.Logger RECEIPT_LOGGER = org.slf4j.LoggerFactory.getLogger("AMS-packets");
++    private static final carpet.script.external.WeakIdentityMap<Object, java.util.Set<Class<?>>> UNACKNOWLEDGED =
++            new carpet.script.external.WeakIdentityMap<>();
++
++    /**
++     * Logged once per connection and packet class.
++     */
++    private static void unacknowledged(Object connection, String recipient, net.minecraft.network.protocol.Packet<?> packet, long bound) {
++        if (UNACKNOWLEDGED.computeIfAbsent(connection, ignored -> java.util.concurrent.ConcurrentHashMap.newKeySet()).add(packet.getClass()))
++            RECEIPT_LOGGER.warn("A {} written to {} was not acknowledged by the network pipeline within {} ms while the connection stayed open;"
++                            + " treating it as sent so the world work waiting on it can continue. A channel handler is holding the write promise."
++                            + " Later timeouts of this packet type on this connection are not logged.",
++                    packet.getClass().getSimpleName(), recipient, bound);
++    }
++
+     /**
+      * Called on the actual player owner; physical write failure remains a native child.
++     * A write the pipeline never acknowledges while the channel stays open is treated as sent
++     * after {@code compat-config.packet-receipt-timeout-millis}.
+      */
+     public static CompletableFuture<Void> packet(ServerPlayer player, net.minecraft.network.protocol.Packet<?> packet) {
+         var actual = new CompletableFuture<Void>() {
+@@ -173,6 +202,19 @@ public final class AmsNativeCommandEffects {
+                     }
+                 }
+             });
++            // An outbound interceptor can drop the write promise while the channel stays open:
++            // cancelling the packet, or re-scheduling it and re-sending it later without the
++            // original callback, leaves the promise never completed, so neither terminal above
++            // fires. Bound the wait so that interceptor cannot decide whether world work waiting
++            // on this receipt (a wither birth) ever resumes. A real failure reported before the
++            // bound still fails the receipt; same-channel order is Netty's and needs no fence.
++            long bound = fun.bm.lecithin.config.modules.CompatConfig.packetReceiptTimeoutMillis;
++            if (bound > 0 && !actual.isDone()) {
++                String recipient = player.getScoreboardName();
++                receiptTimer.schedule(bound, () -> {
++                    if (actual.complete(null)) unacknowledged(connection, recipient, packet, bound);
++                });
++            }
+         } catch (Throwable failure) {
+             actual.completeExceptionally(failure);
+             throw failure;
