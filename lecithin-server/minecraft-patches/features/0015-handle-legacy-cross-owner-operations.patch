@@ -25,7 +25,7 @@ index 591002c9fdb58b5ee9d54d092c913a9eee01e6ec..c9f1d0a80091d9e791e7842cc48bce1a
          // halt all chunk systems first so that any in-progress chunk generation stops
          LOGGER.info("Halting chunk systems...");
 diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
-index 70ef6100e8f4e8fa8c1978bbc22c204f3b5327b2..abac099946919745e779f5e282e5f85950e1a189 100644
+index 467b0b62acaf8f1551cb2b3f0c681d9eb10a3956..38d2bc0f6442c6e7df91e9284cba5d133151d211 100644
 --- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
 +++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -30,6 +30,7 @@ public final class TickRegionScheduler {
@@ -36,7 +36,7 @@ index 70ef6100e8f4e8fa8c1978bbc22c204f3b5327b2..abac099946919745e779f5e282e5f859
      private static final boolean MEASURE_CPU_TIME;
      static {
          MEASURE_CPU_TIME = THREAD_MX_BEAN.isThreadCpuTimeSupported();
-@@ -375,6 +376,93 @@ public final class TickRegionScheduler {
+@@ -380,6 +381,93 @@ public final class TickRegionScheduler {
          }
      }
  
@@ -130,7 +130,7 @@ index 70ef6100e8f4e8fa8c1978bbc22c204f3b5327b2..abac099946919745e779f5e282e5f859
      public static abstract class RegionScheduleHandle extends SchedulableTick {
  
          protected long currentTick;
-@@ -445,6 +533,19 @@ public final class TickRegionScheduler {
+@@ -450,6 +538,19 @@ public final class TickRegionScheduler {
  
          @Override
          public final boolean runTasks(final BooleanSupplier canContinue) {
@@ -150,7 +150,7 @@ index 70ef6100e8f4e8fa8c1978bbc22c204f3b5327b2..abac099946919745e779f5e282e5f859
              boolean carpetResourceReader = this.region != null;
              if (carpetResourceReader && !fun.bm.lophine.carpet.CarpetResourceReloadCoordinator.tryEnterRegion()) {
                  return !this.cancelled.get();
-@@ -510,6 +611,19 @@ public final class TickRegionScheduler {
+@@ -515,6 +616,19 @@ public final class TickRegionScheduler {
  
          @Override
          public final boolean runTick() {
@@ -169,7 +169,7 @@ index 70ef6100e8f4e8fa8c1978bbc22c204f3b5327b2..abac099946919745e779f5e282e5f859
 +        private boolean runTickOwned() {
              boolean carpetResourceReader = this.region != null;
              if (carpetResourceReader && !fun.bm.lophine.carpet.CarpetResourceReloadCoordinator.tryEnterRegion()) {
-                 this.updateScheduledStart(System.nanoTime() + TIME_BETWEEN_TICKS);
+                 final long now = System.nanoTime();
 diff --git a/io/papermc/paper/threadedregions/TickRegions.java b/io/papermc/paper/threadedregions/TickRegions.java
 index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e36941d2b6 100644
 --- a/io/papermc/paper/threadedregions/TickRegions.java
@@ -200,7 +200,7 @@ index 512616efa352535cf9233573565641618c950b8f..73ca6aefb9dc3f1f10b039ecb3273e2c
      }
  
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index f5e69cfe0343fd84c41d3674b70abce5e85dad52..d7ae81c9e7bb9e6a9032f48e302adc376cc586a9 100644
+index a1e3a9901b843a1fb74020e3a783381f9ea8df43..2abe80d4d36cbf8c0f2c5493efa78cb393b5467c 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -365,7 +365,7 @@ public abstract class Entity

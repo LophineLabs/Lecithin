@@ -60,10 +60,10 @@ index 0000000000000000000000000000000000000000..ea1ef74f35fed58c7e9dbad7c2bf7573
 +    }
 +}
 diff --git a/src/main/java/carpet/script/external/ScarpetExplosionActors.java b/src/main/java/carpet/script/external/ScarpetExplosionActors.java
-index 621144a37e67affa2407c87dd5035229bfc44144..f8a00d8ab9d65737eb2ee99f5bee696e1b13b3c0 100644
+index 8107583f56d6e3ada4706dddb207c8d0644a78be..cc2c4ccd5c7ea9b96ce9bf8b9b5b060bef2ce287 100644
 --- a/src/main/java/carpet/script/external/ScarpetExplosionActors.java
 +++ b/src/main/java/carpet/script/external/ScarpetExplosionActors.java
-@@ -70,6 +70,13 @@ public final class ScarpetExplosionActors {
+@@ -74,6 +74,13 @@ public final class ScarpetExplosionActors {
                      result.complete(unadmittedRetirement.get());
                  else retired(entity, captured, result, 0);
              };

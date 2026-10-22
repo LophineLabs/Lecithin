@@ -20,10 +20,10 @@ See LophinyaPassengerTeleportEvents for the measured Paper baseline.
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 97c0716bd4db81ffb94b5045c0cb9d9e91570735..e2af43dd905c6bc6edd3b057206f7b5a4705f65e 100644
+index a73cb0d54693bc3bc769587bdd6afb80d2582229..72ed30a3ac938f9a5d8eddb80b0376a7f9665369 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -4863,6 +4863,14 @@ public abstract class Entity
+@@ -4864,6 +4864,14 @@ public abstract class Entity
          }
          // Lecithin end
  

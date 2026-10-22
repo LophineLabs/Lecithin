@@ -72,10 +72,10 @@ index 90e318578bcbe0f407a3c4f55c870455886406cf..e88eec0e235247df98ed5ed09034ab71
  
      // Paper start
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index ee7b6b80c491997423ad225102e3d81032803bab..44f3434ae33df4a444de3c0feeb5b1ed4caf076d 100644
+index f91c6c7a7f866e1c71f8c59afb666901906e135f..c6ec957fc68efeab1c903efc13bc03c37d050821 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -1574,15 +1574,20 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -1578,15 +1578,20 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
  
      @Override
      public void setPlayerTime(long time, boolean tickTime) {

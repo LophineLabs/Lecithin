@@ -6,10 +6,10 @@ Subject: [PATCH] answer canSee for an entity between owners instead of failing
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 19edc7e2b4f76e36f08b951c6864f609ec875174..ad875c08c631891ce77cdef4e4a0ff4866638bc2 100644
+index f70458953a472e7f071b8df750e0924853996dcb..5830bd103a3c6f3cf8fb08d3518636d399ddca8f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -2162,10 +2162,20 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -2166,10 +2166,20 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
  
      @Override
      public boolean canSee(org.bukkit.entity.Entity entity) {

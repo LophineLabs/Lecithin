@@ -274,10 +274,10 @@ index df2f4d75bb0d9bc0e1cf24d0b51b6c934d6b0f11..4768951cb2cd4b519621d0a2acac6910
              this.getHandle().inventory,
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 334b8e632a8f0d20f48f2279a7114192e9929fb5..f9e37bf6bba180bf92ee0d5d9051ad0f09f8ae5d 100644
+index b9c93bec037b8a1ff510fb88c7dad5723198351a..366c04e5f7757cd1b38cbadd668ccc49c3d99a04 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -677,21 +677,35 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -684,21 +684,35 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public void setMetadata(String metadataKey, MetadataValue newMetadataValue) {
@@ -313,7 +313,7 @@ index 334b8e632a8f0d20f48f2279a7114192e9929fb5..f9e37bf6bba180bf92ee0d5d9051ad0f
          this.server.getEntityMetadata().removeMetadata(this, metadataKey, owningPlugin);
      }
  
-@@ -787,6 +801,10 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -794,6 +808,10 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public boolean isVisibleByDefault() {
@@ -395,10 +395,10 @@ index 31e8295128ccd9305ad1b5dd37b829539d7c78fb..6a320939c78583bd1ebb7a425eecd556
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.BODY),
              this.getHandle().createEquipmentSlotContainer(EquipmentSlot.SADDLE)
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 44f3434ae33df4a444de3c0feeb5b1ed4caf076d..19edc7e2b4f76e36f08b951c6864f609ec875174 100644
+index c6ec957fc68efeab1c903efc13bc03c37d050821..f70458953a472e7f071b8df750e0924853996dcb 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -1397,12 +1397,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -1401,12 +1401,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
  
      @Override
      public void setSleepingIgnored(boolean isSleeping) {
@@ -418,7 +418,7 @@ index 44f3434ae33df4a444de3c0feeb5b1ed4caf076d..19edc7e2b4f76e36f08b951c6864f609
          return this.getHandle().fauxSleeping;
      }
  
-@@ -1888,6 +1895,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -1892,6 +1899,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      }
  
      private void hideEntity0(@Nullable Plugin plugin, org.bukkit.entity.Entity entity) {
@@ -429,7 +429,7 @@ index 44f3434ae33df4a444de3c0feeb5b1ed4caf076d..19edc7e2b4f76e36f08b951c6864f609
          Preconditions.checkArgument(entity != null, "Entity hidden cannot be null");
          if (this.getHandle().connection == null) return;
          if (this.equals(entity)) return;
-@@ -1922,12 +1933,23 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -1926,12 +1937,23 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      private void untrackAndHideEntity(org.bukkit.entity.Entity entity) {
          // Remove this entity from the hidden player's EntityTrackerEntry
          // Paper start
@@ -454,7 +454,7 @@ index 44f3434ae33df4a444de3c0feeb5b1ed4caf076d..19edc7e2b4f76e36f08b951c6864f609
          // Paper end
          ChunkMap tracker = ((ServerLevel) this.getHandle().level()).getChunkSource().chunkMap;
          ChunkMap.TrackedEntity entry = other.moonrise$getTrackedEntity(); // Folia - region threading
-@@ -1970,6 +1992,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -1974,6 +1996,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      }
  
      private void showEntity0(@Nullable Plugin plugin, org.bukkit.entity.Entity entity) {
@@ -465,7 +465,7 @@ index 44f3434ae33df4a444de3c0feeb5b1ed4caf076d..19edc7e2b4f76e36f08b951c6864f609
          Preconditions.checkArgument(entity != null, "Entity show cannot be null");
          if (this.getHandle().connection == null) return;
          if (this.equals(entity)) return;
-@@ -2005,6 +2031,32 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -2009,6 +2035,32 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      }
  
      private void trackAndShowEntity(org.bukkit.entity.Entity entity, final @Nullable UUID uuidOverride) {
@@ -498,7 +498,7 @@ index 44f3434ae33df4a444de3c0feeb5b1ed4caf076d..19edc7e2b4f76e36f08b951c6864f609
          ChunkMap tracker = this.getHandle().level().getChunkSource().chunkMap;
          Entity other = ((CraftEntity) entity).getHandle();
  
-@@ -2110,6 +2162,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -2114,6 +2166,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
  
      @Override
      public boolean canSee(org.bukkit.entity.Entity entity) {
@@ -587,10 +587,10 @@ index 3d9cb57bb0d3dac3b950cc5f38305bab6c0f70b8..d20f3e39bf1e239540e25a2ced63f66b
          this.getHandle().setOrderedToSit(sitting);
      }
 diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
-index 24198f00ebe679ab19c2d30d6b30474dd99fb2a7..5f7d0f73d4c8aeee26f0439ff82198eed707a4bb 100644
+index a1e1c89786eb4278ff8ff2bfb4d97848b4da4702..23e907484986afb105f638d36b8e7b6d13fb3c11 100644
 --- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftInventory.java
-@@ -428,11 +428,23 @@ public class CraftInventory implements Inventory {
+@@ -429,11 +429,23 @@ public class CraftInventory implements Inventory {
  
      @Override
      public void clear(int index) {

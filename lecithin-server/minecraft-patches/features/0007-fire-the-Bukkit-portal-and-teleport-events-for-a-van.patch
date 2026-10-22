@@ -52,10 +52,10 @@ off by up to the portal search radius.
 Kill switch: event-config.portal-events=false.
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5e85dad52 100644
+index d495b3bf15501b5f3fd525592c286d0383448457..a1e3a9901b843a1fb74020e3a783381f9ea8df43 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -5039,13 +5039,14 @@ public abstract class Entity
+@@ -5040,13 +5040,14 @@ public abstract class Entity
      // If we have to worry about whether the entity may not teleport,
      // we need to first search, then report back, ...
      protected void findOrCreatePortalAsync(ServerLevel origin, BlockPos originPortal, ServerLevel destination, PortalType type,
@@ -72,7 +72,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
                      // Luminol start - Add missing teleportation apis
                      final org.bukkit.Location orginalPortalLocation = io.papermc.paper.util.MCUtil.toLocation(origin, originPortal);
                      final org.bukkit.Location targetPortalLocation = io.papermc.paper.util.MCUtil.toLocation(destination, targetPos);
-@@ -5084,7 +5085,7 @@ public abstract class Entity
+@@ -5085,7 +5086,7 @@ public abstract class Entity
                          }
                      );
                  } else {
@@ -81,7 +81,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
                      // Luminol start - Add missing teleportation apis
                      final org.bukkit.Location orginalPortalLocation = io.papermc.paper.util.MCUtil.toLocation(origin, originPortal);
                      final org.bukkit.Location targetPortalLocation = io.papermc.paper.util.MCUtil.toLocation(destination, spawnPos);
-@@ -5146,14 +5147,21 @@ public abstract class Entity
+@@ -5147,14 +5148,21 @@ public abstract class Entity
  
                  boolean destinationIsNether = destination.getTypeKey() == net.minecraft.world.level.dimension.LevelStem.NETHER;
  
@@ -106,7 +106,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
                  // Luminol start - Add missing teleportation apis
                  final org.bukkit.Location orginalPortalLocation = io.papermc.paper.util.MCUtil.toLocation(origin, originPortal);
                  final org.bukkit.Location targetPortalLocation = io.papermc.paper.util.MCUtil.toLocation(destination, targetPos);
-@@ -5218,6 +5226,11 @@ public abstract class Entity
+@@ -5219,6 +5227,11 @@ public abstract class Entity
                              );
                          }
  
@@ -118,7 +118,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
                          // no portal found - create one
                          destination.moonrise$loadChunksAsync(
                              targetPos, portalCreateRadius + 32,
-@@ -5295,6 +5308,54 @@ public abstract class Entity
+@@ -5296,6 +5309,54 @@ public abstract class Entity
  
      }
  
@@ -173,7 +173,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
      protected boolean portalToAsync(ServerLevel destination, BlockPos portalPos, boolean takePassengers,
                                      PortalType type, java.util.function.Consumer<Entity> teleportComplete) {
          ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
-@@ -5337,9 +5398,32 @@ public abstract class Entity
+@@ -5338,9 +5399,32 @@ public abstract class Entity
          }
          // Lophine end - destination-driven portal backpressure
  
@@ -208,7 +208,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
          // Kaiiju end
          Vec3 initialPosition = this.position();
          ChunkPos initialPositionChunk = new ChunkPos(
-@@ -5348,7 +5432,7 @@ public abstract class Entity
+@@ -5349,7 +5433,7 @@ public abstract class Entity
          );
          // Luminol start - Level hot load/unload apis
          // let's acquire read reference first
@@ -217,7 +217,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
              // failed, destination is under unloading process
              return false;
          }
-@@ -5361,15 +5445,15 @@ public abstract class Entity
+@@ -5362,15 +5446,15 @@ public abstract class Entity
  
          for (EntityTreeNode node : fullPassengerTree) {
              node.root.preChangeDimension();
@@ -238,7 +238,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
                      if (teleportComplete != null) teleportComplete.accept(null);
                  });
  
-@@ -5377,7 +5461,8 @@ public abstract class Entity
+@@ -5378,7 +5462,8 @@ public abstract class Entity
      }
      private void carpetBeginPortalAfterRemoval(ServerLevel originWorld, ServerLevel destination, Vec3 initialPosition,
          ChunkPos initialPositionChunk, EntityTreeNode passengerTree, List<EntityTreeNode> fullPassengerTree, boolean takePassengers,
@@ -248,7 +248,7 @@ index bac30813d3a3d8d0d3a673b61c7a6e53d3b1b3b2..f5e69cfe0343fd84c41d3674b70abce5
          // ensure the region is always ticking in case of a shutdown
          // otherwise, the shutdown will not be able to complete the shutdown as it requires a ticking region
          Long teleportHoldId = Long.valueOf(TELEPORT_HOLD_TICKET_GEN.getAndIncrement());
-@@ -5447,7 +5532,7 @@ public abstract class Entity
+@@ -5448,7 +5533,7 @@ public abstract class Entity
          }));
  
  

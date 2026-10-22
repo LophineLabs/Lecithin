@@ -24,7 +24,7 @@ the hot path. The player's board override becomes volatile for the same
 cross-thread readers.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 116614718bb14382475f9182ba796eb7ed73d50f..c0196b3e821e425155909714489e453ffcaade5e 100644
+index 8de94f57cd950c4a5087552cdc525e116c465eba..f2c9195146bbd1acf604c6ac719e8577f1e4ba0e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -251,7 +251,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
