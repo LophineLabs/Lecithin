@@ -1,0 +1,136 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Fri, 23 Oct 2026 19:23:01 +0800
+Subject: [PATCH] Bound the item merge scan cost for dense unmergable piles
+
+
+diff --git a/net/minecraft/world/entity/item/ItemEntity.java b/net/minecraft/world/entity/item/ItemEntity.java
+index 95c537bcfa6c6185b1a0dbe50a4e0be02ea70dd1..dec8129ba41c9f4d49f072ef364a68fa0946689b 100644
+--- a/net/minecraft/world/entity/item/ItemEntity.java
++++ b/net/minecraft/world/entity/item/ItemEntity.java
+@@ -59,6 +59,10 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+     public final float bobOffs = this.random.nextFloat() * (float) Math.PI * 2.0F;
+     public boolean canMobPickup = true; // Paper - Item#canEntityPickup
+     private int despawnRate = -1; // Paper - Alternative item-despawn-rate
++    // Lecithin start - bound the item merge scan cost: runtime-only scan backoff, owned by the ticking region thread, never saved or copied
++    private int mergeBackoffExp;
++    private int lastScanCount;
++    // Lecithin end - bound the item merge scan cost
+     public net.kyori.adventure.util.TriState frictionState = net.kyori.adventure.util.TriState.NOT_SET; // Paper - Friction API
+ 
+     public ItemEntity(final EntityType<? extends ItemEntity> type, final Level level) {
+@@ -212,10 +216,24 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+             boolean moved = Mth.floor(this.xo) != Mth.floor(this.getX())
+                 || Mth.floor(this.yo) != Mth.floor(this.getY())
+                 || Mth.floor(this.zo) != Mth.floor(this.getZ());
+-            int rate = moved ? 2 : 40;
+-            if (this.tickCount % rate == 0 && !this.level().isClientSide() && this.isMergable()) {
+-                this.mergeWithNeighbours();
++            // Lecithin start - bound the item merge scan cost: back off scanning for stationary items that cannot merge
++            if (!this.level().isClientSide()) {
++                final boolean countChanged = this.getItem().getCount() != this.lastScanCount;
++                if (moved || countChanged) {
++                    this.mergeBackoffExp = 0;
++                }
++                final int rate = fun.bm.lecithin.compat.LecithinItemMergeScan.scanInterval(moved, this.mergeBackoffExp);
++                if (fun.bm.lecithin.compat.LecithinItemMergeScan.scanDue(this.tickCount, this.getId(), rate)) {
++                    if (this.isMergable()) {
++                        final boolean mergedAny = this.mergeWithNeighbours();
++                        this.mergeBackoffExp = fun.bm.lecithin.compat.LecithinItemMergeScan.nextBackoffExp(this.mergeBackoffExp, mergedAny, moved, countChanged);
++                        this.lastScanCount = this.getItem().getCount();
++                    } else {
++                        this.mergeBackoffExp = 0;
++                    }
++                }
+             }
++            // Lecithin end - bound the item merge scan cost
+ 
+             if (this.age != -32768) {
+                 this.age++;
+@@ -260,11 +278,44 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+         this.setDeltaMovement(movement.x * multiplier, movement.y + (movement.y < 0.06F ? 5.0E-4F : 0.0F), movement.z * multiplier);
+     }
+ 
+-    private void mergeWithNeighbours() {
++    private boolean mergeWithNeighbours() { // Lecithin - bound the item merge scan cost: report whether anything merged
++        boolean mergedAny = false; // Lecithin - bound the item merge scan cost
+         if (this.isMergable()) {
+             double radius = this.level().spigotConfig.itemMerge; // Spigot
+-            for (ItemEntity entity : this.level()
+-                .getEntitiesOfClass(ItemEntity.class, this.getBoundingBox().inflate(radius, this.level().paperConfig().entities.behavior.onlyMergeItemsHorizontally ? 0 : radius - 0.5D, radius), other -> other != this && other.isMergable())) { // Spigot // Paper - configuration to only merge items horizontally
++            // Lecithin start - bound the item merge scan cost: only collect candidates that can really merge, and only as many as could
++            final net.minecraft.world.phys.AABB scanBox = this.getBoundingBox().inflate(radius, this.level().paperConfig().entities.behavior.onlyMergeItemsHorizontally ? 0 : radius - 0.5D, radius); // Spigot // Paper - configuration to only merge items horizontally
++            final ItemStack scanStack = this.getItem();
++            final java.util.List<ItemEntity> candidates;
++            if (!org.leavesmc.leaves.util.ItemOverstackUtils.hasOverstackingItem() && !fun.bm.lophine.carpet.OrgItemShadowGroups.managed(scanStack)) {
++                final UUID scanTarget = this.target;
++                candidates = new java.util.ArrayList<>();
++                final int[] visited = new int[1];
++                // A scan at the highest backoff step is not budgeted, so a partner deep in a dense pile is still found eventually
++                final boolean budgeted = fun.bm.lecithin.compat.LecithinItemMergeScan.budgeted(this.mergeBackoffExp);
++                // Same thread semantics as Level#getEntitiesOfClass, which calls the entity lookup directly
++                ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevel) this.level()).moonrise$getEntityLookup().getEntities(
++                    ItemEntity.class, null, scanBox, candidates,
++                    other -> {
++                        // Over budget: accept everything so the lookup stops filling; the loop below re-checks every candidate
++                        if (budgeted && ++visited[0] > fun.bm.lecithin.compat.LecithinItemMergeScan.SCAN_BUDGET) {
++                            return true;
++                        }
++                        return other != this && other.isMergable()
++                            && (fun.bm.lophine.carpet.OrgItemShadowGroups.managed(other.getItem())
++                            || fun.bm.lecithin.compat.LecithinItemMergeScan.mayMerge(scanStack, other.getItem(), Objects.equals(scanTarget, other.target)));
++                    },
++                    fun.bm.lecithin.compat.LecithinItemMergeScan.candidateCap(scanStack.getMaxStackSize(), scanStack.getCount())
++                );
++                if (budgeted && visited[0] > fun.bm.lecithin.compat.LecithinItemMergeScan.SCAN_BUDGET) {
++                    candidates.removeIf(other -> other == this || !other.isMergable()
++                        || !fun.bm.lophine.carpet.OrgItemShadowGroups.managed(other.getItem())
++                        && !fun.bm.lecithin.compat.LecithinItemMergeScan.mayMerge(scanStack, other.getItem(), Objects.equals(scanTarget, other.target)));
++                }
++            } else {
++                candidates = this.level().getEntitiesOfClass(ItemEntity.class, scanBox, other -> other != this && other.isMergable());
++            }
++            for (ItemEntity entity : candidates) {
++            // Lecithin end - bound the item merge scan cost
+                 if (entity.isMergable()) {
+                     // Paper start - Fix items merging through walls
+                     if (this.level().paperConfig().fixes.fixItemsMergingThroughWalls) {
+@@ -274,13 +325,21 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+                         }
+                     }
+                     // Paper end - Fix items merging through walls
++                    // Lecithin start - bound the item merge scan cost
++                    final int thisCountBefore = this.getItem().getCount();
++                    final int otherCountBefore = entity.getItem().getCount();
+                     this.tryToMerge(entity);
+-                    if (this.isRemoved()) {
++                    if (this.isRemoved() || entity.isRemoved() || this.getItem().getCount() != thisCountBefore || entity.getItem().getCount() != otherCountBefore) {
++                        mergedAny = true;
++                    }
++                    if (this.isRemoved() || !this.isMergable()) {
+                         break;
+                     }
++                    // Lecithin end - bound the item merge scan cost
+                 }
+             }
+         }
++        return mergedAny; // Lecithin - bound the item merge scan cost
+     }
+ 
+     private boolean isMergable() {
+@@ -545,6 +604,7 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+     public void postChangeDimension() {
+         super.postChangeDimension();
+         if (!this.level().isClientSide() && this instanceof ItemEntity item) {
++            item.mergeBackoffExp = 0; // Lecithin - bound the item merge scan cost: a dimension change counts as moving
+             item.mergeWithNeighbours();
+         }
+     }
+@@ -555,6 +615,7 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+         Entity entity = super.teleport(transition);
+         if (entity != null) entity.postChangeDimension(); // Folia - region threading - move to post change
+         if (!this.level().isClientSide() && entity instanceof ItemEntity item) {
++            item.mergeBackoffExp = 0; // Lecithin - bound the item merge scan cost: a teleport counts as moving
+             item.mergeWithNeighbours();
+         }
+ 
