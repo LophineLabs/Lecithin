@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'lophine-server/**'
-      - 'lophine-api/**'
-      - 'lophine-checkstyle/**'
+      - 'lecithin-server/**'
+      - 'lecithin-api/**'
+      - 'lecithin-checkstyle/**'
       - '.github/workflows/**'
       - 'gradle.properties'
       - 'build.gradle.kts'
@@ -16,9 +16,9 @@ on:
       - exp/* # Experimental branch
       - dev/* # Development Branch
     paths:
-      - 'lophine-server/**'
-      - 'lophine-api/**'
-      - 'lophine-checkstyle/**'
+      - 'lecithin-server/**'
+      - 'lecithin-api/**'
+      - 'lecithin-checkstyle/**'
       - '.github/workflows/**'
       - 'gradle.properties'
       - 'build.gradle.kts'

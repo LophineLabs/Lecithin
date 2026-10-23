@@ -5,9 +5,9 @@ on:
     branches:
       - "**"
     paths:
-      - 'lophine-server/**'
-      - 'lophine-api/**'
-      - 'lophine-checkstyle/**'
+      - 'lecithin-server/**'
+      - 'lecithin-api/**'
+      - 'lecithin-checkstyle/**'
       - '.github/workflows/**'
       - 'gradle.properties'
       - 'build.gradle.kts'
@@ -16,9 +16,9 @@ on:
     branches:
       - "**"
     paths:
-      - 'lophine-server/**'
-      - 'lophine-api/**'
-      - 'lophine-checkstyle/**'
+      - 'lecithin-server/**'
+      - 'lecithin-api/**'
+      - 'lecithin-checkstyle/**'
       - '.github/workflows/**'
       - 'gradle.properties'
       - 'build.gradle.kts'
