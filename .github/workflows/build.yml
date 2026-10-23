@@ -6,6 +6,7 @@ on:
       - "**"
     paths:
       - 'lophine-server/**'
+      - 'lecithin-server/**'
       - 'lophine-api/**'
       - 'lophine-checkstyle/**'
       - '.github/workflows/**'
@@ -17,6 +18,7 @@ on:
       - "**"
     paths:
       - 'lophine-server/**'
+      - 'lecithin-server/**'
       - 'lophine-api/**'
       - 'lophine-checkstyle/**'
       - '.github/workflows/**'
