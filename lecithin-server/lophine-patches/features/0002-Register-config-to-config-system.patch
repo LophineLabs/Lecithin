@@ -5,14 +5,14 @@ Subject: [PATCH] Register config to config system
 
 
 diff --git a/src/main/java/me/earthme/luminol/config/ConfigManager.java b/src/main/java/me/earthme/luminol/config/ConfigManager.java
-index 854ba66945b790e929101cc87e24384e7083cf0b..923eaed23f982c572a70e5203f896147f1b5cfb2 100644
+index c4069e3fb30290a9ce986be2defdbb8fe6b45359..bb824bc491adbb88a993eae93d7538dabab39830 100644
 --- a/src/main/java/me/earthme/luminol/config/ConfigManager.java
 +++ b/src/main/java/me/earthme/luminol/config/ConfigManager.java
-@@ -30,6 +30,7 @@ public class ConfigManager {
-                 "fun.bm.lophine.carpet.config.modules"
+@@ -42,6 +42,7 @@ public class ConfigManager {
+                 false
          ));
          // Lophine end - add carpet config
-+        registerConfig(builder.of("lecithin", "fun.bm.lecithin.config.modules")); // Lecithin global config
++        registerConfig(builder.of("lecithin", "fun.bm.lecithin.config.modules", false)); // Lecithin global config
          preLoad();
      }
  

@@ -5,7 +5,7 @@ Subject: [PATCH] Sync buffered linear region files before marking them closed
 
 
 diff --git a/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java b/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java
-index 9dbb58ced7e5e254aa344d213168e3ed489cbe8d..243b419b8edb183149d075d98ddd4da74bb1b896 100644
+index e3586f36fb3c1b037fa5887cab392e0c411d2112..64ea64cabc566dade194288919362f5789ecc549 100644
 --- a/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java
 +++ b/src/main/java/io/anonymous/anonymous/data/BufferedLinearRegionFile.java
 @@ -52,6 +52,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;

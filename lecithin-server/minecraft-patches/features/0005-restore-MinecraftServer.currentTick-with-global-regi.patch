@@ -31,7 +31,7 @@ index 084366f10a04ad885684355aa208951113a9ec97..b05913fe19ab906ab75a8b5bca181391
          // Luminol start - Add a config to enable tick command
          if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.tickCommandEnabled()) { // Lophine - redirect
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index 4f4548638c90b0198a60263c6062c537877a1bac..f0bffce2eeecddf6ba9fdfc62c309d63b3564946 100644
+index d67c7e15793499f97b39ea2fbad97436e86415c2..c61e174806ead67009521992cc34340f46279d1b 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -315,7 +315,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa

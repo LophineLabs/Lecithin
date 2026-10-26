@@ -77,10 +77,10 @@ index a31e1ac190078a07a61a9df08fe41167e0238b2c..951ce638c0fe804169a4223ff35845b3
      public static final record WorldLevelData(ServerLevel world, long nonRedstoneGameTime) {}
  }
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 2e500f078debc5055f5bc284fe5567612680789e..d90b5dfded48357c4bd530eefdf550ee7eff8fa7 100644
+index f4dad64e3cf7af8c91f56e1a0c2690a8dcf1b839..e345ca16ce2e75826fcd3f77eea26f0bf3df0c35 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
-@@ -3055,10 +3055,15 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -3062,10 +3062,15 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          event.callEvent();
          // CraftBukkit end
          this.getServer().getDataStorage().set(MapItemSavedData.type(id), data);

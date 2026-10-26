@@ -1,10 +1,10 @@
 package fun.bm.lecithin.config.modules;
 
-import me.earthme.luminol.config.flags.ConfigClassInfo;
-import me.earthme.luminol.config.flags.ConfigInfo;
-import me.earthme.luminol.config.flags.DoNotLoad;
-import me.earthme.luminol.enums.EnumConfigCategory;
-import me.earthme.luminol.enums.EnumLoadType;
+import me.earthme.luminol.api.config.annotation.ConfigClassInfo;
+import me.earthme.luminol.api.config.annotation.ConfigInfo;
+import me.earthme.luminol.api.config.annotation.DoNotLoad;
+import me.earthme.luminol.api.config.enums.EnumConfigCategory;
+import me.earthme.luminol.api.config.enums.EnumLoadType;
 
 @ConfigClassInfo(name = "event-config", category = EnumConfigCategory.ROOT)
 public class EventConfig {
@@ -35,7 +35,7 @@ public class EventConfig {
      * Fire {@code PlayerRespawnEvent}. The platform rewrote {@code ServerPlayer#respawn} and no
      * longer routes it through the Paper method that fires the event, so on stock the event is never
      * constructed at all and a respawn-placing plugin is never called. Turning this off also restores
-     * the platform's behaviour of never consuming a respawn anchor's charge, because Paper's rule for
+     * the platform's behavior of never consuming a respawn anchor's charge, because Paper's rule for
      * that is defined in terms of this event. See {@link
      * fun.bm.lecithin.compat.LecithinRespawnEvents}.
      */

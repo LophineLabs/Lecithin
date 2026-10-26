@@ -5,7 +5,7 @@ Subject: [PATCH] Bound the item merge scan cost for dense unmergable piles
 
 
 diff --git a/net/minecraft/world/entity/item/ItemEntity.java b/net/minecraft/world/entity/item/ItemEntity.java
-index 95c537bcfa6c6185b1a0dbe50a4e0be02ea70dd1..dec8129ba41c9f4d49f072ef364a68fa0946689b 100644
+index 0fd33714cf3e199bf7b9b77b5bd0575bec4cd980..bf23a0d21009f60096e8415eee39d2448c9404d5 100644
 --- a/net/minecraft/world/entity/item/ItemEntity.java
 +++ b/net/minecraft/world/entity/item/ItemEntity.java
 @@ -59,6 +59,10 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish

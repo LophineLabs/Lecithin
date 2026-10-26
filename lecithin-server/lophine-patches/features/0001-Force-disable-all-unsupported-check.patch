@@ -5,13 +5,16 @@ Subject: [PATCH] Force disable all unsupported check
 
 
 diff --git a/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java b/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
-index 49638c4887492fedbab8b6ebe859790989e28fec..13712f5bc49ba38f813b424e2a5fadfa736456dd 100644
+index a109196100533bd2133402db669e616f2f22779e..76f6a44304b8b9d27d4c60cd15f13f52684e392f 100644
 --- a/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
 +++ b/src/main/java/me/earthme/luminol/config/modules/unsupported/DisableCheckForFoliaSupported.java
-@@ -4,11 +4,7 @@ import me.earthme.luminol.config.flags.ConfigClassInfo;
- import me.earthme.luminol.config.flags.ConfigInfo;
- import me.earthme.luminol.enums.EnumConfigCategory;
+@@ -1,14 +1,6 @@
+ package me.earthme.luminol.config.modules.unsupported;
  
+-import me.earthme.luminol.api.config.annotation.ConfigClassInfo;
+-import me.earthme.luminol.api.config.annotation.ConfigInfo;
+-import me.earthme.luminol.api.config.enums.EnumConfigCategory;
+-
 -@ConfigClassInfo(category = EnumConfigCategory.UNSUPPORTED, name = "disable_check_for_folia_supported")
  public class DisableCheckForFoliaSupported {
 -    @ConfigInfo(name = "disable_for_paper")
