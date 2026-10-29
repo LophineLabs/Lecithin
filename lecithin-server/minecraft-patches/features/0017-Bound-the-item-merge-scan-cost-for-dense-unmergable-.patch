@@ -5,10 +5,10 @@ Subject: [PATCH] Bound the item merge scan cost for dense unmergable piles
 
 
 diff --git a/net/minecraft/world/entity/item/ItemEntity.java b/net/minecraft/world/entity/item/ItemEntity.java
-index 0fd33714cf3e199bf7b9b77b5bd0575bec4cd980..bf23a0d21009f60096e8415eee39d2448c9404d5 100644
+index c74df43ed794366ee9dcc837d52c8b780f762231..d0e23bca83821483d82a4bbd08be0c8d7c69d6a6 100644
 --- a/net/minecraft/world/entity/item/ItemEntity.java
 +++ b/net/minecraft/world/entity/item/ItemEntity.java
-@@ -59,6 +59,10 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+@@ -55,6 +55,10 @@ public class ItemEntity extends Entity implements TraceableEntity, net.caffeinem
      public final float bobOffs = this.random.nextFloat() * (float) Math.PI * 2.0F;
      public boolean canMobPickup = true; // Paper - Item#canEntityPickup
      private int despawnRate = -1; // Paper - Alternative item-despawn-rate
@@ -19,7 +19,7 @@ index 0fd33714cf3e199bf7b9b77b5bd0575bec4cd980..bf23a0d21009f60096e8415eee39d244
      public net.kyori.adventure.util.TriState frictionState = net.kyori.adventure.util.TriState.NOT_SET; // Paper - Friction API
  
      public ItemEntity(final EntityType<? extends ItemEntity> type, final Level level) {
-@@ -212,10 +216,24 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+@@ -208,10 +212,24 @@ public class ItemEntity extends Entity implements TraceableEntity, net.caffeinem
              boolean moved = Mth.floor(this.xo) != Mth.floor(this.getX())
                  || Mth.floor(this.yo) != Mth.floor(this.getY())
                  || Mth.floor(this.zo) != Mth.floor(this.getZ());
@@ -47,7 +47,7 @@ index 0fd33714cf3e199bf7b9b77b5bd0575bec4cd980..bf23a0d21009f60096e8415eee39d244
  
              if (this.age != -32768) {
                  this.age++;
-@@ -260,11 +278,44 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+@@ -256,11 +274,44 @@ public class ItemEntity extends Entity implements TraceableEntity, net.caffeinem
          this.setDeltaMovement(movement.x * multiplier, movement.y + (movement.y < 0.06F ? 5.0E-4F : 0.0F), movement.z * multiplier);
      }
  
@@ -95,7 +95,7 @@ index 0fd33714cf3e199bf7b9b77b5bd0575bec4cd980..bf23a0d21009f60096e8415eee39d244
                  if (entity.isMergable()) {
                      // Paper start - Fix items merging through walls
                      if (this.level().paperConfig().fixes.fixItemsMergingThroughWalls) {
-@@ -274,13 +325,21 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+@@ -270,13 +321,21 @@ public class ItemEntity extends Entity implements TraceableEntity, net.caffeinem
                          }
                      }
                      // Paper end - Fix items merging through walls
@@ -118,7 +118,7 @@ index 0fd33714cf3e199bf7b9b77b5bd0575bec4cd980..bf23a0d21009f60096e8415eee39d244
      }
  
      private boolean isMergable() {
-@@ -545,6 +604,7 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+@@ -541,6 +600,7 @@ public class ItemEntity extends Entity implements TraceableEntity, net.caffeinem
      public void postChangeDimension() {
          super.postChangeDimension();
          if (!this.level().isClientSide() && this instanceof ItemEntity item) {
@@ -126,7 +126,7 @@ index 0fd33714cf3e199bf7b9b77b5bd0575bec4cd980..bf23a0d21009f60096e8415eee39d244
              item.mergeWithNeighbours();
          }
      }
-@@ -555,6 +615,7 @@ public class ItemEntity extends Entity implements TraceableEntity, ChangePublish
+@@ -551,6 +611,7 @@ public class ItemEntity extends Entity implements TraceableEntity, net.caffeinem
          Entity entity = super.teleport(transition);
          if (entity != null) entity.postChangeDimension(); // Folia - region threading - move to post change
          if (!this.level().isClientSide() && entity instanceof ItemEntity item) {

@@ -28,10 +28,10 @@ lifecycle, scheduling, return values or teleport results changes.
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index f82d64f345f674b8dea0eea57c9b73de037b3a8d..ce9c4e223da59b705e43f46fab7b38441501e8ae 100644
+index 1f43a583acaa6b3577c2980428563089fc5e0fde..eef1b5025bdaae97e206ba216f1e7231e8edd967 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -4824,6 +4824,13 @@ public abstract class Entity
+@@ -4820,6 +4820,13 @@ public abstract class Entity
          }
  
          if (!this.canTeleportAsync()) {
@@ -45,7 +45,7 @@ index f82d64f345f674b8dea0eea57c9b73de037b3a8d..ce9c4e223da59b705e43f46fab7b3844
              return false;
          }
          this.getBukkitEntity(); // force bukkit entity to be created before TPing
-@@ -6793,6 +6800,13 @@ public abstract class Entity
+@@ -6768,6 +6775,13 @@ public abstract class Entity
  
      @Override
      public void setLevelCallback(final EntityInLevelCallback levelCallback) {
@@ -57,5 +57,5 @@ index f82d64f345f674b8dea0eea57c9b73de037b3a8d..ce9c4e223da59b705e43f46fab7b3844
 +        }
 +        // Lecithin end
          this.levelCallback = levelCallback;
-     }
- 
+         // Leaf start - Lithium - equipment tracking
+         if (!this.lithium$isInLevel()) {

@@ -5,10 +5,10 @@ Subject: [PATCH] Register config to config system
 
 
 diff --git a/src/main/java/me/earthme/luminol/config/ConfigManager.java b/src/main/java/me/earthme/luminol/config/ConfigManager.java
-index c4069e3fb30290a9ce986be2defdbb8fe6b45359..bb824bc491adbb88a993eae93d7538dabab39830 100644
+index c1b5d13d9ec9b016ae43512e108b68e2b1970ba3..d359fd67dcba194501480b2a80ab0c887b612840 100644
 --- a/src/main/java/me/earthme/luminol/config/ConfigManager.java
 +++ b/src/main/java/me/earthme/luminol/config/ConfigManager.java
-@@ -42,6 +42,7 @@ public class ConfigManager {
+@@ -44,6 +44,7 @@ public class ConfigManager {
                  false
          ));
          // Lophine end - add carpet config

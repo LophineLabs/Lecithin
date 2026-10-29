@@ -186,7 +186,7 @@ index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e3
          /** Never 0L, since 0L is reserved for global region. */
          public final long id = ID_GENERATOR.incrementAndGet();
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index f1bde4b565ccaddee0e96a27c798503d5513e0f4..9d5dd19fd4f250f1465e9cba5f44253d3f3c0cf8 100644
+index 4f9b4bbc5b091736b2b9a03a78724b2796f975ec..1e93d43aa25951b14d4438f369cbb1788a4bf7f6 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -3409,6 +3409,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
@@ -200,7 +200,7 @@ index f1bde4b565ccaddee0e96a27c798503d5513e0f4..9d5dd19fd4f250f1465e9cba5f44253d
      }
  
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 766b174934f5fc49c8a7c0c65f17389362ada6f4..98a28dac8b9b4a403068645f096b1f50c5de05af 100644
+index 61337d5e9660bd8ffb3708a8fa9a8007c3114c71..9c10cbbf95ccf905633b285ff286c57c02fd5cc0 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -365,7 +365,7 @@ public abstract class Entity

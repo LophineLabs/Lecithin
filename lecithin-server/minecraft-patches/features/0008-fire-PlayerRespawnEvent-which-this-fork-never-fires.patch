@@ -52,7 +52,7 @@ completes and a player who left is cleaned up by the normal disconnect path.
 Kill switch: event-config.respawn-event=false.
 
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index ea924890de500545ce9ab298db6807f6e38637e8..f1bde4b565ccaddee0e96a27c798503d5513e0f4 100644
+index f6877a587a66ec0f78286bb5a16314863bca9645..4f9b4bbc5b091736b2b9a03a78724b2796f975ec 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -1975,13 +1975,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc

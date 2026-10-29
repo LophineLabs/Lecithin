@@ -77,7 +77,7 @@ index a31e1ac190078a07a61a9df08fe41167e0238b2c..951ce638c0fe804169a4223ff35845b3
      public static final record WorldLevelData(ServerLevel world, long nonRedstoneGameTime) {}
  }
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index f4dad64e3cf7af8c91f56e1a0c2690a8dcf1b839..e345ca16ce2e75826fcd3f77eea26f0bf3df0c35 100644
+index eb387499ee6abb685e80154d90f00cd353abd395..fdc6156f0d284e79259f1bd1b531d75ab0e5ae71 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -3062,10 +3062,15 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
