@@ -106,13 +106,16 @@ public final class LegacyOwnerOperations {
         Runnable cancel = () -> {};
         try {
             cancel = request.target.queue(request::attempt);
+            // An owner parked in a managed wait serves the operation from its progress hook: wake it.
+            LegacyCalls.wakeWaiting();
             // A lane has no owner. Its carrier only executes an API body after acquiring a real one.
             // Tick callers can make the same try-only acquisition themselves inside await's pump.
             CARRIERS.execute(() -> {
-                try { LegacyCalls.await(request.result, request::attempt, () -> null); }
+                try { LegacyCalls.awaitPolling(request.result, request::attempt, () -> null); }
                 catch (final Throwable failure) { /* The synchronous caller receives this same failure. */ }
             });
-            return LegacyCalls.await(request.result, request::attempt, () -> request.executor);
+            // Completion wakes the caller; polling only retries acquiring the target while it is idle.
+            return LegacyCalls.awaitPolling(request.result, request::attempt, () -> request.executor);
         } finally {
             cancel.run();
             PENDING.remove(request);
@@ -204,7 +207,12 @@ public final class LegacyOwnerOperations {
         T value;
         Throwable failure;
 
-        Request(final Target target, final Supplier<T> body) { this.target = target; this.body = body; }
+        Request(final Target target, final Supplier<T> body) {
+            this.target = target;
+            this.body = body;
+            // The body may run on the owner's thread under this frame: fix its anchor here, on the caller.
+            if (this.frame != null) this.frame.affinity();
+        }
 
         OwnerOperationCancelledException.Reason cancellation() {
             if (closing || this.target.serverStopped()) return OwnerOperationCancelledException.Reason.SERVER_STOPPING;

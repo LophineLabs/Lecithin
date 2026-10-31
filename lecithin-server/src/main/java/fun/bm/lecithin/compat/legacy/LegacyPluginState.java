@@ -15,7 +15,10 @@ public final class LegacyPluginState {
     final LegacyLane lane;
 
     // Entries into the domain, by entry point.
-    final LongAdder listenerCalls = new LongAdder();
+    /** Listener calls that entered the domain: counted inside it, by its holder only. */
+    private volatile long listenerEntries;
+    /** Listener calls skipped before the domain (ignoreCancelled on a cancelled event). */
+    final LongAdder listenerSkips = new LongAdder();
     final LongAdder commandCalls = new LongAdder();
     final LongAdder serviceCalls = new LongAdder();
     final LongAdder lifecycleCalls = new LongAdder();
@@ -48,6 +51,24 @@ public final class LegacyPluginState {
 
     public Plugin plugin() {
         return this.plugin;
+    }
+
+    /** Domain holder only. */
+    void countListenerEntry() {
+        LISTENER_ENTRIES.setOpaque(this, this.listenerEntries + 1);
+    }
+
+    long listenerCalls() {
+        return this.listenerEntries + this.listenerSkips.sum();
+    }
+
+    private static final java.lang.invoke.VarHandle LISTENER_ENTRIES;
+    static {
+        try {
+            LISTENER_ENTRIES = java.lang.invoke.MethodHandles.lookup().findVarHandle(LegacyPluginState.class, "listenerEntries", long.class);
+        } catch (final ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
     }
 
     /**

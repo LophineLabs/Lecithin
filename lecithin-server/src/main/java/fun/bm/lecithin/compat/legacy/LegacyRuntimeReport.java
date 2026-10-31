@@ -36,7 +36,7 @@ public final class LegacyRuntimeReport {
         for (final LegacyPluginState s : managed) {
             final LegacyExecutionDomain d = s.domain;
             out.add(s.plugin.getName()
-                    + " | entries listener=" + s.listenerCalls.sum()
+                    + " | entries listener=" + s.listenerCalls()
                     + " command=" + s.commandCalls.sum()
                     + " service=" + s.serviceCalls.sum()
                     + " lifecycle=" + s.lifecycleCalls.sum()
@@ -51,7 +51,7 @@ public final class LegacyRuntimeReport {
                     + " coalesced=" + s.coalescedFirings.sum() + ')'
                     + " | globalThread entries=" + s.entriesOnGlobalThread.sum()
                     + " scheduledBodies=" + s.scheduledBodiesOnGlobalThread.sum()
-                    + " | domain acq=" + d.acquisitions.sum()
+                    + " | domain acq=" + d.acquisitions()
                     + " contended=" + d.contended.sum()
                     + " callbacks=" + d.callbacks.sum()
                     + " ownerBoundWaits=" + d.ownerBoundWaits.sum()

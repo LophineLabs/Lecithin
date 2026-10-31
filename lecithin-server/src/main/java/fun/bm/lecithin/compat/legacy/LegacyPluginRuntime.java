@@ -79,18 +79,44 @@ public final class LegacyPluginRuntime {
     /**
      * One platform-established execution frame: which plugin's domain this thread is inside, where
      * the work is anchored, and whether the thread is the legacy lane.
+     *
+     * <p>A listener frame resolves its anchor from its event only when something asks for it - a task
+     * created, a service called, an owner operation - since almost no listener call does, and the
+     * answer for an event with no entity or block comes from the thread's execution provenance, which
+     * is not free on a region thread. It is resolved on the thread that created the frame, during the
+     * frame's own call: that thread's provenance cannot change under a managed frame (only async
+     * dispatch sets a scope, and async events never enter one). A frame handed to another thread is
+     * resolved first ({@link LegacyOwnerOperations}).
      */
     static final class Frame {
         final LegacyPluginState state;
-        final LegacyAffinity affinity;
         final boolean lane;
         final Frame parent;
+        private final Event event;
+        private LegacyAffinity affinity;
 
         Frame(final LegacyPluginState state, final LegacyAffinity affinity, final boolean lane, final Frame parent) {
             this.state = state;
             this.affinity = affinity;
             this.lane = lane;
             this.parent = parent;
+            this.event = null;
+        }
+
+        /** A listener frame whose anchor is resolved from {@code event} on first use. */
+        Frame(final LegacyPluginState state, final Event event, final Frame parent) {
+            this.state = state;
+            this.lane = parent != null && parent.lane;
+            this.parent = parent;
+            this.event = event;
+        }
+
+        LegacyAffinity affinity() {
+            LegacyAffinity resolved = this.affinity;
+            if (resolved == null) {
+                this.affinity = resolved = affinityOf(this.event, this.parent);
+            }
+            return resolved;
         }
     }
 
@@ -140,6 +166,12 @@ public final class LegacyPluginRuntime {
         if (folia) {
             return NATIVE;
         }
+        if (declaredNativeByOperator(plugin)) {
+            LOGGER.warn("[Lecithin] {} does not declare folia-supported but is listed in compat-config.legacy-native-plugins; "
+                    + "running it on the native path WITHOUT the Legacy Paper Runtime: several regions may be inside it at once",
+                    plugin.getName());
+            return NATIVE;
+        }
         LOGGER.info("[Lecithin] {} does not declare folia-supported; running it under the Legacy Paper "
                 + "Runtime (serial plugin domain, legacy lane for unanchored work)", plugin.getName());
         return new LegacyPluginState(plugin);
@@ -147,14 +179,35 @@ public final class LegacyPluginRuntime {
 
     // ------------------------------------------------------------------ frames
 
+    /**
+     * An operator's statement that a plugin which does not declare Folia support may still be entered
+     * from several regions at once: {@code compat-config.legacy-native-plugins}, by plugin name.
+     */
+    private static boolean declaredNativeByOperator(final Plugin plugin) {
+        final List<String> names = CompatConfig.legacyNativePlugins;
+        if (names == null || names.isEmpty()) {
+            return false;
+        }
+        for (final String name : names) {
+            if (name != null && name.trim().equalsIgnoreCase(plugin.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static Frame enter(final LegacyPluginState state, final LegacyAffinity affinity, final boolean lane) {
         final Frame parent = FRAME.get();
         final Frame frame = new Frame(state, affinity, lane || (parent != null && parent.lane), parent);
         FRAME.set(frame);
+        countGlobalEntry(state);
+        return frame;
+    }
+
+    private static void countGlobalEntry(final LegacyPluginState state) {
         if (RegionizedServer.isGlobalTickThread()) {
             state.entriesOnGlobalThread.increment();
         }
-        return frame;
     }
 
     /**
@@ -187,25 +240,62 @@ public final class LegacyPluginRuntime {
         });
     }
 
+    /**
+     * Every sync listener call of every plugin passes here. The uncontended managed entry - nothing to
+     * return to, domain free and nobody waiting for it - enters the domain without a monitor, pushes
+     * one frame whose anchor is resolved only if asked for, and calls the listener directly. Anything
+     * else takes the general path, unchanged. Both rethrow exactly what the listener threw.
+     */
     public static void callListener(final RegisteredListener registration, final Event event) throws org.bukkit.event.EventException {
         final LegacyPluginState state = event.isAsynchronous() ? null : stateOf(registration.getPlugin());
+        if (state == null) {
+            if (FRAME.get() == null) {
+                // No managed frame to clear: the native call is the whole job.
+                registration.callEvent(event);
+                return;
+            }
+            withFrame(null, listenerBody(registration, event));
+            return;
+        }
+        // Same skip RegisteredListener.callEvent makes, taken before waiting for the domain. Exact
+        // class only: a subclass may override callEvent, so it keeps the full path.
+        if (registration.getClass() == RegisteredListener.class && registration.isIgnoringCancelled()
+                && event instanceof Cancellable cancellable && cancellable.isCancelled()) {
+            state.listenerSkips.increment();
+            return;
+        }
+        if (LegacyCalls.RETURN_TO.get() == null) {
+            final LegacyCalls.Channel self = LegacyCalls.current();
+            final LegacyExecutionDomain domain = state.domain;
+            if (domain.tryEnterFast(self)) {
+                final Frame parent = FRAME.get();
+                FRAME.set(new Frame(state, event, parent));
+                try {
+                    state.countListenerEntry();
+                    countGlobalEntry(state);
+                    registration.callEvent(event);
+                } finally {
+                    FRAME.set(parent);
+                    domain.exit(self);
+                }
+                return;
+            }
+        }
+        // The body may run on another thread: resolve the anchor here, on the caller.
+        final LegacyAffinity affinity = affinityOf(event);
+        final java.util.function.Supplier<Void> listener = listenerBody(registration, event);
         final java.util.function.Supplier<Void> body = () -> {
+            state.countListenerEntry();
+            return listener.get();
+        };
+        LegacyCalls.callback(() -> call(state, affinity, false, body));
+    }
+
+    private static java.util.function.Supplier<Void> listenerBody(final RegisteredListener registration, final Event event) {
+        return () -> {
             try { registration.callEvent(event); return null; }
             catch (final Throwable failure) { throw LegacyCalls.unchecked(failure); }
         };
-        if (state == null) {
-            withFrame(null, body);
-        } else {
-            state.listenerCalls.increment();
-            // Same skip RegisteredListener.callEvent makes, taken before waiting for the domain. Exact
-            // class only: a subclass may override callEvent, so it keeps the full path.
-            if (registration.getClass() == RegisteredListener.class && registration.isIgnoringCancelled()
-                    && event instanceof Cancellable cancellable && cancellable.isCancelled()) {
-                return;
-            }
-            final LegacyAffinity affinity = affinityOf(event);
-            LegacyCalls.callback(() -> call(state, affinity, false, body));
-        }
     }
 
     public static <T> T callCommand(final Command command, final CommandSender sender,
@@ -236,7 +326,7 @@ public final class LegacyPluginRuntime {
         }
         state.serviceCalls.increment();
         final Frame parent = FRAME.get();
-        return call(state, parent != null ? parent.affinity : affinityOfThread(), false, body);
+        return call(state, parent != null ? parent.affinity() : affinityOfThread(), false, body);
     }
 
     /**
@@ -258,8 +348,9 @@ public final class LegacyPluginRuntime {
     static LegacyAffinity affinityForNewTask() {
         final Frame frame = FRAME.get();
         if (frame != null) {
-            if (frame.affinity.kind() != LegacyAffinity.Kind.NONE) {
-                return frame.affinity;
+            final LegacyAffinity affinity = frame.affinity();
+            if (affinity.kind() != LegacyAffinity.Kind.NONE) {
+                return affinity;
             }
             if (frame.lane) {
                 return LegacyAffinity.NONE;
@@ -305,6 +396,11 @@ public final class LegacyPluginRuntime {
     }
 
     static LegacyAffinity affinityOf(final Event event) {
+        return affinityOf(event, FRAME.get());
+    }
+
+    /** The anchor of {@code event}, falling back to the frame it was fired in, then to the thread. */
+    static LegacyAffinity affinityOf(final Event event, final Frame enclosing) {
         try {
             final Entity entity;
             if (event instanceof PlayerEvent playerEvent) {
@@ -331,8 +427,13 @@ public final class LegacyPluginRuntime {
         } catch (final Throwable ignored) {
             // Fall back to the thread's own answer.
         }
-        final Frame frame = FRAME.get();
-        return frame != null && frame.affinity.kind() != LegacyAffinity.Kind.NONE ? frame.affinity : affinityOfThread();
+        if (enclosing != null) {
+            final LegacyAffinity inherited = enclosing.affinity();
+            if (inherited.kind() != LegacyAffinity.Kind.NONE) {
+                return inherited;
+            }
+        }
+        return affinityOfThread();
     }
 
     // ------------------------------------------------------------------ lifecycle
