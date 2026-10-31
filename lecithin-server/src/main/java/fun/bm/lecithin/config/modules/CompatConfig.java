@@ -193,18 +193,4 @@ public class CompatConfig {
     @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "legacy-owner-bound-entries")
     public static boolean legacyOwnerBoundEntries = true;
-
-    /**
-     * Plugins, by name, that the operator declares safe to be entered from several regions at once
-     * although they do not declare {@code folia-supported}. A listed plugin runs on the native path
-     * exactly as if its descriptor declared Folia support: no serial domain, no legacy lane, no
-     * plugin-lifetime scheduler routing (its legacy sync tasks fall back to caller-context dispatch).
-     * It is a per-plugin {@code legacy-managed-execution=false}, for a plugin whose listeners are
-     * hot and whose author's code is known to tolerate concurrent entry. Empty by default: every
-     * legacy plugin keeps the managed contract unless an operator lists it. See {@link
-     * fun.bm.lecithin.compat.legacy.LegacyPluginRuntime}.
-     */
-    @DoNotLoad(when = EnumLoadType.RELOAD)
-    @ConfigInfo(name = "legacy-native-plugins")
-    public static java.util.List<String> legacyNativePlugins = java.util.List.of();
 }

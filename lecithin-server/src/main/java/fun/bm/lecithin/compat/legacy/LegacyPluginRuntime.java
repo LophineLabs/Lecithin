@@ -166,35 +166,12 @@ public final class LegacyPluginRuntime {
         if (folia) {
             return NATIVE;
         }
-        if (declaredNativeByOperator(plugin)) {
-            LOGGER.warn("[Lecithin] {} does not declare folia-supported but is listed in compat-config.legacy-native-plugins; "
-                    + "running it on the native path WITHOUT the Legacy Paper Runtime: several regions may be inside it at once",
-                    plugin.getName());
-            return NATIVE;
-        }
         LOGGER.info("[Lecithin] {} does not declare folia-supported; running it under the Legacy Paper "
                 + "Runtime (serial plugin domain, legacy lane for unanchored work)", plugin.getName());
         return new LegacyPluginState(plugin);
     }
 
     // ------------------------------------------------------------------ frames
-
-    /**
-     * An operator's statement that a plugin which does not declare Folia support may still be entered
-     * from several regions at once: {@code compat-config.legacy-native-plugins}, by plugin name.
-     */
-    private static boolean declaredNativeByOperator(final Plugin plugin) {
-        final List<String> names = CompatConfig.legacyNativePlugins;
-        if (names == null || names.isEmpty()) {
-            return false;
-        }
-        for (final String name : names) {
-            if (name != null && name.trim().equalsIgnoreCase(plugin.getName())) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     private static Frame enter(final LegacyPluginState state, final LegacyAffinity affinity, final boolean lane) {
         final Frame parent = FRAME.get();
