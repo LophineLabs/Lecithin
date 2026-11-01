@@ -52,6 +52,29 @@ public class CompatConfig {
     @ConfigInfo(name = "packet-receipt-timeout-millis")
     public static long packetReceiptTimeoutMillis = 1000;
 
+    /**
+     * Upper bound, in seconds, on how long a stop request waits for native Carpet work before
+     * Folia's region shutdown thread starts: /stop, /stop force, Bukkit.shutdown() and a failed
+     * region all pass this gate, and work that never completes used to keep the server alive with
+     * idle tick threads and no shutdown at all. On expiry the stuck work is named in the log and the
+     * normal shutdown runs: plugins disable, players and worlds save. A failed region has already
+     * halted every tick thread, so that path waits a few seconds at most. A value of 0 or less
+     * removes the bound.
+     */
+    @DoNotLoad(when = EnumLoadType.RELOAD)
+    @ConfigInfo(name = "shutdown-gate-timeout-seconds")
+    public static long shutdownGateTimeoutSeconds = 60;
+
+    /**
+     * Upper bound, in seconds, on how long a disconnected player waits for native work on it before
+     * it leaves the player list. While it waits the name stays taken and every login is refused as
+     * a duplicate. On expiry the stuck work is named in the log and the normal removal runs on the
+     * player's owner, with its quit event and save. A value of 0 or less removes the bound.
+     */
+    @DoNotLoad(when = EnumLoadType.RELOAD)
+    @ConfigInfo(name = "player-removal-timeout-seconds")
+    public static long playerRemovalTimeoutSeconds = 60;
+
     @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "riding-teleport")
     public static boolean ridingTeleport = true;

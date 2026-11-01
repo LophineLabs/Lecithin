@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 1 Nov 2026 19:35:50 +0800
+Subject: [PATCH] tell players about recipe changes on their own owner, once
+ per global tick
+
+
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+index 5dd2f820f9b77954422aa66e68921100407c8745..b7a75c241fbf55a721a6bbbf3bc54a0a283dbce1 100644
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -1707,8 +1707,12 @@ public abstract class PlayerList {
+         //     playerAdvancements.reload(this.server.getAdvancements());
+         // }
+         for (ServerPlayer player : this.players) {
+-            player.getAdvancements().reload(this.server.getAdvancements());
+-            player.getAdvancements().flushDirty(player, false); // CraftBukkit - trigger immediate flush of advancements
++            // Lecithin start - a plugin reaches this from any owner; the progress maps belong to the player's region
++            this.carpetAtPlayerOwner(player, owner -> {
++            owner.getAdvancements().reload(this.server.getAdvancements());
++            owner.getAdvancements().flushDirty(owner, false); // CraftBukkit - trigger immediate flush of advancements
++            });
++            // Lecithin end - a plugin reaches this from any owner; the progress maps belong to the player's region
+         }
+         // CraftBukkit end
+ 
+@@ -1729,9 +1733,25 @@ public abstract class PlayerList {
+         );
+ 
+         for (ServerPlayer player : this.players) {
+-            player.connection.send(recipes);
+-            player.getRecipeBook().sendInitialRecipeBook(player);
++            // Lecithin start - a plugin reaches this from any owner; the recipe book belongs to the player's region
++            this.carpetAtPlayerOwner(player, owner -> {
++            owner.connection.send(recipes);
++            owner.getRecipeBook().sendInitialRecipeBook(owner);
++            });
++            // Lecithin end - a plugin reaches this from any owner; the recipe book belongs to the player's region
+         }
+         org.leavesmc.leaves.protocol.core.LeavesProtocolManager.handleDataPackReload(); // Leaves - protocol core
+     }
++
++    // Lecithin start - run player-owned reload work on the player's own owner
++    private void carpetAtPlayerOwner(final ServerPlayer player, final java.util.function.Consumer<ServerPlayer> action) {
++        if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(player) || ca.spottedleaf.moonrise.common.util.TickThread.isShutdownThread()) {
++            action.accept(player);
++            return;
++        }
++        player.getBukkitEntity().taskScheduler.schedule((ServerPlayer owner) -> {
++            if (!owner.hasDisconnected()) action.accept(owner);
++        }, null, 1L);
++    }
++    // Lecithin end - run player-owned reload work on the player's own owner
+ }
+diff --git a/net/minecraft/world/item/crafting/RecipeManager.java b/net/minecraft/world/item/crafting/RecipeManager.java
+index 521bd6c6b71326465fa1e086c69daaaae1a78341..c621397fd00cc859db90ba567680413cbea04f29 100644
+--- a/net/minecraft/world/item/crafting/RecipeManager.java
++++ b/net/minecraft/world/item/crafting/RecipeManager.java
+@@ -206,8 +206,28 @@ public class RecipeManager implements RecipeAccess {
+         this.finalizeRecipeLoading(this.enabledFlags);
+         }
+         // Lecithin end - rebuilt under this manager's monitor, read by region threads without it
+-        net.minecraft.server.MinecraftServer.getServer().getPlayerList().reloadResources();
++        this.carpetTellPlayers();
++    }
++
++    // Lecithin start - tell players once per global tick
++    private final java.util.concurrent.atomic.AtomicBoolean carpetPlayersToldQueued = new java.util.concurrent.atomic.AtomicBoolean();
++
++    /**
++     * Telling players resends every advancement, tag and recipe to every player, and a plugin adds
++     * its recipes in a loop. A failure here must not fail the global tick that runs it.
++     */
++    private void carpetTellPlayers() {
++        if (!this.carpetPlayersToldQueued.compareAndSet(false, true)) return;
++        io.papermc.paper.threadedregions.RegionizedServer.getInstance().addTask(() -> {
++            this.carpetPlayersToldQueued.set(false);
++            try {
++                net.minecraft.server.MinecraftServer.getServer().getPlayerList().reloadResources();
++            } catch (final Throwable failure) {
++                LOGGER.error("Could not tell players about changed recipes", failure);
++            }
++        });
+     }
++    // Lecithin end - tell players once per global tick
+ 
+     public synchronized void finalizeRecipeLoading(final FeatureFlagSet enabledFlags) { // Lecithin - rebuilt under this manager's monitor, read by region threads without it
+         this.enabledFlags = enabledFlags;

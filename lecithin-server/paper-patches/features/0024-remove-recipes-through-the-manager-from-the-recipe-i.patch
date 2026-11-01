@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 1 Nov 2026 18:26:26 +0800
+Subject: [PATCH] remove recipes through the manager from the recipe iterator
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/RecipeIterator.java b/src/main/java/org/bukkit/craftbukkit/inventory/RecipeIterator.java
+index b7b342f77eb3b296e459dafd72f5f0214e244174..ffb8156e9f395ddb60c64365021297e6022072aa 100644
+--- a/src/main/java/org/bukkit/craftbukkit/inventory/RecipeIterator.java
++++ b/src/main/java/org/bukkit/craftbukkit/inventory/RecipeIterator.java
+@@ -28,9 +28,8 @@ public class RecipeIterator implements Iterator<Recipe> {
+ 
+     @Override
+     public void remove() {
+-        MinecraftServer.getServer().getRecipeManager().recipes.byKey.remove(this.currentRecipe.id());
+-        this.recipes.remove();
+-        MinecraftServer.getServer().getRecipeManager().finalizeRecipeLoading();
++        // Lecithin - this iterator walks a published copy that region threads may be reading
++        MinecraftServer.getServer().getRecipeManager().removeRecipe(this.currentRecipe.id());
+         MinecraftServer.getServer().getPlayerList().reloadRecipes();
+     }
+ }

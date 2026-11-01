@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 1 Nov 2026 18:26:25 +0800
+Subject: [PATCH] report a failed tick thread to the shutdown gate
+
+
+diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+index 38d2bc0f6442c6e7df91e9284cba5d133151d211..ca7b4ff0b7f1d42301c52afbca2ef9945018f1b3 100644
+--- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
++++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+@@ -340,11 +340,20 @@ public final class TickRegionScheduler {
+         // Luminol end
+     }
+ 
++    // Lecithin start - a stop request must not wait for work that can no longer run
++    private volatile boolean tickThreadsFailed;
++
++    public boolean tickThreadsFailed() {
++        return this.tickThreadsFailed;
++    }
++    // Lecithin end - a stop request must not wait for work that can no longer run
++
+     private void uncaughtException(final Thread thread, final Throwable thr) {
+         LOGGER.error("Uncaught exception in tick thread \"" + thread.getName() + "\"", thr);
+ 
+         // prevent further ticks from occurring
+         // we CANNOT sync, because WE ARE ON A SCHEDULER THREAD
++        this.tickThreadsFailed = true; // Lecithin - a stop request must not wait for work that can no longer run
+         this.scheduler.halt();
+ 
+         MinecraftServer.getServer().stopServer();
+@@ -355,6 +364,7 @@ public final class TickRegionScheduler {
+ 
+         // prevent further ticks from occurring
+         // we CANNOT sync, because WE ARE ON A SCHEDULER THREAD
++        this.tickThreadsFailed = true; // Lecithin - a stop request must not wait for work that can no longer run
+         this.scheduler.halt();
+ 
+         final ChunkPos center = handle.region == null ? null : handle.region.region.getCenterChunk();

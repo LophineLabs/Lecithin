@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 1 Nov 2026 20:42:31 +0800
+Subject: [PATCH] install world values in tests and except a Leaves-only event
+ from material rerouting
+
+
+diff --git a/src/test/java/org/bukkit/craftbukkit/legacy/MaterialReroutingTest.java b/src/test/java/org/bukkit/craftbukkit/legacy/MaterialReroutingTest.java
+index f6b04513355c0c56d30126faa667e22c9d989818..b297e276f786f499e7ff55840e0f3d0c48b88d21 100644
+--- a/src/test/java/org/bukkit/craftbukkit/legacy/MaterialReroutingTest.java
++++ b/src/test/java/org/bukkit/craftbukkit/legacy/MaterialReroutingTest.java
+@@ -59,6 +59,8 @@ public class MaterialReroutingTest {
+                 // Paper start - types that cannot be translated to ItemType/BlockType
+                 .filter(entry -> !entry.getName().equals("com/destroystokyo/paper/MaterialSetTag.class"))
+                 // Paper end - types that cannot be translated to ItemType/BlockType
++                // Lecithin - a Leaves-only event: no plugin old enough to need material rerouting can call it
++                .filter(entry -> !entry.getName().equals("org/leavesmc/leaves/event/player/UpdateSuppressionEvent.class"))
+                 .map(entry -> {
+                     try {
+                         return MaterialReroutingTest.jarFile.getInputStream(entry);
+diff --git a/src/test/java/org/bukkit/support/extension/BaseExtension.java b/src/test/java/org/bukkit/support/extension/BaseExtension.java
+index 780988a699f97dc574a3ee57869a816d4f76d117..3a0c18bd400afcafe07c1b4ef112d8f25a53268c 100644
+--- a/src/test/java/org/bukkit/support/extension/BaseExtension.java
++++ b/src/test/java/org/bukkit/support/extension/BaseExtension.java
+@@ -13,6 +13,12 @@ import org.junit.jupiter.api.extension.ExtensionContext;
+ 
+ public abstract class BaseExtension implements BeforeAllCallback, BeforeEachCallback {
+ 
++    // Lecithin start - config classes read this factory while initialising; the server installs it first thing in Main
++    static {
++        me.earthme.luminol.api.config.WorldValues.setInstance(new me.earthme.luminol.config.ServerWorldValues());
++    }
++    // Lecithin end - config classes read this factory while initialising; the server installs it first thing in Main
++
+     private static final Set<String> IGNORE_TAGS = Sets.newHashSet();
+ 
+     private static String currentlyRunning = null;

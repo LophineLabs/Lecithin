@@ -1,0 +1,144 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Sun, 1 Nov 2026 18:26:25 +0800
+Subject: [PATCH] copy recipe maps on write so a plugin's change cannot fail a
+ reading region
+
+
+diff --git a/net/minecraft/world/item/crafting/RecipeManager.java b/net/minecraft/world/item/crafting/RecipeManager.java
+index 1481626d2d26498e1a32b8135ca08e5f623d931b..521bd6c6b71326465fa1e086c69daaaae1a78341 100644
+--- a/net/minecraft/world/item/crafting/RecipeManager.java
++++ b/net/minecraft/world/item/crafting/RecipeManager.java
+@@ -51,12 +51,14 @@ public class RecipeManager implements RecipeAccess {
+         RecipePropertySet.BREWING_REAGENTS,
+         recipe -> recipe instanceof BrewingRecipe brewingRecipe ? Optional.of(brewingRecipe.getReagent().ingredient()) : Optional.empty()
+     );
+-    public RecipeMap recipes;
+-    private Map<ResourceKey<RecipePropertySet>, RecipePropertySet> propertySets = Map.of();
+-    private SelectableRecipe.SingleInputSet<StonecutterRecipe> stonecutterRecipes = SelectableRecipe.SingleInputSet.empty();
+-    private List<RecipeManager.ServerDisplayInfo> allDisplays = List.of();
+-    private Map<ResourceKey<Recipe<?>>, List<RecipeManager.ServerDisplayInfo>> recipeToDisplay = Map.of();
+-    private Collection<RecipeHolder<?>> learnableRecipes;
++    // Lecithin start - rebuilt under this manager's monitor, read by region threads without it
++    public volatile RecipeMap recipes;
++    private volatile Map<ResourceKey<RecipePropertySet>, RecipePropertySet> propertySets = Map.of();
++    private volatile SelectableRecipe.SingleInputSet<StonecutterRecipe> stonecutterRecipes = SelectableRecipe.SingleInputSet.empty();
++    private volatile List<RecipeManager.ServerDisplayInfo> allDisplays = List.of();
++    private volatile Map<ResourceKey<Recipe<?>>, List<RecipeManager.ServerDisplayInfo>> recipeToDisplay = Map.of();
++    private volatile Collection<RecipeHolder<?>> learnableRecipes;
++    // Lecithin end - rebuilt under this manager's monitor, read by region threads without it
+     private final Map<ResourceKey<Recipe<?>>, RecipeHolder<?>> carpetInjectedRecipes = new java.util.HashMap<>();
+     private List<Boolean> carpetRecipeOptions;
+ 
+@@ -106,6 +108,7 @@ public class RecipeManager implements RecipeAccess {
+     }
+ 
+     public void carpetReloadCompatRecipes() {
++        synchronized (this) { // Lecithin - rebuilt under this manager's monitor, read by region threads without it
+         if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.recipeRuleValues().equals(this.carpetRecipeOptions)) return;
+         for (Map.Entry<ResourceKey<Recipe<?>>, RecipeHolder<?>> entry : this.carpetInjectedRecipes.entrySet()) {
+             if (this.recipes.byKey(entry.getKey()) == entry.getValue()) this.recipes.removeRecipe(entry.getKey());
+@@ -113,6 +116,7 @@ public class RecipeManager implements RecipeAccess {
+         this.carpetInjectedRecipes.clear();
+         this.injectCompatRecipes(this.recipes);
+         this.learnableRecipes = this.recipes.values().stream().filter(r -> !r.value().isSpecial()).collect(Collectors.toUnmodifiableList());
++        } // Lecithin - rebuilt under this manager's monitor, read by region threads without it
+         this.finalizeRecipeLoading();
+     }
+ 
+@@ -195,15 +199,17 @@ public class RecipeManager implements RecipeAccess {
+     private FeatureFlagSet enabledFlags;
+ 
+     public void finalizeRecipeLoading() {
++        // Lecithin start - rebuilt under this manager's monitor, read by region threads without it
++        synchronized (this) {
+         this.learnableRecipes = this.recipes.values().stream().filter(r -> !r.value().isSpecial()).toList(); // Paper - refresh learnable recipes after runtime recipe changes
+-        if (this.enabledFlags != null) {
+-            this.finalizeRecipeLoading(this.enabledFlags);
+-
+-            net.minecraft.server.MinecraftServer.getServer().getPlayerList().reloadResources();
++        if (this.enabledFlags == null) return;
++        this.finalizeRecipeLoading(this.enabledFlags);
+         }
++        // Lecithin end - rebuilt under this manager's monitor, read by region threads without it
++        net.minecraft.server.MinecraftServer.getServer().getPlayerList().reloadResources();
+     }
+ 
+-    public void finalizeRecipeLoading(final FeatureFlagSet enabledFlags) {
++    public synchronized void finalizeRecipeLoading(final FeatureFlagSet enabledFlags) { // Lecithin - rebuilt under this manager's monitor, read by region threads without it
+         this.enabledFlags = enabledFlags;
+         // CraftBukkit end
+         List<SelectableRecipe.SingleInputEntry<StonecutterRecipe>> stonecutterRecipes = new ArrayList<>();
+diff --git a/net/minecraft/world/item/crafting/RecipeMap.java b/net/minecraft/world/item/crafting/RecipeMap.java
+index b6142dc1f3b8b358965c16dcacf5a5979470b239..1a7d44ae33d2f74e3ac5fea9104d91b86fd0afed 100644
+--- a/net/minecraft/world/item/crafting/RecipeMap.java
++++ b/net/minecraft/world/item/crafting/RecipeMap.java
+@@ -14,8 +14,12 @@ import org.jspecify.annotations.Nullable;
+ 
+ public class RecipeMap {
+     public static final RecipeMap EMPTY = new RecipeMap(ImmutableMultimap.of(), Map.of());
+-    public final Multimap<RecipeType<?>, RecipeHolder<?>> byType;
+-    public final Map<ResourceKey<Recipe<?>>, RecipeHolder<?>> byKey;
++    // Lecithin start - copy on write: region threads read these while a plugin adds or removes a recipe
++    // from another owner, so a change publishes a new copy and a reader keeps iterating what it started with.
++    public volatile Multimap<RecipeType<?>, RecipeHolder<?>> byType;
++    public volatile Map<ResourceKey<Recipe<?>>, RecipeHolder<?>> byKey;
++    private final Object writeLock = new Object();
++    // Lecithin end - copy on write
+ 
+     private RecipeMap(final Multimap<RecipeType<?>, RecipeHolder<?>> byType, final Map<ResourceKey<Recipe<?>>, RecipeHolder<?>> byKey) {
+         this.byType = byType;
+@@ -40,25 +44,41 @@ public class RecipeMap {
+ 
+     public void addRecipe(RecipeHolder<?> holder) {
+         holder = holder.asRuntimeAddedRecipe(); // Mark recipes holder as added during runtime
+-        Collection<RecipeHolder<?>> recipes = this.byType.get(holder.value().getType());
+-
+-        if (this.byKey.containsKey(holder.id())) {
+-            throw new IllegalStateException("Duplicate recipe ignored with ID " + holder.id());
+-        } else {
+-            recipes.add(holder);
+-            this.byKey.put(holder.id(), holder);
++        // Lecithin start - copy on write
++        if (this == EMPTY) throw new UnsupportedOperationException("The empty recipe map is shared");
++        synchronized (this.writeLock) {
++            if (this.byKey.containsKey(holder.id())) {
++                throw new IllegalStateException("Duplicate recipe ignored with ID " + holder.id());
++            }
++            Multimap<RecipeType<?>, RecipeHolder<?>> types = com.google.common.collect.LinkedHashMultimap.create(this.byType);
++            Map<ResourceKey<Recipe<?>>, RecipeHolder<?>> keys = com.google.common.collect.Maps.newLinkedHashMap(this.byKey);
++            types.put(holder.value().getType(), holder);
++            keys.put(holder.id(), holder);
++            // Keyed lookups come first: whoever finds a recipe by type can look it up by key.
++            this.byKey = keys;
++            this.byType = types;
+         }
++        // Lecithin end - copy on write
+     }
+     // CraftBukkit end
+ 
+     // Paper start - replace removeRecipe implementation
+     public boolean removeRecipe(ResourceKey<Recipe<?>> id) {
+-        final RecipeHolder<?> remove = this.byKey.remove(id);
+-        if (remove == null) {
+-            return false;
++        // Lecithin start - copy on write
++        synchronized (this.writeLock) {
++            final RecipeHolder<?> remove = this.byKey.get(id);
++            if (remove == null) {
++                return false;
++            }
++            Multimap<RecipeType<?>, RecipeHolder<?>> types = com.google.common.collect.LinkedHashMultimap.create(this.byType);
++            Map<ResourceKey<Recipe<?>>, RecipeHolder<?>> keys = com.google.common.collect.Maps.newLinkedHashMap(this.byKey);
++            keys.remove(id);
++            final boolean removed = types.remove(remove.value().getType(), remove);
++            this.byType = types;
++            this.byKey = keys;
++            return removed;
+         }
+-        final Collection<? extends RecipeHolder<?>> recipes = this.byType(remove.value().getType());
+-        return recipes.remove(remove);
++        // Lecithin end - copy on write
+     }
+     // Paper end - replace removeRecipe implementation
+ 
