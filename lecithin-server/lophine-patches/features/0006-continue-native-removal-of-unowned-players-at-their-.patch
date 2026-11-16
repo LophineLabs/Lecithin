@@ -60,12 +60,12 @@ index 0000000000000000000000000000000000000000..ea1ef74f35fed58c7e9dbad7c2bf7573
 +    }
 +}
 diff --git a/src/main/java/carpet/script/external/ScarpetExplosionActors.java b/src/main/java/carpet/script/external/ScarpetExplosionActors.java
-index 8107583f56d6e3ada4706dddb207c8d0644a78be..cc2c4ccd5c7ea9b96ce9bf8b9b5b060bef2ce287 100644
+index 49577585a582c6ac5d1b70d4e9d0f312467e2335..280254a18107130e0fd48ba41f4fb94d98697a9a 100644
 --- a/src/main/java/carpet/script/external/ScarpetExplosionActors.java
 +++ b/src/main/java/carpet/script/external/ScarpetExplosionActors.java
-@@ -74,6 +74,13 @@ public final class ScarpetExplosionActors {
+@@ -102,6 +102,13 @@ public final class ScarpetExplosionActors {
                      result.complete(unadmittedRetirement.get());
-                 else retired(entity, captured, result, 0);
+                 else retired(entity, captured, result, 0, later);
              };
 +            if (ScarpetEntityOwnership.unowned(entity)) {
 +                // Its scheduler will never run or retire; continue at the region that owns its final position.

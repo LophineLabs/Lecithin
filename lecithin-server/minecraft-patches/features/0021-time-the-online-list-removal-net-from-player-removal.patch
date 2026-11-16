@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TinyYana <yanasakuranight@gmail.com>
+Date: Mon, 16 Nov 2026 21:24:15 +0800
+Subject: [PATCH] time the online-list removal net from
+ player-removal-timeout-seconds
+
+Lophine (c99370f) drops a player whose removal has not finished within a
+fixed 10 s of the disconnect from players and playersByUUID, so a stuck
+continuation cannot leave a ghost session that refuses every later login
+(#217). Lecithin already bounds that wait with player-removal-timeout-seconds
+(default 60) and falls back to the region owning the player's position when
+its scheduler never runs the removal; both keep the quit event and the save.
+A fixed 10 s net fires before either can: it drops the player before its
+removal ran, and the late save can land while a new session of the same
+account is already online.
+
+The net now waits three bounds, one each for the native work, the owner hop
+or its fallback, and the removal itself. It still fires when the removal
+cannot run at all, logs what it was waiting for, and is off when the bound
+is off.
+
+Divergence from Lophine: with the default 60 s, a ghost session whose removal
+can never run lasts up to 180 s instead of 10 s.
+
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+index 43d45ec25867a93d9ce82ce27b729efb520fbe94..ae0c85174b9377001f45bfb8634ed9be7d78e09c 100644
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -888,13 +888,19 @@ public abstract class PlayerList {
+         // dropped from players/playersByUUID so a later login with the same UUID can place a new one.
+         // Without it a stuck continuation left a ghost session and every retry was rejected with
+         // "You logged in from another location" until the server restarted (upstream issue #217).
+-        completed = completed.orTimeout(10L, java.util.concurrent.TimeUnit.SECONDS);
++        // Lecithin start - time the online-list net from player-removal-timeout-seconds
++        // A fixed 10 s from the disconnect would cut off the bounded wait for native work, the owner
++        // fallback, and the quit event and save they guarantee; see ScarpetPlayerInventoryGate#removalNetSeconds.
++        final long lecithinNetSeconds = carpet.script.external.ScarpetPlayerInventoryGate.removalNetSeconds();
++        if (lecithinNetSeconds > 0) completed = completed.orTimeout(lecithinNetSeconds, java.util.concurrent.TimeUnit.SECONDS);
++        // Lecithin end - time the online-list net from player-removal-timeout-seconds
+         completed.whenComplete((ignored, failure) -> {
+             if (failure != null) {
+                 this.dropOnlinePlayer(player);
+                 carpet.script.external.ScarpetPlayerInventoryGate.retired(player);
+                 if (failure instanceof java.util.concurrent.TimeoutException)
+-                    LOGGER.error("Player removal for {} did not finish in 10s; dropping it from the online list", player.getPlainTextName());
++                    LOGGER.error("Player removal for {} did not finish in {} s; dropping it from the online list before its quit event and save ran. Still waiting on: {}", // Lecithin - name what the removal waited for
++                        player.getPlainTextName(), lecithinNetSeconds, carpet.script.external.ScarpetPlayerInventoryGate.describeStuckRemoval(player)); // Lecithin - name what the removal waited for
+                 else
+                     LOGGER.error("Player removal failed; dropping {} from the online list", player.getPlainTextName(), failure);
+             }

@@ -6,10 +6,10 @@ Subject: [PATCH] tell players about recipe changes on their own owner, once
 
 
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index 5dd2f820f9b77954422aa66e68921100407c8745..b7a75c241fbf55a721a6bbbf3bc54a0a283dbce1 100644
+index a46ada083d9ea0db75c4759a64d3f896c968c4d6..43d45ec25867a93d9ce82ce27b729efb520fbe94 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
-@@ -1707,8 +1707,12 @@ public abstract class PlayerList {
+@@ -1752,8 +1752,12 @@ public abstract class PlayerList {
          //     playerAdvancements.reload(this.server.getAdvancements());
          // }
          for (ServerPlayer player : this.players) {
@@ -24,7 +24,7 @@ index 5dd2f820f9b77954422aa66e68921100407c8745..b7a75c241fbf55a721a6bbbf3bc54a0a
          }
          // CraftBukkit end
  
-@@ -1729,9 +1733,25 @@ public abstract class PlayerList {
+@@ -1774,9 +1778,25 @@ public abstract class PlayerList {
          );
  
          for (ServerPlayer player : this.players) {

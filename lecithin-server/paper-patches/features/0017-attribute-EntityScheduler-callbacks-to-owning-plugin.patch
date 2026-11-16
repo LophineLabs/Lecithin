@@ -6,7 +6,7 @@ Subject: [PATCH] attribute EntityScheduler callbacks to owning plugin in
 
 
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
-index 811b8efd155540beac19b70afa1885bff570cd3e..8339b79adee43b1018b9f718f708d39b2b32fe83 100644
+index 8dd612a8c632cbac03cd02bb457fd0605df46d1b..ac21c29d220be1c6982fa585138c871afa4b8117 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
 @@ -15,6 +15,25 @@ public final class FoliaEntityScheduler implements EntityScheduler {
@@ -97,5 +97,5 @@ index 811b8efd155540beac19b70afa1885bff570cd3e..8339b79adee43b1018b9f718f708d39b
 +                    profiler.stopTimer(this.timerId);
 +                }
                  boolean reschedule = false;
-                  if (!repeating && !retired) {
+                 if (!repeating && !retired) {
                      this.setStateVolatile(STATE_FINISHED);

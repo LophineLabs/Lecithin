@@ -52,28 +52,28 @@ completes and a player who left is cleaned up by the normal disconnect path.
 Kill switch: event-config.respawn-event=false.
 
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index f6877a587a66ec0f78286bb5a16314863bca9645..4f9b4bbc5b091736b2b9a03a78724b2796f975ec 100644
+index dcb9a91100cfd9a1e6ef4eb054d0558e8efc4171..95bda540824c78473adbe3d309e573f68d4da8b1 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -1975,13 +1975,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1978,13 +1978,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          this.isChangingDimension = true;
          origin.removePlayerImmediately(this, RemovalReason.CHANGED_DIMENSION);
          if (!carpet.script.external.ScarpetNativeRemovals.thenOwner(this, () ->
--            this.carpetRespawnAfterRemoval(origin, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive))) {
--            this.carpetRespawnAfterRemoval(origin, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive);
-+            this.carpetRespawnAfterRemoval(origin, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive, reason))) { // Lecithin - PlayerRespawnEvent reports the reason
-+            this.carpetRespawnAfterRemoval(origin, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive, reason); // Lecithin - PlayerRespawnEvent reports the reason
+-            this.carpetRespawnAfterRemoval(origin, originPos, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive))) {
+-            this.carpetRespawnAfterRemoval(origin, originPos, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive);
++            this.carpetRespawnAfterRemoval(origin, originPos, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive, reason))) { // Lecithin - PlayerRespawnEvent reports the reason
++            this.carpetRespawnAfterRemoval(origin, originPos, respawnConfig, respawnWorld, finalRespawnCompleteCallback, passengerTree, alive, reason); // Lecithin - PlayerRespawnEvent reports the reason
          }
      }
  
-     private void carpetRespawnAfterRemoval(ServerLevel origin, ServerPlayer.RespawnConfig respawnConfig, ServerLevel respawnWorld,
+     private void carpetRespawnAfterRemoval(ServerLevel origin, Vec3 originPos, ServerPlayer.RespawnConfig respawnConfig, ServerLevel respawnWorld,
 -        java.util.function.Consumer<ServerPlayer> finalRespawnCompleteCallback, EntityTreeNode passengerTree, boolean alive) {
 +        java.util.function.Consumer<ServerPlayer> finalRespawnCompleteCallback, EntityTreeNode passengerTree, boolean alive,
 +        org.bukkit.event.player.PlayerRespawnEvent.RespawnReason reason) { // Lecithin - fire PlayerRespawnEvent, which needs the reason the caller was given
          // reset player if needed, only after removal from world
          if (!alive) {
              ServerPlayer.this.reset();
-@@ -1992,9 +1993,28 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1995,9 +1996,28 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          ca.spottedleaf.concurrentutil.completable.CallbackCompletable<org.bukkit.Location> spawnPosComplete =
              new ca.spottedleaf.concurrentutil.completable.CallbackCompletable<>();
          boolean[] usedRespawnAnchor = new boolean[1];
@@ -102,7 +102,7 @@ index f6877a587a66ec0f78286bb5a16314863bca9645..4f9b4bbc5b091736b2b9a03a78724b27
              // update pos and velocity
              ServerPlayer.this.setPosRaw(spawnLoc.getX(), spawnLoc.getY(), spawnLoc.getZ());
              ServerPlayer.this.setYRot(spawnLoc.getYaw());
-@@ -2051,6 +2071,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2054,6 +2074,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                      ).orElse(null);
                      if (spawnPos == null) {
                          // no spawn
@@ -110,7 +110,7 @@ index f6877a587a66ec0f78286bb5a16314863bca9645..4f9b4bbc5b091736b2b9a03a78724b27
                          ServerPlayer.this.connection.send(
                              new ClientboundGameEventPacket(ClientboundGameEventPacket.NO_RESPAWN_BLOCK_AVAILABLE, 0.0F)
                          );
-@@ -2065,6 +2086,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2068,6 +2089,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                      boolean isRespawnAnchor = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.world.level.block.Blocks.RESPAWN_ANCHOR);
                      boolean isBed = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.tags.BlockTags.BEDS);
                      usedRespawnAnchor[0] = !alive && isRespawnAnchor;

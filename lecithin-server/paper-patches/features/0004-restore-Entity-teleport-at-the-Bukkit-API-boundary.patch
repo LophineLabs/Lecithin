@@ -6,10 +6,10 @@ Subject: [PATCH] restore Entity#teleport at the Bukkit API boundary
 Folia replaces CraftEntity/CraftPlayer teleport0 with an unconditional throw, so every Paper plugin that calls Entity#teleport(Location) is broken regardless of whether the move would be safe. Delegate to the platform's own teleportAsync and read the future without waiting: already-completed means Folia took its same-region fast path and did the move inline, so the real result is Paper's behaviour exactly; not-completed means the destination is another region/world and the teleport was accepted but has not happened yet, which is reported as true with a once-per-callsite diagnostic. No ownership check is bypassed and nothing is dispatched to the global scheduler.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 9800fae6a1d48a258a4e681bd05d809849d82ef0..7474a4f47759dc5830a2107bbfeaaf804a6ccf1d 100644
+index 7f23db18b098035d0a3e4d85541e07a1ff548b09..583b298a3ff721c12c7db3a7070bc5108c86a59c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -328,8 +328,13 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -330,8 +330,13 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      protected boolean teleport0(Location location, TeleportCause cause, TeleportFlag... flags) {
          // Folia start - region threading

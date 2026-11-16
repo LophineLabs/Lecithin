@@ -1,4 +1,4 @@
-package fun.bm.lophine.carpet;
+package fun.bm.lophine.carpet.ams;
 
 import carpet.script.external.ScarpetNativeWork;
 import io.netty.channel.ChannelFuture;

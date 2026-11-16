@@ -51,10 +51,10 @@ answer the per-region question, from any thread.
 Kill switch: compat-config.server-tps-off-region=false.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index f9859b4e9d78fde5f5bb325082dc5a8c30b12ca6..66d5ec36bcd05c27fd82a38336f0f3dffb5da47a 100644
+index cb5528f20ef6e88cb4c5d7d8c2ed4fd787ff616d..be55fa1e9931db3eb5b18a69cf27c150fefa0385 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -2801,6 +2801,13 @@ public final class CraftServer implements Server {
+@@ -2822,6 +2822,13 @@ public final class CraftServer implements Server {
  
      @Override
      public double getAverageTickTime() {
@@ -68,7 +68,7 @@ index f9859b4e9d78fde5f5bb325082dc5a8c30b12ca6..66d5ec36bcd05c27fd82a38336f0f3df
          // Folia start - region threading
          ca.spottedleaf.concurrentutil.scheduler.SchedulableTick task = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentTickingTask();
          if (task == null) {
-@@ -2874,6 +2881,15 @@ public final class CraftServer implements Server {
+@@ -2895,6 +2902,15 @@ public final class CraftServer implements Server {
  
      @Override
      public double[] getTPS() {

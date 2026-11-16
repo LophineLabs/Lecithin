@@ -81,10 +81,10 @@ index 4c871ad7893e714018f088dd0baefda1c3089343..82f36a77b2945681d34da08ba2d672ba
              if (!registration.getPlugin().isEnabled()) {
                  continue;
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-index f7552dcbaa1c9060254bd6490324a022c8d25937..2c5792223d2f78ce0bfa991182f2be378ca9e90c 100644
+index 4020fc455d4d0de11e891932e8cf48e6cbd538df..551fcff5607426b60ad5e81d7d7db0a7f030acd5 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-@@ -278,6 +278,15 @@ class PaperPluginInstanceManager {
+@@ -280,6 +280,15 @@ class PaperPluginInstanceManager {
          }
          // Lecithin end - restored async scheduler: cancel Bukkit tasks on disable, like Paper does
  

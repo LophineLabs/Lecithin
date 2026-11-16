@@ -5,7 +5,7 @@ Subject: [PATCH] bound native packet receipts the pipeline never acknowledges
 
 
 diff --git a/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java b/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java
-index 165187b79906a73ab247778cc7428aa12056ccb3..2b2c507cc4d88345f376732da01c8d1f569ed573 100644
+index 165187b79906a73ab247778cc7428aa12056ccb3..7cc6c749c374f8deb6edc0910bb7b5516e7ee7b5 100644
 --- a/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java
 +++ b/src/main/java/carpet/script/external/ScarpetDragonDeathContinuations.java
 @@ -335,22 +335,9 @@ public final class ScarpetDragonDeathContinuations {
@@ -31,14 +31,14 @@ index 165187b79906a73ab247778cc7428aa12056ccb3..2b2c507cc4d88345f376732da01c8d1f
 -            receipt.completeExceptionally(failure);
 -            throw failure;
 -        }
-+        fun.bm.lophine.carpet.AmsNativeCommandEffects.packet(player, new ClientboundLevelEventPacket(LevelEvent.SOUND_DRAGON_DEATH, position, 0, true));
++        fun.bm.lophine.carpet.ams.AmsNativeCommandEffects.packet(player, new ClientboundLevelEventPacket(LevelEvent.SOUND_DRAGON_DEATH, position, 0, true));
      }
  }
-diff --git a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
-index 761d737f3f58271d875fc227b4317bbecd16486d..05ecf9c23fd4aa99bf9f8e83e424e89062b450f0 100644
---- a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
-+++ b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
-@@ -127,8 +127,37 @@ public final class AmsNativeCommandEffects {
+diff --git a/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java b/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java
+index 2fba1356df2613a1fae986c69ca13270cee04b25..61a2300fa3186a156a3bc7242e6baaa6ef85a4f9 100644
+--- a/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java
++++ b/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java
+@@ -129,8 +129,37 @@ public final class AmsNativeCommandEffects {
          return protectedValue(player.carpetSpawnServer(), () -> TisCommandContinuations.owned(player, () -> value(body)));
      }
  
@@ -76,7 +76,7 @@ index 761d737f3f58271d875fc227b4317bbecd16486d..05ecf9c23fd4aa99bf9f8e83e424e890
       */
      public static CompletableFuture<Void> packet(ServerPlayer player, net.minecraft.network.protocol.Packet<?> packet) {
          var actual = new CompletableFuture<Void>() {
-@@ -173,6 +202,19 @@ public final class AmsNativeCommandEffects {
+@@ -175,6 +204,19 @@ public final class AmsNativeCommandEffects {
                      }
                  }
              });

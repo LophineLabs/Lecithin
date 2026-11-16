@@ -75,21 +75,22 @@ index 82f36a77b2945681d34da08ba2d672bad767d982..4ef1a9965bb49c1ce0bde16e253be34d
          }
      }
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-index 2c5792223d2f78ce0bfa991182f2be378ca9e90c..5b0efe5e0b87048c52180618c26ec57a1a5041b3 100644
+index 551fcff5607426b60ad5e81d7d7db0a7f030acd5..998706b4be25eac6bc02f87a041d012b4ba8564b 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-@@ -201,7 +201,10 @@ class PaperPluginInstanceManager {
+@@ -201,8 +201,11 @@ class PaperPluginInstanceManager {
              fun.bm.lecithin.compat.LecithinPaperLibAdapter.install(jPlugin);
              // Lecithin end
  
 +            final fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.Frame lecithin$frame =
 +                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enterLifecycle(jPlugin); // Lecithin - Legacy Paper Runtime
              try {
+                 fun.bm.lophine.carpet.api.LophineCarpetApi.pluginEnabling(plugin); // Lophine - reopen extension admission before onEnable
 +                fun.bm.lecithin.compat.legacy.LegacyPluginRuntime.enabled(jPlugin); // Lecithin - Legacy Paper Runtime
                  jPlugin.setEnabled(true);
              } catch (Throwable ex) {
                  this.server.getLogger().log(Level.SEVERE, "Error occurred while enabling " + plugin.getPluginMeta().getDisplayName() + " (Is it up to date?)", ex);
-@@ -209,6 +212,8 @@ class PaperPluginInstanceManager {
+@@ -210,6 +213,8 @@ class PaperPluginInstanceManager {
                  this.server.getPluginManager().disablePlugin(jPlugin);
                  return;
                  // Paper end
@@ -98,7 +99,7 @@ index 2c5792223d2f78ce0bfa991182f2be378ca9e90c..5b0efe5e0b87048c52180618c26ec57a
              }
  
              // Perhaps abort here, rather than continue going, but as it stands,
-@@ -236,10 +241,15 @@ class PaperPluginInstanceManager {
+@@ -238,10 +243,15 @@ class PaperPluginInstanceManager {
              plugin.getLogger().info("Disabling %s".formatted(pluginName));
  
              this.server.getPluginManager().callEvent(new PluginDisableEvent(plugin));
@@ -114,7 +115,7 @@ index 2c5792223d2f78ce0bfa991182f2be378ca9e90c..5b0efe5e0b87048c52180618c26ec57a
              }
  
              // Flush async appender before unloading, avoids issues when a log message with class context
-@@ -285,6 +295,7 @@ class PaperPluginInstanceManager {
+@@ -287,6 +297,7 @@ class PaperPluginInstanceManager {
              fun.bm.lecithin.compat.LecithinDispatchedTasks.cancelAll(plugin);
          } catch (Throwable ignored) {
          }
@@ -123,10 +124,10 @@ index 2c5792223d2f78ce0bfa991182f2be378ca9e90c..5b0efe5e0b87048c52180618c26ec57a
  
          // Paper start - Folia schedulers
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 66d5ec36bcd05c27fd82a38336f0f3dffb5da47a..a87b6e6e640edd7a007011915b04d7882ebce83d 100644
+index be55fa1e9931db3eb5b18a69cf27c150fefa0385..a1f6ca24458d65fadb31854d78d146de0e632326 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -2409,7 +2409,8 @@ public final class CraftServer implements Server {
+@@ -2430,7 +2430,8 @@ public final class CraftServer implements Server {
  
      @Override
      public boolean isPrimaryThread() {

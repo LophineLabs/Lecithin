@@ -41,10 +41,10 @@ restore made reachable:
    the same kill switch, matching Paper's disable semantics.
 
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-index 455e8c24d98fcd0ae0a349737a0e709a05ed9170..54e966cb1fb51fc74162748a39bb7172758bd5c0 100644
+index c39cdc2f101b32f5f77290d4047b531077014a9a..c025efea6546e5cd919fd94e72e4790e0a6f12c4 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-@@ -260,6 +260,19 @@ class PaperPluginInstanceManager {
+@@ -262,6 +262,19 @@ class PaperPluginInstanceManager {
          }
  
          // Folia - region threading
@@ -65,7 +65,7 @@ index 455e8c24d98fcd0ae0a349737a0e709a05ed9170..54e966cb1fb51fc74162748a39bb7172
          // Paper start - Folia schedulers
          try {
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
-index f20f2735fbb4d1e38d576eafe18a0054a45aa59e..11c68f3cdeae65eff232ebfbc9ebd7cf600305d1 100644
+index db0c4069962c30199b552ac93724fb73add92702..3ce5d0d34ef66f51267ed7030d33f46a78c76fca 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 @@ -20,6 +20,19 @@ public class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {

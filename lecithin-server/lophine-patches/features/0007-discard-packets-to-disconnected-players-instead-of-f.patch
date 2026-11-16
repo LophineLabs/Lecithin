@@ -5,11 +5,11 @@ Subject: [PATCH] discard packets to disconnected players instead of failing
  natively
 
 
-diff --git a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
-index 4300223dc14c2507afd783aa46f2bfcfecc02132..761d737f3f58271d875fc227b4317bbecd16486d 100644
---- a/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
-+++ b/src/main/java/fun/bm/lophine/carpet/AmsNativeCommandEffects.java
-@@ -148,23 +148,30 @@ public final class AmsNativeCommandEffects {
+diff --git a/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java b/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java
+index d728c66ba404ec5701bb8e5b742ea72a597cfdce..2fba1356df2613a1fae986c69ca13270cee04b25 100644
+--- a/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java
++++ b/src/main/java/fun/bm/lophine/carpet/ams/AmsNativeCommandEffects.java
+@@ -150,23 +150,30 @@ public final class AmsNativeCommandEffects {
                  actual.complete(null);
                  return actual;
              }

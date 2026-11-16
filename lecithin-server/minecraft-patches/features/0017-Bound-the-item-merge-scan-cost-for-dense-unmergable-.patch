@@ -5,7 +5,7 @@ Subject: [PATCH] Bound the item merge scan cost for dense unmergable piles
 
 
 diff --git a/net/minecraft/world/entity/item/ItemEntity.java b/net/minecraft/world/entity/item/ItemEntity.java
-index c74df43ed794366ee9dcc837d52c8b780f762231..d0e23bca83821483d82a4bbd08be0c8d7c69d6a6 100644
+index c1e799350a4b87d00767a3255e4ca71231789bff..d68b1430ed4ad7167037995f131313cf5465e0e9 100644
 --- a/net/minecraft/world/entity/item/ItemEntity.java
 +++ b/net/minecraft/world/entity/item/ItemEntity.java
 @@ -55,6 +55,10 @@ public class ItemEntity extends Entity implements TraceableEntity, net.caffeinem
@@ -62,7 +62,7 @@ index c74df43ed794366ee9dcc837d52c8b780f762231..d0e23bca83821483d82a4bbd08be0c8d
 +            final net.minecraft.world.phys.AABB scanBox = this.getBoundingBox().inflate(radius, this.level().paperConfig().entities.behavior.onlyMergeItemsHorizontally ? 0 : radius - 0.5D, radius); // Spigot // Paper - configuration to only merge items horizontally
 +            final ItemStack scanStack = this.getItem();
 +            final java.util.List<ItemEntity> candidates;
-+            if (!org.leavesmc.leaves.util.ItemOverstackUtils.hasOverstackingItem() && !fun.bm.lophine.carpet.OrgItemShadowGroups.managed(scanStack)) {
++            if (!org.leavesmc.leaves.util.ItemOverstackUtils.hasOverstackingItem() && !fun.bm.lophine.carpet.org.OrgItemShadowGroups.managed(scanStack)) {
 +                final UUID scanTarget = this.target;
 +                candidates = new java.util.ArrayList<>();
 +                final int[] visited = new int[1];
@@ -77,14 +77,14 @@ index c74df43ed794366ee9dcc837d52c8b780f762231..d0e23bca83821483d82a4bbd08be0c8d
 +                            return true;
 +                        }
 +                        return other != this && other.isMergable()
-+                            && (fun.bm.lophine.carpet.OrgItemShadowGroups.managed(other.getItem())
++                            && (fun.bm.lophine.carpet.org.OrgItemShadowGroups.managed(other.getItem())
 +                            || fun.bm.lecithin.compat.LecithinItemMergeScan.mayMerge(scanStack, other.getItem(), Objects.equals(scanTarget, other.target)));
 +                    },
 +                    fun.bm.lecithin.compat.LecithinItemMergeScan.candidateCap(scanStack.getMaxStackSize(), scanStack.getCount())
 +                );
 +                if (budgeted && visited[0] > fun.bm.lecithin.compat.LecithinItemMergeScan.SCAN_BUDGET) {
 +                    candidates.removeIf(other -> other == this || !other.isMergable()
-+                        || !fun.bm.lophine.carpet.OrgItemShadowGroups.managed(other.getItem())
++                        || !fun.bm.lophine.carpet.org.OrgItemShadowGroups.managed(other.getItem())
 +                        && !fun.bm.lecithin.compat.LecithinItemMergeScan.mayMerge(scanStack, other.getItem(), Objects.equals(scanTarget, other.target)));
 +                }
 +            } else {

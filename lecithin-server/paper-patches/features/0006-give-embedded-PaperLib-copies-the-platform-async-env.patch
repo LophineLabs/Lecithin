@@ -30,7 +30,7 @@ a teleport Paper would also have reported, and no Bukkit API overload produces
 UNKNOWN by default.
 
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
-index 54e966cb1fb51fc74162748a39bb7172758bd5c0..f7552dcbaa1c9060254bd6490324a022c8d25937 100644
+index c025efea6546e5cd919fd94e72e4790e0a6f12c4..4020fc455d4d0de11e891932e8cf48e6cbd538df 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 @@ -197,6 +197,10 @@ class PaperPluginInstanceManager {
@@ -42,5 +42,5 @@ index 54e966cb1fb51fc74162748a39bb7172758bd5c0..f7552dcbaa1c9060254bd6490324a022
 +            // Lecithin end
 +
              try {
+                 fun.bm.lophine.carpet.api.LophineCarpetApi.pluginEnabling(plugin); // Lophine - reopen extension admission before onEnable
                  jPlugin.setEnabled(true);
-             } catch (Throwable ex) {

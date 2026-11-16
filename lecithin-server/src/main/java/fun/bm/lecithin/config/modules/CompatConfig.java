@@ -69,7 +69,10 @@ public class CompatConfig {
      * Upper bound, in seconds, on how long a disconnected player waits for native work on it before
      * it leaves the player list. While it waits the name stays taken and every login is refused as
      * a duplicate. On expiry the stuck work is named in the log and the normal removal runs on the
-     * player's owner, with its quit event and save. A value of 0 or less removes the bound.
+     * player's owner, with its quit event and save. If even that removal cannot run, the player is
+     * dropped from the list at three times this bound without its quit event and save, logging what
+     * it waited for; Lophine drops it after a fixed 10 s, which would cut off the steps above.
+     * A value of 0 or less removes the bound and that last drop with it.
      */
     @DoNotLoad(when = EnumLoadType.RELOAD)
     @ConfigInfo(name = "player-removal-timeout-seconds")

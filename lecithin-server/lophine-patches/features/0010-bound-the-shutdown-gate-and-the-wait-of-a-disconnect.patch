@@ -4,9 +4,19 @@ Date: Sun, 1 Nov 2026 18:26:24 +0800
 Subject: [PATCH] bound the shutdown gate and the wait of a disconnected
  player's removal
 
+Lophine bounds the same waits with fixed values: 10 s for the accepted
+native work a removal waits on (c99370f), and 30 s for the fake player and
+Org shutdown drains (ade5106). Here each wait has one deadline, from
+player-removal-timeout-seconds or shutdown-gate-timeout-seconds, so the
+expiry names the stuck work and where it was registered, a stuck login's
+file lease is released, and a removal the player's scheduler never runs
+falls back to the region that owns the player's position. A failed region
+cuts the shutdown waits to a few seconds. Lophine's drain threads, progress
+logs, and the last-chance save of fake players whose removal did not finish
+stay as they are; only their deadline comes from CarpetShutdownGate.
 
 diff --git a/src/main/java/carpet/script/external/ScarpetNativeRemovals.java b/src/main/java/carpet/script/external/ScarpetNativeRemovals.java
-index af4525b75f69681c331530e85a539bd33da39cb5..bcab6032c7d12956464a643e9b5b83dc440af186 100644
+index 8318c118f92545235e5201a217d852e5b022f487..348a0fb11e4813a9c1ffd461d422c745c4e61cf2 100644
 --- a/src/main/java/carpet/script/external/ScarpetNativeRemovals.java
 +++ b/src/main/java/carpet/script/external/ScarpetNativeRemovals.java
 @@ -18,12 +18,55 @@ import java.util.concurrent.atomic.AtomicBoolean;
@@ -48,7 +58,7 @@ index af4525b75f69681c331530e85a539bd33da39cb5..bcab6032c7d12956464a643e9b5b83dc
 +    /**
 +     * One line per unfinished job, oldest first: the oldest is the most likely cause of the rest.
 +     */
-+    public static List<String> describePending(MinecraftServer server) {
++    public static List<String> describePendingLines(MinecraftServer server) {
 +        var lines = new ArrayList<String>();
 +        var jobs = new ArrayList<>(CALLERS.getOrDefault(server, Map.of()).entrySet());
 +        jobs.removeIf(entry -> entry.getKey().isDone());
@@ -66,7 +76,7 @@ index af4525b75f69681c331530e85a539bd33da39cb5..bcab6032c7d12956464a643e9b5b83dc
      private static final class Plan {
          final Entity entity;
          final MinecraftServer server;
-@@ -78,8 +121,8 @@ public final class ScarpetNativeRemovals {
+@@ -81,8 +124,8 @@ public final class ScarpetNativeRemovals {
       * Includes leave observers and inventory admission before the physical Entity.remove head.
       */
      public static <T> CompletableFuture<T> trackCaller(MinecraftServer server, CompletableFuture<T> actual) {
@@ -77,7 +87,7 @@ index af4525b75f69681c331530e85a539bd33da39cb5..bcab6032c7d12956464a643e9b5b83dc
          actual.whenComplete((value, failure) -> {
              callers.remove(actual);
          });
-@@ -266,7 +309,7 @@ public final class ScarpetNativeRemovals {
+@@ -269,7 +312,7 @@ public final class ScarpetNativeRemovals {
      public static CompletableFuture<Void> whenIdle(MinecraftServer server) {
          CompletableFuture<?>[] pending;
          synchronized (PENDING) {
@@ -86,7 +96,7 @@ index af4525b75f69681c331530e85a539bd33da39cb5..bcab6032c7d12956464a643e9b5b83dc
              pending = java.util.stream.Stream.concat(callers.stream(), PENDING.values().stream()
                              .filter(plan -> plan.server == server && !plan.completed.isDone()).map(plan -> plan.completed))
                      .filter(future -> !future.isDone()).distinct().toArray(CompletableFuture[]::new);
-@@ -274,7 +317,7 @@ public final class ScarpetNativeRemovals {
+@@ -277,7 +320,7 @@ public final class ScarpetNativeRemovals {
          return CompletableFuture.allOf(pending).handle((ignored, failure) -> null).thenCompose(ignored -> {
              synchronized (PENDING) {
                  if (PENDING.values().stream().noneMatch(plan -> plan.server == server && !plan.completed.isDone())
@@ -95,8 +105,17 @@ index af4525b75f69681c331530e85a539bd33da39cb5..bcab6032c7d12956464a643e9b5b83dc
                      return CompletableFuture.completedFuture(null);
              }
              return whenIdle(server);
+@@ -291,7 +334,7 @@ public final class ScarpetNativeRemovals {
+         synchronized (PENDING) {
+             var open = PENDING.values().stream().filter(plan -> plan.server == server && !plan.completed.isDone()).toList();
+             var sample = open.stream().limit(5L).map(plan -> plan.description).toList();
+-            long jobs = CALLERS.getOrDefault(server, Set.of()).stream().filter(future -> !future.isDone()).count();
++            long jobs = CALLERS.getOrDefault(server, Map.of()).keySet().stream().filter(future -> !future.isDone()).count(); // Lecithin - callers keep where they were registered
+             return "removals=" + open.size()
+                     + (sample.isEmpty() ? "" : "{" + String.join(", ", sample)
+                     + (open.size() > sample.size() ? ", ..." : "") + "}")
 diff --git a/src/main/java/carpet/script/external/ScarpetNativeWork.java b/src/main/java/carpet/script/external/ScarpetNativeWork.java
-index 3c41823c9679c4144cc6b2b8b1e5d0677084de25..35d4abb0432154185adf06ca5bad2edf1db4db24 100644
+index 6262a101c86eff2db43fa4ab2e7908409010a754..8ec71178c5302946b24bf165935fccc016c29d3f 100644
 --- a/src/main/java/carpet/script/external/ScarpetNativeWork.java
 +++ b/src/main/java/carpet/script/external/ScarpetNativeWork.java
 @@ -181,6 +181,7 @@ public final class ScarpetNativeWork {
@@ -105,9 +124,9 @@ index 3c41823c9679c4144cc6b2b8b1e5d0677084de25..35d4abb0432154185adf06ca5bad2edf
      public static void beginDrain(net.minecraft.server.MinecraftServer server) {
 +        fun.bm.lophine.carpet.CarpetShutdownGate.of(server);
          DRAINING.put(server, Boolean.TRUE);
-         fun.bm.lophine.carpet.OrgPlayerInventoryMenus.beginDrain(server);
+         fun.bm.lophine.carpet.org.OrgPlayerInventoryMenus.beginDrain(server);
          fun.bm.lophine.carpet.CarpetPlayerBirths.beginDrain(server);
-@@ -234,6 +235,21 @@ public final class ScarpetNativeWork {
+@@ -242,6 +243,21 @@ public final class ScarpetNativeWork {
          return DEPENDENCIES.get(future);
      }
  
@@ -130,7 +149,7 @@ index 3c41823c9679c4144cc6b2b8b1e5d0677084de25..35d4abb0432154185adf06ca5bad2edf
          Token token = DEPENDENCIES.get(original);
          if (token != null) DEPENDENCIES.put(alias, token);
 diff --git a/src/main/java/carpet/script/external/ScarpetOwnerWorkGate.java b/src/main/java/carpet/script/external/ScarpetOwnerWorkGate.java
-index b2807595b025c58954939737839c1af70b9ca926..c1c593d7f33724888b4b3192c52abe1e41918ae1 100644
+index 10f247844b79fea26e5237d3204edcf1a051e655..d72cf4328afd1b4c383604d3b9769d7833469620 100644
 --- a/src/main/java/carpet/script/external/ScarpetOwnerWorkGate.java
 +++ b/src/main/java/carpet/script/external/ScarpetOwnerWorkGate.java
 @@ -14,7 +14,10 @@ import java.util.function.Supplier;
@@ -154,7 +173,7 @@ index b2807595b025c58954939737839c1af70b9ca926..c1c593d7f33724888b4b3192c52abe1e
          }
          actual.whenComplete((ignored, failure) -> {
              synchronized (ScarpetOwnerWorkGate.this) {
-@@ -47,13 +50,21 @@ final class ScarpetOwnerWorkGate {
+@@ -47,30 +50,31 @@ final class ScarpetOwnerWorkGate {
      }
  
      <T> CompletableFuture<T> whenIdle(Function<Supplier<T>, CompletableFuture<T>> owner, Supplier<T> snapshot, boolean mandatoryCleanup, boolean authorizedChild) {
@@ -177,7 +196,18 @@ index b2807595b025c58954939737839c1af70b9ca926..c1c593d7f33724888b4b3192c52abe1e
                      })
                      .map(entry -> mandatoryCleanup ? entry.getKey().handle((ignored, failure) -> null) : entry.getKey())
                      .toArray(CompletableFuture[]::new));
-@@ -61,7 +72,7 @@ final class ScarpetOwnerWorkGate {
+         }
+-        if (mandatoryCleanup) {
+-            // Lophine fix: bound the wait for accepted native work. A stuck continuation used to
+-            // block this future forever, silently leaving the ServerPlayer in playersByUUID
+-            // (ghost session that rejects every later login). After the budget the snapshot still
+-            // runs on the owner, and an already retired owner fails the schedule instead.
+-            pending = pending.orTimeout(ScarpetPlayerInventoryGate.REMOVAL_IDLE_TIMEOUT_MILLIS,
+-                            java.util.concurrent.TimeUnit.MILLISECONDS)
+-                    .exceptionally(ignored -> null);
+-        }
++        // Lecithin - the wait for accepted native work is bounded by `wait` (ScarpetPlayerInventoryGate#boundRemovalWait:
++        // player-removal-timeout-seconds, which names the stuck work and ends a stuck login's custody), not by a second fixed timeout here.
          var result = new CompletableFuture<T>();
          var lifetime = new Snapshot<T>(result, this::release);
          try {
@@ -186,7 +216,7 @@ index b2807595b025c58954939737839c1af70b9ca926..c1c593d7f33724888b4b3192c52abe1e
          } catch (Throwable failure) {
              lifetime.fail(failure);
          } finally {
-@@ -70,6 +81,18 @@ final class ScarpetOwnerWorkGate {
+@@ -79,6 +83,18 @@ final class ScarpetOwnerWorkGate {
          return result;
      }
  
@@ -206,10 +236,22 @@ index b2807595b025c58954939737839c1af70b9ca926..c1c593d7f33724888b4b3192c52abe1e
          CompletableFuture<Void> resume = null;
          synchronized (this) {
 diff --git a/src/main/java/carpet/script/external/ScarpetPlayerInventoryGate.java b/src/main/java/carpet/script/external/ScarpetPlayerInventoryGate.java
-index b7ca792b39fee38e35d89e276584369091ca21c4..ad5800224f47eb0a70221b2c10c997c245d0ab1a 100644
+index afaa7134e6e7894e7f018ea4a0102880dc3d1390..bdb1c3d4d9ce6c5fa3c3b769f911bf125ec04034 100644
 --- a/src/main/java/carpet/script/external/ScarpetPlayerInventoryGate.java
 +++ b/src/main/java/carpet/script/external/ScarpetPlayerInventoryGate.java
-@@ -15,6 +15,19 @@ public final class ScarpetPlayerInventoryGate {
+@@ -11,17 +11,24 @@ import java.util.function.Supplier;
+  * Inventory snapshots wait for accepted native tails and suspend new native item operations.
+  */
+ public final class ScarpetPlayerInventoryGate {
+-    /**
+-     * Lophine fix: a player removal must never wait forever on accepted native work that can no
+-     * longer finish (a stuck continuation, a third-party fake player that never answers). When the
+-     * budget expires the snapshot still runs on the owner; if the owner is gone the scheduler
+-     * reports retirement and the caller drops the session from the online list.
+-     */
+-    static final long REMOVAL_IDLE_TIMEOUT_MILLIS = 10000L;
++    // Lecithin - Lophine's fixed REMOVAL_IDLE_TIMEOUT_MILLIS (10 s) is player-removal-timeout-seconds here; see boundRemovalWait
+     private static final WeakIdentityMap<ServerPlayer, ScarpetOwnerWorkGate> GATES = new WeakIdentityMap<>();
      private static final WeakIdentityMap<ServerPlayer, IntentQueue> INTENTS = new WeakIdentityMap<>();
      private static final ThreadLocal<java.util.Set<ServerPlayer>> ACCEPTED = ThreadLocal.withInitial(java.util.Set::of);
  
@@ -229,8 +271,8 @@ index b7ca792b39fee38e35d89e276584369091ca21c4..ad5800224f47eb0a70221b2c10c997c2
      private ScarpetPlayerInventoryGate() {
      }
  
-@@ -312,7 +325,9 @@ public final class ScarpetPlayerInventoryGate {
-         TickThread.ensureTickThread(player, "Player inventory snapshot must be requested by its owner");
+@@ -375,7 +382,9 @@ public final class ScarpetPlayerInventoryGate {
+         // duplicate-login kicks. The snapshot body still runs on the owning region.
          return of(player).whenIdle(operation -> {
              var result = new CompletableFuture<T>();
 +            var started = new java.util.concurrent.atomic.AtomicBoolean();
@@ -239,7 +281,7 @@ index b7ca792b39fee38e35d89e276584369091ca21c4..ad5800224f47eb0a70221b2c10c997c2
                  try {
                      TickThread.ensureTickThread(player, "Player inventory snapshot must run on its owner");
                      if (owned != player || player.isRemoved())
-@@ -330,11 +345,52 @@ public final class ScarpetPlayerInventoryGate {
+@@ -393,11 +402,78 @@ public final class ScarpetPlayerInventoryGate {
                          retired -> result.completeExceptionally(new IllegalStateException("Player retired before inventory snapshot")), 1L);
                  if (!scheduled)
                      result.completeExceptionally(new IllegalStateException("Player scheduler retired before inventory snapshot"));
@@ -290,14 +332,49 @@ index b7ca792b39fee38e35d89e276584369091ca21c4..ad5800224f47eb0a70221b2c10c997c2
 +            player.level().getServer().server.getRegionScheduler().execute(org.leavesmc.leaves.plugin.MinecraftInternalPlugin.INSTANCE, player.level().getWorld(),
 +                    position.getX() >> 4, position.getZ() >> 4, () -> body.accept(player));
 +        });
++    }
++
++    /**
++     * When {@code PlayerList#carpetRemoveAsync} stops waiting and drops a removal from the online list.
++     *
++     * <p>Lophine drops it after a fixed 10 s, counted from the disconnect. That is shorter than
++     * {@link #boundRemovalWait} alone, so it would cut off the wait for native work, the owner hop or
++     * {@link #ownerFallback}, and the quit event and save those guarantee; a removal that ran after the
++     * drop would also save while a new session of the same account could already be online. This net
++     * gives each of the three steps one full bound, so it only fires when the removal could not run at
++     * all. Then the player leaves the list without its quit event and save, as it does on Lophine.
++     *
++     * @return 0 when the bound is off, so the net is off with it
++     */
++    public static long removalNetSeconds() {
++        long bound = fun.bm.lecithin.config.modules.CompatConfig.playerRemovalTimeoutSeconds;
++        if (bound <= 0) return 0;
++        return bound > Long.MAX_VALUE / 3 ? Long.MAX_VALUE : bound * 3;
++    }
++
++    /**
++     * What a removal the net gave up on was still waiting for, for its log line.
++     */
++    public static String describeStuckRemoval(ServerPlayer player) {
++        return "accepted native work " + of(player).describeAccepted()
++                + ", " + ScarpetNativeRemovals.describePending(player.level().getServer());
      }
  
      public static AcceptedScope acceptedScope(ServerPlayer player) {
 diff --git a/src/main/java/fun/bm/lophine/carpet/CarpetFakePlayerManager.java b/src/main/java/fun/bm/lophine/carpet/CarpetFakePlayerManager.java
-index 3ff2caf87ca2f9c095dc4fccead1272499a0086b..b20b2575cee3a1882d692f448ff694d312449fd6 100644
+index 4fdd0abe2a59c4d41ac2f523aeca02b708573253..88caa6199fd2436890963a947dcac85b34628fdb 100644
 --- a/src/main/java/fun/bm/lophine/carpet/CarpetFakePlayerManager.java
 +++ b/src/main/java/fun/bm/lophine/carpet/CarpetFakePlayerManager.java
-@@ -478,16 +478,17 @@ public final class CarpetFakePlayerManager {
+@@ -56,7 +56,7 @@ public final class CarpetFakePlayerManager {
+     private static final Logger LOGGER = LogUtils.getLogger();
+     // Folia keeps ticking while shutdown drains removals, so the drain is bounded like the Scarpet
+     // shutdown phases. The save pass below is what keeps that bound from losing player state.
+-    private static final long SHUTDOWN_TIMEOUT_MILLIS = 30_000L;
++    // Lecithin - the bound itself is CarpetShutdownGate's (shutdown-gate-timeout-seconds)
+     private static final long SHUTDOWN_REPORT_MILLIS = 5_000L;
+     private static final long SHUTDOWN_SAVE_TIMEOUT_MILLIS = 10_000L;
+     private final MinecraftServer server;
+@@ -488,7 +488,10 @@ public final class CarpetFakePlayerManager {
                      throw new IllegalStateException("Carpet player removal failed during shutdown");
          });
          if (shutdown.isDone()) {
@@ -309,20 +386,43 @@ index 3ff2caf87ca2f9c095dc4fccead1272499a0086b..b20b2575cee3a1882d692f448ff694d3
              forceShutdown = true;
              return true;
          }
--        shutdown.whenComplete((ignored, failure) -> {
-+        fun.bm.lophine.carpet.CarpetShutdownGate.of(server).bounded(shutdown, fun.bm.lophine.carpet.CarpetShutdownGate.Stage.PLAYER_REGISTRIES).whenComplete((ignored, failure) -> {
-             if (failure != null) LOGGER.error("Cannot finish Carpet player shutdown", failure);
--            else {
--                forceShutdown = true;
--                server.stopServer();
+@@ -510,22 +513,21 @@ public final class CarpetFakePlayerManager {
+      * persists every player first, so the bound delays the halt instead of losing state or hanging.
+      */
+     private void carpetAwaitShutdownRemovals(List<ShutdownRemoval> removals) {
+-        var drain = this.shutdown;
++        // Lecithin start - one shutdown deadline: the gate ends this wait at its player-registry share
++        // of shutdown-gate-timeout-seconds and names the stuck work, instead of a second fixed bound.
++        var removed = this.shutdown;
++        var drain = fun.bm.lophine.carpet.CarpetShutdownGate.of(this.server).bounded(removed, fun.bm.lophine.carpet.CarpetShutdownGate.Stage.PLAYER_REGISTRIES);
+         long slice = TimeUnit.MILLISECONDS.toNanos(SHUTDOWN_REPORT_MILLIS);
+-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SHUTDOWN_TIMEOUT_MILLIS);
+-        while (!drain.isDone()) {
+-            long remaining = deadline - System.nanoTime();
+-            if (remaining <= 0L) {
+-                LOGGER.error("Carpet player shutdown removals did not finish within {} ms ({}); saving and halting anyway",
+-                        SHUTDOWN_TIMEOUT_MILLIS, carpetPendingRemovals(removals));
+-                break;
 -            }
-+            forceShutdown = true;
-+            server.stopServer();
-         });
-         return false;
-     }
++        while (true) {
+             try {
+-                drain.get(Math.min(remaining, slice), TimeUnit.NANOSECONDS);
+-                return;
++                drain.get(slice, TimeUnit.NANOSECONDS);
++                // The gate ends its view normally when it gives up; only a finished drain skips the save pass.
++                if (removed.isDone() && !removed.isCompletedExceptionally()) return;
++                break;
+             } catch (TimeoutException stillWaiting) {
+-                LOGGER.info("Waiting for Carpet player shutdown removals to finish ({}; saves and halts anyway after {} ms)",
+-                        carpetPendingRemovals(removals), SHUTDOWN_TIMEOUT_MILLIS);
++                LOGGER.info("Waiting for Carpet player shutdown removals to finish ({}; shutdown-gate-timeout-seconds bounds the wait)",
++                        carpetPendingRemovals(removals));
++                // Lecithin end - one shutdown deadline
+             } catch (InterruptedException interrupted) {
+                 // The save pass and the halt below still have to run, so this dedicated shutdown
+                 // thread keeps the original join semantics of not restoring the interrupt status.
 diff --git a/src/main/java/fun/bm/lophine/carpet/CarpetPlayerBirths.java b/src/main/java/fun/bm/lophine/carpet/CarpetPlayerBirths.java
-index 66cc8d5606b3d10284085f7c2a8210d934962636..f0e857c037005fd136d591da526f8879204d8f97 100644
+index ab4ffe916ebda93126c1d24eb76d5551fecb9bd6..87ab7c43c442e55e10acae1aedad5bc6c9d538a9 100644
 --- a/src/main/java/fun/bm/lophine/carpet/CarpetPlayerBirths.java
 +++ b/src/main/java/fun/bm/lophine/carpet/CarpetPlayerBirths.java
 @@ -11,7 +11,9 @@ import java.util.concurrent.CompletableFuture;
@@ -345,14 +445,14 @@ index 66cc8d5606b3d10284085f7c2a8210d934962636..f0e857c037005fd136d591da526f8879
          boolean draining;
          synchronized (table) {
              if (table.jobs.isEmpty()) table.idle = new CompletableFuture<>();
-@@ -62,12 +64,34 @@ public final class CarpetPlayerBirths {
+@@ -75,12 +77,34 @@ public final class CarpetPlayerBirths {
          }
      }
  
 +    /**
 +     * One line per unfinished birth for the shutdown gate's log.
 +     */
-+    static List<String> describePending(MinecraftServer server) {
++    static List<String> describePendingLines(MinecraftServer server) {
 +        Table table = table(server);
 +        ArrayList<Entry> jobs;
 +        synchronized (table) {
@@ -381,7 +481,7 @@ index 66cc8d5606b3d10284085f7c2a8210d934962636..f0e857c037005fd136d591da526f8879
          }
          carpet.script.external.ScarpetPlayerInventoryGate.admitBirth(player, actual);
          actual.whenComplete((ignored, failure) -> {
-@@ -84,18 +108,31 @@ public final class CarpetPlayerBirths {
+@@ -97,18 +121,31 @@ public final class CarpetPlayerBirths {
      public static boolean playerPending(net.minecraft.server.level.ServerPlayer player) {
          synchronized (PLAYERS) {
              var pending = PLAYERS.get(player);
@@ -417,10 +517,10 @@ index 66cc8d5606b3d10284085f7c2a8210d934962636..f0e857c037005fd136d591da526f8879
  
      private static final class Table {
 diff --git a/src/main/java/fun/bm/lophine/carpet/CarpetPlayerLoginLease.java b/src/main/java/fun/bm/lophine/carpet/CarpetPlayerLoginLease.java
-index f850178b8beb9c91b14db3195f79c658581ff532..f232d8c70712e02ddcfe336c2a582f1fdd7d8cd5 100644
+index 90454ae2662a0717e4410ab27a052f5be25b8b09..1b4d171923f2942ec0b6bf7a70cd245419e71c49 100644
 --- a/src/main/java/fun/bm/lophine/carpet/CarpetPlayerLoginLease.java
 +++ b/src/main/java/fun/bm/lophine/carpet/CarpetPlayerLoginLease.java
-@@ -22,7 +22,7 @@ public final class CarpetPlayerLoginLease {
+@@ -23,7 +23,7 @@ public final class CarpetPlayerLoginLease {
      private final UUID player;
      private final CompletableFuture<Void> nativeLifetime = new CompletableFuture<>();
      private final CompletableFuture<Void> completion = new CompletableFuture<>();
@@ -429,7 +529,7 @@ index f850178b8beb9c91b14db3195f79c658581ff532..f232d8c70712e02ddcfe336c2a582f1f
      private int phases;
      private Throwable failure;
  
-@@ -97,7 +97,7 @@ public final class CarpetPlayerLoginLease {
+@@ -98,7 +98,7 @@ public final class CarpetPlayerLoginLease {
                  var lifetime = ScarpetNativeWork.completionOf(ScarpetNativeWork.capture());
                  ScarpetNativeWork.linkDependency(completion, lifetime);
                  ScarpetNativeWork.aliasDependency(completion, lifetime);
@@ -438,7 +538,7 @@ index f850178b8beb9c91b14db3195f79c658581ff532..f232d8c70712e02ddcfe336c2a582f1f
                  ScarpetPlayerInventoryGate.admitBirth(owner, ScarpetNativeWork.completionOf(ScarpetNativeWork.capture()));
                  try (var accepted = ScarpetPlayerInventoryGate.acceptedScope(owner)) {
                      T value = operation.get();
-@@ -124,10 +124,29 @@ public final class CarpetPlayerLoginLease {
+@@ -125,10 +125,29 @@ public final class CarpetPlayerLoginLease {
              closed = terminal = true;
          }
          finishIfReady();
@@ -470,7 +570,7 @@ index f850178b8beb9c91b14db3195f79c658581ff532..f232d8c70712e02ddcfe336c2a582f1f
              if (--phases < 0) throw new IllegalStateException("Login phase completed twice");
 diff --git a/src/main/java/fun/bm/lophine/carpet/CarpetShutdownGate.java b/src/main/java/fun/bm/lophine/carpet/CarpetShutdownGate.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f3a1edd34e351b0bfda59d69717f9153e7f12575
+index 0000000000000000000000000000000000000000..5a56bd22c0d21315064876a9e36d23e4db878666
 --- /dev/null
 +++ b/src/main/java/fun/bm/lophine/carpet/CarpetShutdownGate.java
 @@ -0,0 +1,142 @@
@@ -606,8 +706,8 @@ index 0000000000000000000000000000000000000000..f3a1edd34e351b0bfda59d69717f9153
 +
 +    private List<String> pending() {
 +        var lines = new ArrayList<String>();
-+        lines.addAll(CarpetPlayerBirths.describePending(server));
-+        lines.addAll(ScarpetNativeRemovals.describePending(server));
++        lines.addAll(CarpetPlayerBirths.describePendingLines(server));
++        lines.addAll(ScarpetNativeRemovals.describePendingLines(server));
 +        var players = server.getPlayerList();
 +        if (players != null) {
 +            for (ServerPlayer player : players.getPlayers())
@@ -616,33 +716,63 @@ index 0000000000000000000000000000000000000000..f3a1edd34e351b0bfda59d69717f9153
 +        return lines;
 +    }
 +}
-diff --git a/src/main/java/fun/bm/lophine/carpet/OrgPlayerManager.java b/src/main/java/fun/bm/lophine/carpet/OrgPlayerManager.java
-index 73ec01db3f49882bdd8190b6bf6caebbec7d1f96..58d632f97ff5d6a863c3387512479aa56a73cbb7 100644
---- a/src/main/java/fun/bm/lophine/carpet/OrgPlayerManager.java
-+++ b/src/main/java/fun/bm/lophine/carpet/OrgPlayerManager.java
-@@ -944,7 +944,8 @@ public final class OrgPlayerManager {
+diff --git a/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManager.java b/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManager.java
+index dc05dda453e61f2497bbf33bc35b75ebf38d2b2c..1201805717ba140ff28cb60f404841846d5dfc7b 100644
+--- a/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManager.java
++++ b/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManager.java
+@@ -947,7 +947,8 @@ public final class OrgPlayerManager {
          manager.closed = true;
          if (manager.task != null) manager.task.cancel();
          CarpetPlayerBirths.beginDrain(server);
 -        return CarpetPlayerBirths.whenIdle(server).thenCompose(ignoredBirths -> manager.carpetCaptureShutdownCohort());
-+        return CarpetShutdownGate.of(server).bounded(CarpetPlayerBirths.whenIdle(server), CarpetShutdownGate.Stage.LOGINS)
++        return fun.bm.lophine.carpet.CarpetShutdownGate.of(server).bounded(CarpetPlayerBirths.whenIdle(server), fun.bm.lophine.carpet.CarpetShutdownGate.Stage.LOGINS) // Lecithin - bound the shutdown gate
 +                .thenCompose(ignoredBirths -> manager.carpetCaptureShutdownCohort());
      }
  
      private CompletableFuture<Void> carpetCaptureShutdownCohort() {
-diff --git a/src/main/java/fun/bm/lophine/carpet/OrgPlayerManagerLifecycle.java b/src/main/java/fun/bm/lophine/carpet/OrgPlayerManagerLifecycle.java
-index 13a51d442e283600d846cd5b06f6d5e627e54c8b..d30ad0765cd8587e8687684d166293cc99de6d1c 100644
---- a/src/main/java/fun/bm/lophine/carpet/OrgPlayerManagerLifecycle.java
-+++ b/src/main/java/fun/bm/lophine/carpet/OrgPlayerManagerLifecycle.java
-@@ -45,7 +45,7 @@ public final class OrgPlayerManagerLifecycle {
-         }).thenCompose(ignored -> carpet.script.external.ScarpetNativeWork.whenIdle(server));
-         Runnable finish = () -> {
+diff --git a/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManagerLifecycle.java b/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManagerLifecycle.java
+index 9ff3a9fc00ca0ea9d614d1a61c28c1694e0bcfa9..b1531fcde8e83d174306b236e6c0f7caf2af54de 100644
+--- a/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManagerLifecycle.java
++++ b/src/main/java/fun/bm/lophine/carpet/org/OrgPlayerManagerLifecycle.java
+@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
+ public final class OrgPlayerManagerLifecycle {
+     // Region work admitted during a drain can keep admitting more, so the coordinator waits for a
+     // bounded period like the Scarpet shutdown phase instead of holding the server open forever.
+-    private static final long DRAIN_TIMEOUT_MILLIS = 30_000L;
++    // Lecithin - the bound itself is CarpetShutdownGate's (shutdown-gate-timeout-seconds)
+     private static final long DRAIN_REPORT_MILLIS = 5_000L;
+     private static final Set<MinecraftServer> STARTED = ConcurrentHashMap.newKeySet();
+     private static final ConcurrentHashMap<MinecraftServer, Stop> STOPS = new ConcurrentHashMap<>();
+@@ -79,21 +79,18 @@ public final class OrgPlayerManagerLifecycle {
+      * cancels whatever was abandoned, so a stuck continuation halts the server late, never forever.
+      */
+     private static void awaitDrain(MinecraftServer server, CompletableFuture<?> captured, CompletableFuture<Void> drained) {
++        // Lecithin start - one shutdown deadline: the gate ends this wait at its native-work share of
++        // shutdown-gate-timeout-seconds and names the stuck work, instead of a second fixed bound.
++        var bounded = fun.bm.lophine.carpet.CarpetShutdownGate.of(server).bounded(drained, fun.bm.lophine.carpet.CarpetShutdownGate.Stage.NATIVE_WORK);
+         long slice = TimeUnit.MILLISECONDS.toNanos(DRAIN_REPORT_MILLIS);
+-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(DRAIN_TIMEOUT_MILLIS);
+-        while (!drained.isDone()) {
+-            long remaining = deadline - System.nanoTime();
+-            if (remaining <= 0L) {
+-                MinecraftServer.LOGGER.error("Carpet shutdown work did not finish within {} ms ({}); halting anyway",
+-                        DRAIN_TIMEOUT_MILLIS, pendingState(server, captured));
+-                return;
+-            }
++        while (true) {
              try {
--                saved.join();
-+                CarpetShutdownGate.of(server).bounded(saved, CarpetShutdownGate.Stage.NATIVE_WORK).join();
-             } catch (Throwable failure) {
-                 MinecraftServer.LOGGER.error("Cannot finish Org resident profiles before shutdown", failure);
-             } finally {
+-                drained.get(Math.min(remaining, slice), TimeUnit.NANOSECONDS);
++                bounded.get(slice, TimeUnit.NANOSECONDS);
+                 return;
+             } catch (TimeoutException stillWaiting) {
+-                MinecraftServer.LOGGER.info("Waiting for Carpet shutdown work to finish ({}; halts anyway after {} ms)",
+-                        pendingState(server, captured), DRAIN_TIMEOUT_MILLIS);
++                MinecraftServer.LOGGER.info("Waiting for Carpet shutdown work to finish ({}; shutdown-gate-timeout-seconds bounds the wait)",
++                        pendingState(server, captured));
++                // Lecithin end - one shutdown deadline
+             } catch (InterruptedException interrupted) {
+                 // The cleanup and the native halt that follow still have to run, so this dedicated
+                 // shutdown thread keeps the original join semantics of not restoring the interrupt.
 diff --git a/src/main/java/org/leavesmc/leaves/bot/BotList.java b/src/main/java/org/leavesmc/leaves/bot/BotList.java
 index 1ff85017974f461917d31d8d3d0a25d569875511..e025cd06803af57a108e9670e709a8098becd066 100644
 --- a/src/main/java/org/leavesmc/leaves/bot/BotList.java

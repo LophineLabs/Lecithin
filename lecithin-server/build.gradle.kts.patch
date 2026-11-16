@@ -1,6 +1,6 @@
 --- a/lophine-server/build.gradle.kts
 +++ b/lophine-server/build.gradle.kts
-@@ -50,7 +_,29 @@
+@@ -72,7 +_,29 @@
          }
      }
  
@@ -31,7 +31,7 @@
  
  
      updatingMinecraft {
-@@ -124,12 +_,16 @@
+@@ -154,12 +_,16 @@
          resources { srcDir("../paper-server/src/main/resources") }
          java { srcDir("../folia-server/src/main/java") }
          resources { srcDir("../folia-server/src/main/resources") }
@@ -48,7 +48,7 @@
      }
  }
  val log4jPlugins = sourceSets.create("log4jPlugins") {
-@@ -157,7 +_,7 @@
+@@ -187,7 +_,7 @@
  }
  
  dependencies {
@@ -57,8 +57,8 @@
      // Lophine start - Dependenices insert
      implementation("net.objecthunter:exp4j:0.4.8")
      implementation("com.electronwill.night-config:toml:3.8.4") // Night config
-@@ -233,14 +_,14 @@
-         val gitBranch = git.exec(providers, "rev-parse", "--abbrev-ref", "HEAD").get().trim()
+@@ -276,14 +_,14 @@
+             && providers.environmentVariable("GITHUB_HEAD_REF").orElse("").get().isEmpty()
          attributes(
              "Main-Class" to "org.bukkit.craftbukkit.Main",
 -            "Implementation-Title" to "Lophine", // Lophine - Rebrand
