@@ -6,44 +6,34 @@ Subject: [PATCH] do not reload resources for recipe rules on the first config
 
 
 diff --git a/src/main/java/fun/bm/lophine/carpet/config/modules/GeneralCompatConfig.java b/src/main/java/fun/bm/lophine/carpet/config/modules/GeneralCompatConfig.java
-index 0823fa3bc56eaafd443be6bf290ce6ea81a549d1..061206bcff81bc6827d01fc83122f4f783367b05 100644
+index f1da6caf701a59198e0d88250755d842b8e92726..2f6a61b081e57b62e17a6a16a2990318bf9991ae 100644
 --- a/src/main/java/fun/bm/lophine/carpet/config/modules/GeneralCompatConfig.java
 +++ b/src/main/java/fun/bm/lophine/carpet/config/modules/GeneralCompatConfig.java
-@@ -676,6 +676,21 @@ public class GeneralCompatConfig {
-     private static List<Boolean> appliedRecipeRules;
-     private static Boolean appliedLargeEnderChest;
+@@ -1787,16 +1787,19 @@ public class GeneralCompatConfig {
+         if (!fun.bm.lophine.carpet.CarpetRuleChanges.isChanging()) CarpetProtocalDataBase.apply();
+     }
  
 +    /**
 +     * The first load has nothing to change: a resource reload would only wipe the recipes plugins add while
 +     * starting, and make them add theirs again on the global region while regions tick. If the data pack
 +     * load ran with other values, the recipes follow in place before any plugin is enabled.
 +     */
-+    static void applyRecipeRules(net.minecraft.server.MinecraftServer server) {
-+        List<Boolean> recipes = recipeRuleValues();
+     static void refreshRecipeRules() {
+         List<Boolean> recipes = recipeRuleValues();
+-        List<Boolean> previous = appliedRecipeRules;
 +        if (recipes.equals(appliedRecipeRules)) return;
 +        boolean firstLoad = appliedRecipeRules == null;
-+        appliedRecipeRules = recipes;
-+        if (server == null || !server.isRunning()) return;
-+        if (firstLoad) server.getRecipeManager().carpetReloadCompatRecipes();
-+        else carpet.script.external.ScarpetNativeWork.record(fun.bm.lophine.carpet.ams.AmsRecipeLifecycle.changed(server));
-+    }
-+
-     public static List<Boolean> recipeRuleValues() {
-         return List.of(betterCraftableBoneBlock, betterCraftableDispenser, craftableEnchantedGoldenApples,
-                 craftableElytra, betterCraftablePolishedBlackStoneButton, rottenFleshBurnedIntoLeather, craftableCarvedPumpkin);
-@@ -1777,14 +1792,7 @@ public class GeneralCompatConfig {
-         fun.bm.lophine.carpet.ams.AmsFakePlayers.refresh();
-         fun.bm.lophine.carpet.CarpetDistanceRuleLifecycle.refresh();
-         fun.bm.lophine.carpet.CarpetInventoryRuleLifecycle.refresh();
--        List<Boolean> recipes = recipeRuleValues();
--        if (!recipes.equals(appliedRecipeRules)) {
--            appliedRecipeRules = recipes;
+         appliedRecipeRules = recipes;
+-        // Initial recipes are loaded during startup; only later rule changes need a resource reload.
+-        if (previous != null && !recipes.equals(previous)) {
 -            net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
 -            if (server != null && server.isRunning()) {
 -                carpet.script.external.ScarpetNativeWork.record(fun.bm.lophine.carpet.ams.AmsRecipeLifecycle.changed(server));
 -            }
 -        }
-+        applyRecipeRules(net.minecraft.server.MinecraftServer.getServer());
-         if (appliedStackableDiscounts == null || appliedStackableDiscounts != stackableDiscounts) {
-             net.minecraft.world.entity.ai.gossip.GossipType.MINOR_POSITIVE.max = stackableDiscounts ? 200 : 25;
-             net.minecraft.world.entity.ai.gossip.GossipType.MAJOR_POSITIVE.max = stackableDiscounts ? 100 : 20;
++        net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
++        if (server == null || !server.isRunning()) return;
++        if (firstLoad) server.getRecipeManager().carpetReloadCompatRecipes();
++        else carpet.script.external.ScarpetNativeWork.record(fun.bm.lophine.carpet.ams.AmsRecipeLifecycle.changed(server));
+     }
+ }
