@@ -6,7 +6,7 @@ Subject: [PATCH] tell players about recipe changes on their own owner, once
 
 
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index a46ada083d9ea0db75c4759a64d3f896c968c4d6..43d45ec25867a93d9ce82ce27b729efb520fbe94 100644
+index b927d81414980f80c3e498d9989d16c2f23880a6..a1d4554085ecd1c42a3d34f0581b003c4bb6ef16 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -1752,8 +1752,12 @@ public abstract class PlayerList {

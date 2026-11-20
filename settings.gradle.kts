@@ -1,5 +1,5 @@
 pluginManagement {
-    val weightVersion: String by settings
+    val weightVersion = providers.gradleProperty("weightVersion").get()
 
     repositories {
         gradlePluginPortal()
@@ -20,7 +20,7 @@ plugins {
 
 rootProject.name = "lecithin"
 
-for (name in listOf("lecithin-api", "lecithin-server", "lecithin-checkstyle")) {
+for (name in listOf("lecithin-api", "lecithin-server")) {
     include(name)
     file(name).mkdirs()
 }

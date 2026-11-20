@@ -23,7 +23,7 @@ Divergence from Lophine: with the default 60 s, a ghost session whose removal
 can never run lasts up to 180 s instead of 10 s.
 
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index 43d45ec25867a93d9ce82ce27b729efb520fbe94..ae0c85174b9377001f45bfb8634ed9be7d78e09c 100644
+index a1d4554085ecd1c42a3d34f0581b003c4bb6ef16..235bb26c2cb9bf0f1d71ceff39848911114ad272 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -888,13 +888,19 @@ public abstract class PlayerList {

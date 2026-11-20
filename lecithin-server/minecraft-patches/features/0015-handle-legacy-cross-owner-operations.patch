@@ -186,10 +186,10 @@ index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e3
          /** Never 0L, since 0L is reserved for global region. */
          public final long id = ID_GENERATOR.incrementAndGet();
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 95bda540824c78473adbe3d309e573f68d4da8b1..a91ce8d096f5763c73217302bf31c8b46176f560 100644
+index e18aad3e976b9c68911b108a07fa01431daf9266..6ea7a53270c167d82c5b2aff5f803128a1b617bd 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -3412,6 +3412,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3407,6 +3407,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public Entity getCamera() {
@@ -200,18 +200,9 @@ index 95bda540824c78473adbe3d309e573f68d4da8b1..a91ce8d096f5763c73217302bf31c8b4
      }
  
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index e89c000af5e0bf8d6f4559e9d49facc823278cc0..990406e0177c4c90394a1b3174d0fcdefed404c6 100644
+index 636e8957418de0c287f909c42f47956a586e89fa..8a86c653f8883d1143474dcfb685a21deb7621d0 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -365,7 +365,7 @@ public abstract class Entity
-     private CustomData customData = CustomData.EMPTY;
-     // CraftBukkit start
-     public boolean persist = true;
--    public boolean visibleByDefault = true;
-+    public volatile boolean visibleByDefault = true; // Lecithin - read across owners by isVisibleByDefault()
-     public boolean valid;
-     public boolean inWorld = false;
-     public boolean generation;
 @@ -4397,6 +4397,7 @@ public abstract class Entity
          // Paper start - Forward CraftEntity in teleport command
          org.bukkit.craftbukkit.entity.CraftEntity bukkitEntity = oldEntity.bukkitEntity;

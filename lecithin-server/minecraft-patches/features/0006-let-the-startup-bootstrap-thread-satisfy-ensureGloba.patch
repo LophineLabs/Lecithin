@@ -6,10 +6,10 @@ Subject: [PATCH] let the startup bootstrap thread satisfy
 
 
 diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
-index b05913fe19ab906ab75a8b5bca181391db866831..a31e1ac190078a07a61a9df08fe41167e0238b2c 100644
+index f6ea3d5d2f3e051f8e5c95c1ab9985a8c5a103ba..6f77d131f711f251be1772695cdcbbf42d0c51d4 100644
 --- a/io/papermc/paper/threadedregions/RegionizedServer.java
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -145,6 +145,11 @@ public final class RegionizedServer {
+@@ -146,6 +146,11 @@ public final class RegionizedServer {
  
      public static void ensureGlobalTickThread(final String reason) {
          if (!isGlobalTickThread()) {
