@@ -137,6 +137,7 @@ jobs:
           fi
 
       - name: Create Release - No Comment
+        id: release_no_comment
         if: env.flag_comment == 'false'
         uses: ncipollo/release-action@v1
         with:
@@ -156,6 +157,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release - With Comment
+        id: release_with_comment
         if: env.flag_comment == 'true'
         uses: ncipollo/release-action@v1
         with:
