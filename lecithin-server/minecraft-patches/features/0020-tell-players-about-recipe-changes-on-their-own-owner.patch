@@ -53,7 +53,7 @@ index b927d81414980f80c3e498d9989d16c2f23880a6..a1d4554085ecd1c42a3d34f0581b003c
 +    // Lecithin end - run player-owned reload work on the player's own owner
  }
 diff --git a/net/minecraft/world/item/crafting/RecipeManager.java b/net/minecraft/world/item/crafting/RecipeManager.java
-index 521bd6c6b71326465fa1e086c69daaaae1a78341..c621397fd00cc859db90ba567680413cbea04f29 100644
+index 6f4c1f4f357f627a8353ad7b08978b89031db85d..519e731c46702ed3fdacbaa98197ccb3545271a3 100644
 --- a/net/minecraft/world/item/crafting/RecipeManager.java
 +++ b/net/minecraft/world/item/crafting/RecipeManager.java
 @@ -206,8 +206,28 @@ public class RecipeManager implements RecipeAccess {
