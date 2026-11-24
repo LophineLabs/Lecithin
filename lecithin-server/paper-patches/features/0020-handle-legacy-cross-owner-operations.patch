@@ -126,7 +126,7 @@ index 998706b4be25eac6bc02f87a041d012b4ba8564b..fad69345c86c3977be13d0541d98a2a0
  
              // Flush async appender before unloading, avoids issues when a log message with class context
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
-index 525b91a16d4e65ee8a00db8377daef287499f45c..bbbe078ae94148d021706d57ab7caacd15457011 100644
+index d00572a4db484588765cd9b08c443cd412628639..ea5ba87aad6c55c29c71d7ca710688abee607b05 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 @@ -117,6 +117,9 @@ public class CraftChunk implements Chunk {
@@ -151,7 +151,7 @@ index 525b91a16d4e65ee8a00db8377daef287499f45c..bbbe078ae94148d021706d57ab7caacd
  
          LevelChunkSection[] cs = chunk.getSections();
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index a1f6ca24458d65fadb31854d78d146de0e632326..ef8c5bbdea6c645ece92829fca75083e930fb1dc 100644
+index 56386b2248054b5dec18f045a63576100b7858a6..742f01706011694352d1be5aaeeb66cad1f5a77a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -1367,6 +1367,10 @@ public final class CraftServer implements Server {
