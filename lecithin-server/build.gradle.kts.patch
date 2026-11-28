@@ -1,5 +1,5 @@
---- a/lophine-server/build.gradle.kts
-+++ b/lophine-server/build.gradle.kts
+--- a/lophine/lophine-server/build.gradle.kts
++++ b/lophine/lophine-server/build.gradle.kts
 @@ -72,7 +_,29 @@
          }
      }

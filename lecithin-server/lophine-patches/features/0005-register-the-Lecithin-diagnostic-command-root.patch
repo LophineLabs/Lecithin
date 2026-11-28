@@ -9,10 +9,10 @@ ThreadedRegionizer owns it, which region the calling thread is ticking, and what
 level and position the CommandSourceStack in hand carries. Read-only.
 
 diff --git a/src/main/java/me/earthme/luminol/commands/CommandRegister.java b/src/main/java/me/earthme/luminol/commands/CommandRegister.java
-index df1643e89ca91e82b0f03bab7bc6831b8c3e30df..3cdb973db0d57550b67169550526d237f887ae06 100644
+index 9404f6dd510f6db2a5fba0215ed9549ac46e3b3b..7a584fcfb00e34854c503cbefe50492fc0d8d85e 100644
 --- a/src/main/java/me/earthme/luminol/commands/CommandRegister.java
 +++ b/src/main/java/me/earthme/luminol/commands/CommandRegister.java
-@@ -12,5 +12,6 @@ public class CommandRegister {
+@@ -13,5 +13,6 @@ public class CommandRegister {
      public static void register() {
          new BarCommand().register();
          new TpsCommand().register();

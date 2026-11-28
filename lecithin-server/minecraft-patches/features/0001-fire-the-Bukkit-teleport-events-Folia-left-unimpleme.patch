@@ -30,10 +30,10 @@ a teleport Paper would also have reported, and no Bukkit API overload produces
 UNKNOWN by default.
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 13f4c1f49571c5533e6958a3a772fb1f58a7c415..94d399eec1d8a1497f8e9bf98f8c0ca8ea19298d 100644
+index 4a7cf46b46b7fe054dfc214301d1539a35025ad6..69c4bb50c27f0b29080483974126c75b00703e65 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -4658,6 +4658,17 @@ public abstract class Entity
+@@ -4660,6 +4660,17 @@ public abstract class Entity
                          node.root.postChangeDimension();
                      }
  

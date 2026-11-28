@@ -33,7 +33,7 @@ has the same Paper ground truth and the same shape.
 Kill switch: event-config.move-rollback-without-teleport=false.
 
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 6a9d84cc53e51ad93dbd8634f4b36ee2d03569f2..3f628ef4ca9a6fab646084e7342573f886642c2e 100644
+index 48ba176269eb8facb2306c553cf9b0c664678fee..2d3faeab500992c4d05e46ed8f140a4e52ea53ca 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -758,7 +758,14 @@ public class ServerGamePacketListenerImpl

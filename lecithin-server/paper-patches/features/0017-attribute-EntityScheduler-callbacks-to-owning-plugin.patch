@@ -6,7 +6,7 @@ Subject: [PATCH] attribute EntityScheduler callbacks to owning plugin in
 
 
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
-index 8dd612a8c632cbac03cd02bb457fd0605df46d1b..ac21c29d220be1c6982fa585138c871afa4b8117 100644
+index 45cf8599aa5d5c7f1b44702da26fa9869e952eec..0c42447c29b4ec6c0d214b15dfdf7bb8b7902447 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
 @@ -15,6 +15,25 @@ public final class FoliaEntityScheduler implements EntityScheduler {

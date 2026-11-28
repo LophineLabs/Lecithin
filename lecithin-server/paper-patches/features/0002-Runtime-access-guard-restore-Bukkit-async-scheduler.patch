@@ -65,7 +65,7 @@ index c39cdc2f101b32f5f77290d4047b531077014a9a..c025efea6546e5cd919fd94e72e4790e
          // Paper start - Folia schedulers
          try {
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
-index db0c4069962c30199b552ac93724fb73add92702..3ce5d0d34ef66f51267ed7030d33f46a78c76fca 100644
+index 21def031b354458349544b5c60e0d0b5b23d8d15..edb7c1c593c28210f070584d60788e06358caaad 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 @@ -20,6 +20,19 @@ public class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {

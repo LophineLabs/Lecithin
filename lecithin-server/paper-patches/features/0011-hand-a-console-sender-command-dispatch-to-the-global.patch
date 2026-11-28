@@ -31,7 +31,7 @@ the return value and the only real branch on it is in a BungeeCord proxy class
 the server never loads.
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index a621e930abd86c39c583e5abd823607ae537b57b..cb5528f20ef6e88cb4c5d7d8c2ed4fd787ff616d 100644
+index 948509f23bbe200cd993353c67b69c7f70d2e653..2623bccb6a772a4ff85773cbe69dfddc13e72cdd 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -931,6 +931,12 @@ public final class CraftServer implements Server {

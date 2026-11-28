@@ -6,7 +6,7 @@ Subject: [PATCH] copy recipe maps on write so a plugin's change cannot fail a
 
 
 diff --git a/net/minecraft/world/item/crafting/RecipeManager.java b/net/minecraft/world/item/crafting/RecipeManager.java
-index 1481626d2d26498e1a32b8135ca08e5f623d931b..521bd6c6b71326465fa1e086c69daaaae1a78341 100644
+index a740b6288bb7996cf1e3abb42b25f476617f3c86..6f4c1f4f357f627a8353ad7b08978b89031db85d 100644
 --- a/net/minecraft/world/item/crafting/RecipeManager.java
 +++ b/net/minecraft/world/item/crafting/RecipeManager.java
 @@ -51,12 +51,14 @@ public class RecipeManager implements RecipeAccess {

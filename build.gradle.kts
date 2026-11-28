@@ -1,4 +1,7 @@
 import groovy.json.JsonSlurper
+import io.papermc.paperweight.core.tasks.RunNestedBuild
+import io.papermc.paperweight.core.tasks.patching.ApplySingleFilePatches
+import io.papermc.paperweight.core.tasks.patching.RebuildSingleFilePatches
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
@@ -16,17 +19,17 @@ paperweight {
         println("Upstream commit ref: " + ref.get())
 
         patchFile {
-            path = "lophine-server/build.gradle.kts"
+            path = "lophine/lophine-server/build.gradle.kts"
             outputFile = file("lecithin-server/build.gradle.kts")
             patchFile = file("lecithin-server/build.gradle.kts.patch")
         }
         patchFile {
-            path = "lophine-api/build.gradle.kts"
+            path = "lophine/lophine-api/build.gradle.kts"
             outputFile = file("lecithin-api/build.gradle.kts")
             patchFile = file("lecithin-api/build.gradle.kts.patch")
         }
         patchFile {
-            path = "lophine-checkstyle/build.gradle.kts"
+            path = "folia/folia-checkstyle/build.gradle.kts"
             outputFile = file("lecithin-checkstyle/build.gradle.kts")
             patchFile = file("lecithin-checkstyle/build.gradle.kts.patch")
         }
@@ -47,16 +50,24 @@ paperweight {
             outputDir = file("lophine-api")
         }
         patchRepo("paperCheckstyle") {
-            upstreamPath = "paper-checkstyle"
+            upstreamPath = "../folia/paper-checkstyle"
             patchesDir = file("lecithin-checkstyle/paper-patches")
             outputDir = file("paper-checkstyle")
         }
         patchRepo("paperCheckstyleConfig") {
-            upstreamPath = ".checkstyle"
+            upstreamPath = "../folia/.checkstyle"
             patchesDir = file("lecithin-checkstyle/config-patches")
             outputDir = file(".checkstyle")
         }
     }
+}
+
+// Lophine no longer exports Checkstyle. Use Folia from the same upstream build.
+afterEvaluate {
+    val upstreams = tasks.named<RunNestedBuild>("applyUpstream").flatMap { it.workDir }
+    tasks.named<ApplySingleFilePatches>("applyLophineSingleFilePatches") { upstream.set(upstreams) }
+    tasks.named<ApplySingleFilePatches>("applyLophineSingleFilePatchesFuzzy") { upstream.set(upstreams) }
+    tasks.named<RebuildSingleFilePatches>("rebuildLophineSingleFilePatches") { upstream.set(upstreams) }
 }
 
 val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"

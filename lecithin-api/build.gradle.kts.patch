@@ -1,10 +1,10 @@
---- a/lophine-api/build.gradle.kts
-+++ b/lophine-api/build.gradle.kts
+--- a/lophine/lophine-api/build.gradle.kts
++++ b/lophine/lophine-api/build.gradle.kts
 @@ -108,7 +_,7 @@
      testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.3")
  
      // checkstyle
--    checkstyle(project(":lophine-checkstyle"))
+-    //checkstyle(project(":folia-checkstyle"))
 +    checkstyle(project(":lecithin-checkstyle"))
  }
  

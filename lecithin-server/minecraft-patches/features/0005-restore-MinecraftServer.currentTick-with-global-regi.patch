@@ -12,10 +12,10 @@ successor here, so it is the single writer. volatile for the
 cross-thread readers the old plain int already had in practice.
 
 diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
-index 084366f10a04ad885684355aa208951113a9ec97..b05913fe19ab906ab75a8b5bca181391db866831 100644
+index 07b5f434e98937595790b3598357ca32385f41a3..f6ea3d5d2f3e051f8e5c95c1ab9985a8c5a103ba 100644
 --- a/io/papermc/paper/threadedregions/RegionizedServer.java
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -237,12 +237,14 @@ public final class RegionizedServer {
+@@ -238,12 +238,14 @@ public final class RegionizedServer {
      private long lastServerStatus;
      private long tickCount;
  
@@ -31,7 +31,7 @@ index 084366f10a04ad885684355aa208951113a9ec97..b05913fe19ab906ab75a8b5bca181391
          // Luminol start - Add a config to enable tick command
          if (fun.bm.lophine.carpet.config.modules.GeneralCompatConfig.tickCommandEnabled()) { // Lophine - redirect
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index fdb1e6a337c72608bde7956c38eda9cb0704c055..cc0821443aaf56730072e2f1133666e0ac279601 100644
+index 15ea3db109f248df7810ef525e404d0bffe8cb94..c730dcc618fb9ff30f8614da59689c5db15aec66 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -315,7 +315,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa

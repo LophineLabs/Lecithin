@@ -186,10 +186,10 @@ index 842b039d27857e6ed8bb72c0e2b351e5e2c674b8..98a587c8570830ea545db216e61942e3
          /** Never 0L, since 0L is reserved for global region. */
          public final long id = ID_GENERATOR.incrementAndGet();
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 95bda540824c78473adbe3d309e573f68d4da8b1..a91ce8d096f5763c73217302bf31c8b46176f560 100644
+index 508618a74d4e50293f8ca031218142580fc8879e..4e38c24b6457b8d4d79b7fad2a2983c8d0c6bf07 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -3412,6 +3412,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3407,6 +3407,9 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public Entity getCamera() {
@@ -200,19 +200,10 @@ index 95bda540824c78473adbe3d309e573f68d4da8b1..a91ce8d096f5763c73217302bf31c8b4
      }
  
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index e89c000af5e0bf8d6f4559e9d49facc823278cc0..990406e0177c4c90394a1b3174d0fcdefed404c6 100644
+index e1be5b77a5195c6908e2f29010e1e436184c41bf..0aec757a9d87f67c96b5539cf5dc571658c94861 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
-@@ -365,7 +365,7 @@ public abstract class Entity
-     private CustomData customData = CustomData.EMPTY;
-     // CraftBukkit start
-     public boolean persist = true;
--    public boolean visibleByDefault = true;
-+    public volatile boolean visibleByDefault = true; // Lecithin - read across owners by isVisibleByDefault()
-     public boolean valid;
-     public boolean inWorld = false;
-     public boolean generation;
-@@ -4397,6 +4397,7 @@ public abstract class Entity
+@@ -4399,6 +4399,7 @@ public abstract class Entity
          // Paper start - Forward CraftEntity in teleport command
          org.bukkit.craftbukkit.entity.CraftEntity bukkitEntity = oldEntity.bukkitEntity;
          if (bukkitEntity != null) {

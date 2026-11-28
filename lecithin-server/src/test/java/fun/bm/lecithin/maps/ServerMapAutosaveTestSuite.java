@@ -2,6 +2,7 @@ package fun.bm.lecithin.maps;
 
 import fun.bm.lophine.utils.SaveAllUtil;
 import io.papermc.paper.threadedregions.RegionizedServer;
+import io.papermc.paper.world.MapDataCache;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.RegistryAccess;
@@ -66,6 +67,9 @@ class ServerMapAutosaveTestSuite {
         this.worldStorage = spy(new SavedDataStorage(this.worldDir, DataFixers.getDataFixer(), RegistryAccess.EMPTY));
 
         this.server = mock(MinecraftServer.class);
+        Field mapDataCache = MinecraftServer.class.getField("mapDataCache");
+        mapDataCache.setAccessible(true);
+        mapDataCache.set(this.server, new MapDataCache(this.server));
         doReturn(this.serverStorage).when(this.server).getDataStorage();
         doReturn(List.of()).when(this.server).getAllLevels();
         setStaticServer(this.server);

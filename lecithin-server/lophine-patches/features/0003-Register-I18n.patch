@@ -5,14 +5,14 @@ Subject: [PATCH] Register I18n
 
 
 diff --git a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
-index 37c7bec03e0f47fb80a29b48916fca25a2e731bb..37ec0ac0f1bf43a6f5b0a0c0eea84268db6c86e2 100644
+index 86598edcdcafe6c549057896d5274a940f784a08..04755f64c20a8fa6b8eac9186dc9bd7ab1976bcd 100644
 --- a/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
 +++ b/src/main/java/fun/bm/lophine/utils/ServerI18nUtil.java
-@@ -62,6 +62,7 @@ public class ServerI18nUtil {
+@@ -63,6 +63,7 @@ public class ServerI18nUtil {
      private static Set<String> register() {
          Set<String> paths = new HashSet<>();
-         register(paths, "assets/lophine/lang");
-+        register(paths, "assets/lecithin/lang"); // Lecithin - add self lang file
-         return paths;
+         register(paths, "assets/lophine/lang", "assets/lophine/markdown");
++        register(paths, "assets/lecithin/lang", null); // Lecithin - add self lang file
+         return Set.copyOf(paths);
      }
  
